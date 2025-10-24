@@ -567,6 +567,12 @@ function(qlik, $, properties) {
                             );
                             $('#cancel-btn-' + layout.qInfo.qId).hide();
                             console.error('Failed to generate ODAG app:', result.error);
+
+                            // Show user-friendly error message
+                            const errorMsg = result.userMessage || result.error || 'Unknown error';
+                            if (result.userMessage && result.userMessage.indexOf('Field Binding Mismatch') !== -1) {
+                                alert(errorMsg);
+                            }
                         }
                     } catch (error) {
                         console.error('ODAG Generation Error:', error);
@@ -1555,9 +1561,40 @@ function(qlik, $, properties) {
                         error: function(xhr, status, error) {
                             console.error('ODAG API Error:', xhr.status, error);
                             console.error('Response:', xhr.responseText);
+
+                            let errorMessage = 'API call failed: ' + xhr.status + ' - ' + error;
+                            let userFriendlyMessage = errorMessage;
+
+                            // Parse error response for specific ODAG errors
+                            if (xhr.responseText) {
+                                try {
+                                    const errorResponse = JSON.parse(xhr.responseText);
+                                    if (errorResponse.errors && errorResponse.errors.length > 0) {
+                                        const odagError = errorResponse.errors[0];
+
+                                        // ODAG-ERR-1132: Field binding mismatch
+                                        if (odagError.code === 'ODAG-ERR-1132') {
+                                            userFriendlyMessage = '❌ Field Binding Mismatch\n\n' +
+                                                'The fields in your current selections do not match the ODAG template configuration.\n\n' +
+                                                '🔧 How to fix:\n' +
+                                                '1. Check your ODAG link field bindings (App navigation links)\n' +
+                                                '2. Make sure the field names match exactly\n' +
+                                                '3. Or make selections on the correct fields\n\n' +
+                                                'Error: ' + odagError.title;
+                                        } else {
+                                            // Other ODAG errors
+                                            userFriendlyMessage = '❌ ODAG Error (' + odagError.code + ')\n\n' + odagError.title;
+                                        }
+                                    }
+                                } catch (e) {
+                                    // JSON parse failed, use default error
+                                }
+                            }
+
                             resolve({
                                 success: false,
-                                error: 'API call failed: ' + xhr.status + ' - ' + error
+                                error: errorMessage,
+                                userMessage: userFriendlyMessage
                             });
                         }
                     });
@@ -2041,7 +2078,15 @@ function(qlik, $, properties) {
                             window.startODAGStatusMonitoring();
                         }
                     } else {
-                        showNotification('Failed to generate ODAG app: ' + (result.error || 'Unknown error'), 'error');
+                        // Show user-friendly message if available, otherwise show technical error
+                        const errorMsg = result.userMessage || result.error || 'Unknown error';
+
+                        // For field binding errors, show alert instead of notification for more visibility
+                        if (result.userMessage && result.userMessage.indexOf('Field Binding Mismatch') !== -1) {
+                            alert(errorMsg);
+                        } else {
+                            showNotification('Failed to generate ODAG app: ' + errorMsg, 'error');
+                        }
                     }
                     
                 } catch (error) {
