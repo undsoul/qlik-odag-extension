@@ -131,6 +131,32 @@ function(qlik, $, properties) {
             window.qlikTenantUrl = currentUrl;
             debugLog('Detected Qlik tenant URL:', currentUrl);
 
+            // Fetch and cache ODAG bindings if not already cached
+            const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
+            if (odagConfig.odagLinkId && !window[bindingsCacheKey]) {
+                debugLog('Fetching ODAG bindings for link:', odagConfig.odagLinkId);
+
+                $.ajax({
+                    url: currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id,
+                    type: 'POST',
+                    data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
+                    headers: {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    xhrFields: {withCredentials: true},
+                    success: function(response) {
+                        if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                            window[bindingsCacheKey] = response[0].link.bindings;
+                            debugLog('✅ Cached ODAG bindings:', window[bindingsCacheKey]);
+                        }
+                    },
+                    error: function(error) {
+                        console.error('❌ Failed to fetch ODAG bindings:', error);
+                    }
+                });
+            }
+
             // Check if extension is large enough for iframe view
             const isLargeView = elementHeight > 400 && elementWidth > 600;
             const isDynamicView = odagConfig.viewMode === 'dynamicView';
@@ -1476,42 +1502,12 @@ function(qlik, $, properties) {
                     }
                 }
 
-                // Get ODAG link configuration to know which fields are in bindings
-                const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                // Get ODAG bindings from cache (fetched at paint)
+                const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
+                const cachedBindings = window[bindingsCacheKey];
 
-                // Use selAppLinkUsages endpoint - more reliable
-                const selAppLinkUsagesUrl = tenantUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + appId;
-
-                let odagLinkConfig = null;
-                try {
-                    debugLog('Fetching ODAG link configuration from:', selAppLinkUsagesUrl);
-
-                    const linkUsagesResponse = await $.ajax({
-                        url: selAppLinkUsagesUrl,
-                        type: 'GET',
-                        headers: {'Accept': 'application/json'},
-                        xhrFields: {withCredentials: true}
-                    });
-
-                    debugLog('selAppLinkUsages response:', linkUsagesResponse);
-
-                    // Response is an array, find our ODAG link
-                    if (linkUsagesResponse && linkUsagesResponse.length > 0) {
-                        // Find the matching link by ID
-                        const matchingLink = linkUsagesResponse.find(item => item.id === odagConfig.odagLinkId);
-
-                        if (matchingLink) {
-                            odagLinkConfig = matchingLink;
-                            debugLog('Found matching ODAG link configuration:', odagLinkConfig);
-                        } else {
-                            console.warn('ODAG Link ID not found in selAppLinkUsages response. Using first link.');
-                            odagLinkConfig = linkUsagesResponse[0];
-                        }
-                    }
-                } catch (error) {
-                    console.error('Failed to fetch ODAG link configuration:', error);
-                    debugLog('Error details:', error.responseText);
-                }
+                debugLog('Building payload - checking for cached bindings:', bindingsCacheKey);
+                debugLog('Cached bindings:', cachedBindings);
 
                 const currentSelections = await getCurrentSelections(app);
                 const variableSelections = await getVariableValues(app, odagConfig.variableMappings || []);
@@ -1535,11 +1531,11 @@ function(qlik, $, properties) {
                 // bindSelectionState = ALL binding fields (selected + possible values for non-selected)
                 const bindSelectionState = [];
 
-                if (odagLinkConfig && odagLinkConfig.link && odagLinkConfig.link.bindings) {
+                if (cachedBindings && cachedBindings.length > 0) {
                     // Process each binding field
-                    debugLog('Found ODAG bindings:', odagLinkConfig.link.bindings.length);
+                    debugLog('✅ Found cached ODAG bindings:', cachedBindings.length);
 
-                    for (const binding of odagLinkConfig.link.bindings) {
+                    for (const binding of cachedBindings) {
                         const fieldName = binding.selectAppParamName || binding.selectionAppParamName;
 
                         if (!fieldName) continue;
@@ -1598,10 +1594,13 @@ function(qlik, $, properties) {
                         }
                     }
 
-                    debugLog('Final bindSelectionState has', bindSelectionState.length, 'fields');
+                    debugLog('✅ Final bindSelectionState has', bindSelectionState.length, 'fields');
                 } else {
-                    debugLog('WARNING: Could not get ODAG link bindings, using fallback (selected fields only)');
-                    // Fallback: if we couldn't get ODAG config, use only selected fields
+                    console.error('❌ No cached ODAG bindings found!');
+                    console.error('This means the selAppLinkUsages call in paint() failed.');
+                    console.error('Check console for "Failed to fetch ODAG bindings" error above.');
+                    console.error('Falling back to selected fields only - THIS WILL LIKELY FAIL!');
+                    // Fallback: if we couldn't get bindings, use only selected fields (will likely cause 400 error)
                     bindSelectionState.push(...selectionState);
                 }
 
