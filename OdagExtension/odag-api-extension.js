@@ -1461,48 +1461,6 @@ function(qlik, $, properties) {
                 return mappedSelections;
             };
             
-            // Fetch ODAG link bindings from API
-            const getODAGBindings = async function(odagLinkId) {
-                return new Promise(function(resolve) {
-                    const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                    const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagLinkId;
-
-                    debugLog('Fetching ODAG link bindings from:', apiUrl);
-
-                    $.ajax({
-                        url: apiUrl,
-                        type: 'GET',
-                        headers: {
-                            'Accept': 'application/json'
-                        },
-                        xhrFields: {
-                            withCredentials: true
-                        },
-                        success: function(result) {
-                            debugLog('ODAG Link details:', result);
-
-                            // Extract field names from bindings
-                            const boundFieldNames = [];
-                            if (result.link && result.link.bindings) {
-                                result.link.bindings.forEach(function(binding) {
-                                    if (binding.selectionAppParamName) {
-                                        boundFieldNames.push(binding.selectionAppParamName);
-                                    }
-                                });
-                            }
-
-                            debugLog('Bound field names:', boundFieldNames);
-                            resolve(boundFieldNames);
-                        },
-                        error: function(xhr) {
-                            console.error('Failed to fetch ODAG link bindings:', xhr.responseText);
-                            // Return empty array on error - will send all selections
-                            resolve([]);
-                        }
-                    });
-                });
-            };
-
             // Build the ODAG payload
             const buildPayload = async function(app, odagConfig, layout) {
                 const enigmaApp = app.model.enigmaModel;
@@ -1518,41 +1476,97 @@ function(qlik, $, properties) {
                     }
                 }
 
-                // CRITICAL FIX: Get ODAG link bindings to filter selections
-                const boundFieldNames = await getODAGBindings(odagConfig.odagLinkId);
-                debugLog('Will filter selections to only these bound fields:', boundFieldNames);
+                // Get ODAG link configuration to know which fields are in bindings
+                const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                const odagLinkUrl = tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId;
+
+                let odagLinkConfig = null;
+                try {
+                    const odagLinkResponse = await $.ajax({
+                        url: odagLinkUrl,
+                        type: 'GET',
+                        headers: {'Accept': 'application/json'},
+                        xhrFields: {withCredentials: true}
+                    });
+                    odagLinkConfig = odagLinkResponse;
+                    debugLog('ODAG Link Configuration:', odagLinkConfig);
+                } catch (error) {
+                    console.error('Failed to fetch ODAG link configuration:', error);
+                }
 
                 const currentSelections = await getCurrentSelections(app);
                 const variableSelections = await getVariableValues(app, odagConfig.variableMappings || []);
 
+                // Create map of actually selected fields
                 const selectionMap = new Map();
 
-                // Filter current selections to ONLY include fields in ODAG bindings
                 if (odagConfig.includeCurrentSelections) {
                     currentSelections.forEach(selection => {
-                        const fieldName = selection.selectionAppParamName;
-
-                        // Only include if field is in bindings OR if we couldn't fetch bindings (empty array)
-                        if (boundFieldNames.length === 0 || boundFieldNames.indexOf(fieldName) !== -1) {
-                            selectionMap.set(fieldName, selection);
-                            debugLog('✓ Including selection for bound field:', fieldName);
-                        } else {
-                            debugLog('✗ Skipping selection for unbound field:', fieldName);
-                        }
+                        selectionMap.set(selection.selectionAppParamName, selection);
                     });
                 }
 
-                // Variable selections are always included (user explicitly mapped them)
                 variableSelections.forEach(selection => {
                     selectionMap.set(selection.selectionAppParamName, selection);
-                    debugLog('✓ Including variable selection:', selection.selectionAppParamName);
                 });
 
-                const bindSelectionState = Array.from(selectionMap.values());
+                // selectionState = only fields user actually selected
                 const selectionState = Array.from(selectionMap.values());
 
-                debugLog('Final selections to send:', bindSelectionState.length, 'fields');
-                
+                // bindSelectionState = ALL binding fields (selected + possible values for non-selected)
+                const bindSelectionState = [];
+
+                if (odagLinkConfig && odagLinkConfig.link && odagLinkConfig.link.bindings) {
+                    // Process each binding field
+                    for (const binding of odagLinkConfig.link.bindings) {
+                        const fieldName = binding.selectAppParamName || binding.selectionAppParamName;
+
+                        if (!fieldName) continue;
+
+                        // Check if user selected this field
+                        if (selectionMap.has(fieldName)) {
+                            // User selected this field - use their selection with selStatus: "S"
+                            bindSelectionState.push(selectionMap.get(fieldName));
+                        } else {
+                            // User did NOT select this field - get possible values with selStatus: "O"
+                            try {
+                                const field = await enigmaApp.getField(fieldName);
+                                const fieldData = await field.getData();
+
+                                const possibleValues = [];
+
+                                // Get possible (not excluded) values
+                                if (fieldData && fieldData.rows) {
+                                    for (const row of fieldData.rows) {
+                                        // Only include possible values (not excluded)
+                                        if (row.qState === 'O' || row.qState === 'S') {
+                                            possibleValues.push({
+                                                selStatus: 'O',
+                                                strValue: row.qText,
+                                                numValue: isNaN(row.qNum) ? 'NaN' : row.qNum
+                                            });
+                                        }
+                                    }
+                                }
+
+                                if (possibleValues.length > 0) {
+                                    bindSelectionState.push({
+                                        selectionAppParamType: 'Field',
+                                        selectionAppParamName: fieldName,
+                                        values: possibleValues,
+                                        selectedSize: 0
+                                    });
+                                }
+                            } catch (error) {
+                                debugLog('Could not get possible values for field:', fieldName, error);
+                            }
+                        }
+                    }
+                } else {
+                    // Fallback: if we couldn't get ODAG config, use only selected fields
+                    bindSelectionState.push(...selectionState);
+                }
+
                 let sheetId = "";
                 try {
                     const navigation = qlik.navigation;
@@ -1565,19 +1579,24 @@ function(qlik, $, properties) {
                 } catch(e) {
                     debugLog('Could not get sheet ID');
                 }
-                
+
                 const payload = {
                     clientContextHandle: generateContextHandle(),
-                    actualRowEst: 1, // Hardcoded to 1 for simplicity
+                    actualRowEst: 1,
                     selectionApp: appId,
                     bindSelectionState: bindSelectionState,
                     selectionState: selectionState
                 };
-                
+
                 if (sheetId) {
                     payload.sheetname = sheetId;
                 }
-                
+
+                debugLog('Built payload with binding fields:', {
+                    selectionState: selectionState.map(s => s.selectionAppParamName),
+                    bindSelectionState: bindSelectionState.map(s => s.selectionAppParamName)
+                });
+
                 return payload;
             };
             
