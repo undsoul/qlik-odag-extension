@@ -23,22 +23,32 @@ define([], function() {
                     },
                     odagLinkIdHelpStep1: {
                         component: "text",
-                        label: "Step 1: Create ODAG link in template app",
+                        label: "Step 1: Open Browser DevTools (Press F12 / Cmd+Opt+I)",
                         style: "hint"
                     },
                     odagLinkIdHelpStep1Detail: {
                         component: "text",
-                        label: "Data load editor → Sheets panel → Create new → odag (App navigation links)",
+                        label: "→ Go to Network tab\n→ Clear network log\n",
                         style: "hint"
                     },
                     odagLinkIdHelpStep2: {
                         component: "text",
-                        label: "Step 2: Find the ID in DevTools",
+                        label: "Step 2: Create ODAG link",
                         style: "hint"
                     },
                     odagLinkIdHelpStep2Detail: {
                         component: "text",
-                        label: "1. Open selection app and make a selection\n2. Browser DevTools (F12) → Network tab\n3. Filter: 'odaglinks'\n4. Click request → see Request URL\n5. Copy ID: /api/v1/odaglinks/{THIS_IS_THE_ID}",
+                        label: "→ Go to App navigation links\n→ Create new\n→ Configure settings\n→ Click Create\n",
+                        style: "hint"
+                    },
+                    odagLinkIdHelpStep3: {
+                        component: "text",
+                        label: "Step 3: Find the ID in Network tab",
+                        style: "hint"
+                    },
+                    odagLinkIdHelpStep3Detail: {
+                        component: "text",
+                        label: "→ Find 'selAppLink' request\n→ Click it\n→ Go to Response tab\n→ Copy 'id' value at top",
                         style: "hint"
                     },
                     includeCurrentSelections: {
