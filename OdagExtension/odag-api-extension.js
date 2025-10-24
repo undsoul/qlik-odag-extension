@@ -1478,20 +1478,39 @@ function(qlik, $, properties) {
 
                 // Get ODAG link configuration to know which fields are in bindings
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                const odagLinkUrl = tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId;
+
+                // Use selAppLinkUsages endpoint - more reliable
+                const selAppLinkUsagesUrl = tenantUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + appId;
 
                 let odagLinkConfig = null;
                 try {
-                    const odagLinkResponse = await $.ajax({
-                        url: odagLinkUrl,
+                    debugLog('Fetching ODAG link configuration from:', selAppLinkUsagesUrl);
+
+                    const linkUsagesResponse = await $.ajax({
+                        url: selAppLinkUsagesUrl,
                         type: 'GET',
                         headers: {'Accept': 'application/json'},
                         xhrFields: {withCredentials: true}
                     });
-                    odagLinkConfig = odagLinkResponse;
-                    debugLog('ODAG Link Configuration:', odagLinkConfig);
+
+                    debugLog('selAppLinkUsages response:', linkUsagesResponse);
+
+                    // Response is an array, find our ODAG link
+                    if (linkUsagesResponse && linkUsagesResponse.length > 0) {
+                        // Find the matching link by ID
+                        const matchingLink = linkUsagesResponse.find(item => item.id === odagConfig.odagLinkId);
+
+                        if (matchingLink) {
+                            odagLinkConfig = matchingLink;
+                            debugLog('Found matching ODAG link configuration:', odagLinkConfig);
+                        } else {
+                            console.warn('ODAG Link ID not found in selAppLinkUsages response. Using first link.');
+                            odagLinkConfig = linkUsagesResponse[0];
+                        }
+                    }
                 } catch (error) {
                     console.error('Failed to fetch ODAG link configuration:', error);
+                    debugLog('Error details:', error.responseText);
                 }
 
                 const currentSelections = await getCurrentSelections(app);
