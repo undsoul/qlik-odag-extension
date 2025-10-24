@@ -1316,7 +1316,7 @@ function(qlik, $, properties) {
                                 window.odagRefreshInterval = null;
                             }
                         }
-                    }, 1000); // Check every 1 second
+                    }, 1000)); // Check every 1 second
                 };
 
                 // Store function globally so we can call it when generating new apps
