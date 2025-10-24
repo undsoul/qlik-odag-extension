@@ -1523,7 +1523,7 @@ function(qlik, $, properties) {
             };
             
             // Make the API call
-            const callODAGAPI = async function(odagLinkId, payload) {
+            const callODAGAPI = async function(odagLinkId, payload, includeFieldInfo) {
                 // Use dynamic tenant URL
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
                 const url = tenantUrl + '/api/v1/odaglinks/' + odagLinkId + '/requests';
@@ -1574,13 +1574,29 @@ function(qlik, $, properties) {
 
                                         // ODAG-ERR-1132: Field binding mismatch
                                         if (odagError.code === 'ODAG-ERR-1132') {
+                                            // Extract field names from payload
+                                            let selectedFields = '';
+                                            if (payload && payload.selectionState && Array.isArray(payload.selectionState)) {
+                                                selectedFields = '\n📤 Fields you selected:\n';
+                                                payload.selectionState.forEach(function(sel) {
+                                                    if (sel.selectionAppParamName) {
+                                                        const valueCount = sel.values ? sel.values.length : 0;
+                                                        selectedFields += '   • ' + sel.selectionAppParamName + ' (' + valueCount + ' value' + (valueCount !== 1 ? 's' : '') + ')\n';
+                                                    }
+                                                });
+                                            }
+
                                             userFriendlyMessage = '❌ Field Binding Mismatch\n\n' +
-                                                'The fields in your current selections do not match the ODAG template configuration.\n\n' +
+                                                'The fields in your current selections do not match the ODAG template bindings.' +
+                                                selectedFields + '\n' +
                                                 '🔧 How to fix:\n' +
-                                                '1. Check your ODAG link field bindings (App navigation links)\n' +
-                                                '2. Make sure the field names match exactly\n' +
-                                                '3. Or make selections on the correct fields\n\n' +
-                                                'Error: ' + odagError.title;
+                                                '1. Go to App navigation links in Qlik\n' +
+                                                '2. Edit your ODAG link configuration\n' +
+                                                '3. Check the field bindings section\n' +
+                                                '4. Make sure the binding field names EXACTLY match the fields above\n' +
+                                                '   (Or make selections on the fields configured in the bindings)\n\n' +
+                                                '💡 Tip: Field names are case-sensitive!\n\n' +
+                                                'Original error: ' + odagError.title;
                                         } else {
                                             // Other ODAG errors
                                             userFriendlyMessage = '❌ ODAG Error (' + odagError.code + ')\n\n' + odagError.title;
