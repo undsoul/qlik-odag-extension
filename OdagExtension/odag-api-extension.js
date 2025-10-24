@@ -1461,6 +1461,48 @@ function(qlik, $, properties) {
                 return mappedSelections;
             };
             
+            // Fetch ODAG link bindings from API
+            const getODAGBindings = async function(odagLinkId) {
+                return new Promise(function(resolve) {
+                    const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                    const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagLinkId;
+
+                    debugLog('Fetching ODAG link bindings from:', apiUrl);
+
+                    $.ajax({
+                        url: apiUrl,
+                        type: 'GET',
+                        headers: {
+                            'Accept': 'application/json'
+                        },
+                        xhrFields: {
+                            withCredentials: true
+                        },
+                        success: function(result) {
+                            debugLog('ODAG Link details:', result);
+
+                            // Extract field names from bindings
+                            const boundFieldNames = [];
+                            if (result.link && result.link.bindings) {
+                                result.link.bindings.forEach(function(binding) {
+                                    if (binding.selectionAppParamName) {
+                                        boundFieldNames.push(binding.selectionAppParamName);
+                                    }
+                                });
+                            }
+
+                            debugLog('Bound field names:', boundFieldNames);
+                            resolve(boundFieldNames);
+                        },
+                        error: function(xhr) {
+                            console.error('Failed to fetch ODAG link bindings:', xhr.responseText);
+                            // Return empty array on error - will send all selections
+                            resolve([]);
+                        }
+                    });
+                });
+            };
+
             // Build the ODAG payload
             const buildPayload = async function(app, odagConfig, layout) {
                 const enigmaApp = app.model.enigmaModel;
@@ -1475,24 +1517,41 @@ function(qlik, $, properties) {
                         appId = pathMatch[1];
                     }
                 }
-                
+
+                // CRITICAL FIX: Get ODAG link bindings to filter selections
+                const boundFieldNames = await getODAGBindings(odagConfig.odagLinkId);
+                debugLog('Will filter selections to only these bound fields:', boundFieldNames);
+
                 const currentSelections = await getCurrentSelections(app);
                 const variableSelections = await getVariableValues(app, odagConfig.variableMappings || []);
-                
+
                 const selectionMap = new Map();
-                
+
+                // Filter current selections to ONLY include fields in ODAG bindings
                 if (odagConfig.includeCurrentSelections) {
                     currentSelections.forEach(selection => {
-                        selectionMap.set(selection.selectionAppParamName, selection);
+                        const fieldName = selection.selectionAppParamName;
+
+                        // Only include if field is in bindings OR if we couldn't fetch bindings (empty array)
+                        if (boundFieldNames.length === 0 || boundFieldNames.indexOf(fieldName) !== -1) {
+                            selectionMap.set(fieldName, selection);
+                            debugLog('✓ Including selection for bound field:', fieldName);
+                        } else {
+                            debugLog('✗ Skipping selection for unbound field:', fieldName);
+                        }
                     });
                 }
-                
+
+                // Variable selections are always included (user explicitly mapped them)
                 variableSelections.forEach(selection => {
                     selectionMap.set(selection.selectionAppParamName, selection);
+                    debugLog('✓ Including variable selection:', selection.selectionAppParamName);
                 });
-                
+
                 const bindSelectionState = Array.from(selectionMap.values());
                 const selectionState = Array.from(selectionMap.values());
+
+                debugLog('Final selections to send:', bindSelectionState.length, 'fields');
                 
                 let sheetId = "";
                 try {
@@ -1523,7 +1582,7 @@ function(qlik, $, properties) {
             };
             
             // Make the API call
-            const callODAGAPI = async function(odagLinkId, payload, includeFieldInfo) {
+            const callODAGAPI = async function(odagLinkId, payload) {
                 // Use dynamic tenant URL
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
                 const url = tenantUrl + '/api/v1/odaglinks/' + odagLinkId + '/requests';
@@ -1574,29 +1633,13 @@ function(qlik, $, properties) {
 
                                         // ODAG-ERR-1132: Field binding mismatch
                                         if (odagError.code === 'ODAG-ERR-1132') {
-                                            // Extract field names from payload
-                                            let selectedFields = '';
-                                            if (payload && payload.selectionState && Array.isArray(payload.selectionState)) {
-                                                selectedFields = '\n📤 Fields you selected:\n';
-                                                payload.selectionState.forEach(function(sel) {
-                                                    if (sel.selectionAppParamName) {
-                                                        const valueCount = sel.values ? sel.values.length : 0;
-                                                        selectedFields += '   • ' + sel.selectionAppParamName + ' (' + valueCount + ' value' + (valueCount !== 1 ? 's' : '') + ')\n';
-                                                    }
-                                                });
-                                            }
-
                                             userFriendlyMessage = '❌ Field Binding Mismatch\n\n' +
-                                                'The fields in your current selections do not match the ODAG template bindings.' +
-                                                selectedFields + '\n' +
+                                                'The fields in your current selections do not match the ODAG template configuration.\n\n' +
                                                 '🔧 How to fix:\n' +
-                                                '1. Go to App navigation links in Qlik\n' +
-                                                '2. Edit your ODAG link configuration\n' +
-                                                '3. Check the field bindings section\n' +
-                                                '4. Make sure the binding field names EXACTLY match the fields above\n' +
-                                                '   (Or make selections on the fields configured in the bindings)\n\n' +
-                                                '💡 Tip: Field names are case-sensitive!\n\n' +
-                                                'Original error: ' + odagError.title;
+                                                '1. Check your ODAG link field bindings (App navigation links)\n' +
+                                                '2. Make sure the field names match exactly\n' +
+                                                '3. Or make selections on the correct fields\n\n' +
+                                                'Error: ' + odagError.title;
                                         } else {
                                             // Other ODAG errors
                                             userFriendlyMessage = '❌ ODAG Error (' + odagError.code + ')\n\n' + odagError.title;
