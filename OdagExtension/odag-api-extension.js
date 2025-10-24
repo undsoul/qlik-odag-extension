@@ -932,32 +932,25 @@ function(qlik, $, properties) {
                 // Function to check if current selections differ from last generated payload
                 const checkSelectionsChanged = async function() {
                     if (isGenerating) return; // Don't check while generating
+                    if (!lastGeneratedPayload) return; // No previous payload to compare
 
                     try {
-                        const currentPayload = await buildPayload(app, odagConfig, layout);
+                        // Lightweight check: just compare current selections, not full payload
+                        const currentSelections = await getCurrentSelections(app);
+                        const currentSelStr = JSON.stringify(currentSelections);
+                        const lastSelStr = JSON.stringify(lastGeneratedPayload.selectionState);
 
-                        // If we have a last payload, compare
-                        if (lastGeneratedPayload) {
-                            const currentSelStr = JSON.stringify(currentPayload.bindSelectionState);
-                            const lastSelStr = JSON.stringify(lastGeneratedPayload.bindSelectionState);
+                        debugLog('Checking selections changed:', currentSelStr !== lastSelStr);
 
-                            debugLog('Checking selections:', {
-                                current: currentPayload.bindSelectionState,
-                                last: lastGeneratedPayload.bindSelectionState,
-                                different: currentSelStr !== lastSelStr
-                            });
-
-                            if (currentSelStr !== lastSelStr) {
-                                // Selections changed - highlight refresh button
-                                $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
-                                debugLog('Selections changed - refresh button highlighted');
-                            } else {
-                                // Selections same - remove highlight
-                                $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
-                            }
+                        if (currentSelStr !== lastSelStr) {
+                            // Selections changed - highlight refresh button
+                            $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
+                        } else {
+                            // Selections same - remove highlight
+                            $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
                         }
                     } catch (error) {
-                        console.error('Error checking selections:', error);
+                        debugLog('Error checking selections:', error);
                     }
                 };
 
