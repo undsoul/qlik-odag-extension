@@ -551,7 +551,7 @@ function(qlik, $, properties) {
                                             }
                                         }
                                     });
-                                }, 3000);
+                                }, 3000));
                             }
 
                             // Store for next refresh
