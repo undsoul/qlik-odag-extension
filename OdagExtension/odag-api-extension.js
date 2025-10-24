@@ -1160,10 +1160,21 @@ function(qlik, $, properties) {
                     return;
                 }
 
+                // Validate ODAG Link ID format
+                const odagLinkId = String(odagConfig.odagLinkId).trim();
+                if (odagLinkId.length < 20) {
+                    debugLog('WARNING: ODAG Link ID seems too short:', odagLinkId, 'Length:', odagLinkId.length);
+                    $element.html('<div style="padding: 20px; color: red;">❌ Invalid ODAG Link ID<br>Current ID: ' + odagLinkId + '<br>Length: ' + odagLinkId.length + '<br><br>Please check the ODAG Link ID in properties.</div>');
+                    return;
+                }
+
                 // Use the dynamic tenant URL
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true';
+                const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagLinkId + '/requests?pending=true';
                 debugLog('Loading existing ODAG requests from:', apiUrl);
+                debugLog('  - Tenant URL:', tenantUrl);
+                debugLog('  - ODAG Link ID:', odagLinkId);
+                debugLog('  - ODAG Link ID length:', odagLinkId.length);
 
                 $.ajax({
                     url: apiUrl,
