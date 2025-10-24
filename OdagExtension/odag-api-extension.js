@@ -52,6 +52,69 @@ function(qlik, $, properties) {
                 return null;
             };
 
+            // ========== PERFORMANCE OPTIMIZATIONS ==========
+
+            // 1. Paint Debouncing - Prevent excessive re-renders
+            const paintKey = 'lastPaint_' + layout.qInfo.qId;
+            const now = Date.now();
+
+            if (window[paintKey] && (now - window[paintKey]) < 100) {
+                debugLog('Paint debounced - called too frequently (< 100ms)');
+                return qlik.Promise.resolve();
+            }
+            window[paintKey] = now;
+
+            // 2. Interval Cleanup Manager - Prevent memory leaks
+            if (!window.ODAGCleanupManager) {
+                window.ODAGCleanupManager = {};
+            }
+
+            const cleanupKey = 'cleanup_' + layout.qInfo.qId;
+
+            // Cleanup any previous intervals/timeouts for this instance
+            if (window.ODAGCleanupManager[cleanupKey]) {
+                const cleanup = window.ODAGCleanupManager[cleanupKey];
+
+                // Clear all intervals
+                (cleanup.intervals || []).forEach(function(id) {
+                    clearInterval(id);
+                });
+
+                // Clear all timeouts
+                (cleanup.timeouts || []).forEach(function(id) {
+                    clearTimeout(id);
+                });
+
+                debugLog('Cleaned up', cleanup.intervals.length, 'intervals and', cleanup.timeouts.length, 'timeouts');
+            }
+
+            // Create fresh cleanup manager for this paint cycle
+            window.ODAGCleanupManager[cleanupKey] = {
+                intervals: [],
+                timeouts: [],
+
+                addInterval: function(id) {
+                    this.intervals.push(id);
+                    return id;
+                },
+
+                addTimeout: function(id) {
+                    this.timeouts.push(id);
+                    return id;
+                },
+
+                cleanup: function() {
+                    this.intervals.forEach(function(id) { clearInterval(id); });
+                    this.timeouts.forEach(function(id) { clearTimeout(id); });
+                    this.intervals = [];
+                    this.timeouts = [];
+                }
+            };
+
+            const CleanupManager = window.ODAGCleanupManager[cleanupKey];
+
+            // ========== END PERFORMANCE OPTIMIZATIONS ==========
+
             // Check edit mode using Qlik API (synchronous call)
             let isEditMode = false;
             if (qlik.navigation && qlik.navigation.getMode) {
@@ -446,7 +509,7 @@ function(qlik, $, properties) {
                                 debugLog('Will delete old app after new one is ready:', oldRequestId);
 
                                 // Wait and check periodically if new app is ready
-                                const deleteCheckInterval = setInterval(function() {
+                                const deleteCheckInterval = CleanupManager.addInterval(setInterval(function() {
                                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
                                     $.ajax({
                                         url: tenantUrl + '/api/v1/odagrequests/' + odagData.id,
@@ -495,9 +558,9 @@ function(qlik, $, properties) {
                             previousRequestId = odagData.id;
 
                             // Start checking for completion
-                            checkStatusInterval = setInterval(function() {
+                            checkStatusInterval = CleanupManager.addInterval(setInterval(function() {
                                 loadLatestODAGApp();
-                            }, 1000);
+                            }, 1000));
                         } else {
                             $('#dynamic-status-' + layout.qInfo.qId).html(
                                 '<span style="color: #ef4444;">●</span> Failed to generate app'
@@ -1228,7 +1291,7 @@ function(qlik, $, properties) {
                     }
 
                     // Set up periodic refresh ONLY when there are pending apps
-                    window.odagRefreshInterval = setInterval(function() {
+                    window.odagRefreshInterval = CleanupManager.addInterval(setInterval(function() {
                         if (odagConfig.odagLinkId && !isDynamicView) {
                             // Check if there are any non-final status apps
                             const hasPending = window.odagGeneratedApps &&
