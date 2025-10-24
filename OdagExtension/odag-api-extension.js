@@ -1518,27 +1518,39 @@ function(qlik, $, properties) {
 
                 if (odagLinkConfig && odagLinkConfig.link && odagLinkConfig.link.bindings) {
                     // Process each binding field
+                    debugLog('Found ODAG bindings:', odagLinkConfig.link.bindings.length);
+
                     for (const binding of odagLinkConfig.link.bindings) {
                         const fieldName = binding.selectAppParamName || binding.selectionAppParamName;
 
                         if (!fieldName) continue;
 
+                        debugLog('Processing binding field:', fieldName);
+
                         // Check if user selected this field
                         if (selectionMap.has(fieldName)) {
                             // User selected this field - use their selection with selStatus: "S"
+                            debugLog('  → User selected this field, using selection');
                             bindSelectionState.push(selectionMap.get(fieldName));
                         } else {
                             // User did NOT select this field - get possible values with selStatus: "O"
+                            debugLog('  → User did NOT select this field, getting possible values');
                             try {
                                 const field = await enigmaApp.getField(fieldName);
-                                const fieldData = await field.getData();
+                                const fieldData = await field.getData({
+                                    rows: 10000,  // Get up to 10000 possible values
+                                    frequencyMode: 'V'  // Value frequency
+                                });
 
                                 const possibleValues = [];
 
                                 // Get possible (not excluded) values
                                 if (fieldData && fieldData.rows) {
+                                    debugLog('  → Found', fieldData.rows.length, 'rows for field:', fieldName);
+
                                     for (const row of fieldData.rows) {
                                         // Only include possible values (not excluded)
+                                        // qState: 'O' = Optional/Possible, 'S' = Selected, 'X' = Excluded
                                         if (row.qState === 'O' || row.qState === 'S') {
                                             possibleValues.push({
                                                 selStatus: 'O',
@@ -1547,6 +1559,8 @@ function(qlik, $, properties) {
                                             });
                                         }
                                     }
+
+                                    debugLog('  → Added', possibleValues.length, 'possible values');
                                 }
 
                                 if (possibleValues.length > 0) {
@@ -1556,13 +1570,18 @@ function(qlik, $, properties) {
                                         values: possibleValues,
                                         selectedSize: 0
                                     });
+                                } else {
+                                    debugLog('  → WARNING: No possible values found for binding field:', fieldName);
                                 }
                             } catch (error) {
-                                debugLog('Could not get possible values for field:', fieldName, error);
+                                debugLog('  → ERROR: Could not get possible values for field:', fieldName, error);
                             }
                         }
                     }
+
+                    debugLog('Final bindSelectionState has', bindSelectionState.length, 'fields');
                 } else {
+                    debugLog('WARNING: Could not get ODAG link bindings, using fallback (selected fields only)');
                     // Fallback: if we couldn't get ODAG config, use only selected fields
                     bindSelectionState.push(...selectionState);
                 }
