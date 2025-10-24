@@ -65,6 +65,8 @@ Same reliable ODAG functionality you trust, with a significantly improved user e
 
 #### Finding Your ODAG Link ID
 
+https://github.com/undsoul/qlik-odag-extension/blob/main/How-to.mov
+
 **First, create the ODAG link in your template app:**
 1. Open the **template app** in Qlik Sense
 2. Go to **Data load editor**
