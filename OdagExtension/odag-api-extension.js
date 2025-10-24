@@ -136,23 +136,29 @@ function(qlik, $, properties) {
             if (odagConfig.odagLinkId && !window[bindingsCacheKey]) {
                 debugLog('Fetching ODAG bindings for link:', odagConfig.odagLinkId);
 
+                const csrfToken = getCookie('_csrfToken');
+
                 $.ajax({
                     url: currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id,
                     type: 'POST',
                     data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
+                    contentType: 'application/json',
                     headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
+                        'Accept': '*/*',
+                        'qlik-csrf-token': csrfToken || ''
                     },
                     xhrFields: {withCredentials: true},
                     success: function(response) {
                         if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
                             window[bindingsCacheKey] = response[0].link.bindings;
-                            debugLog('✅ Cached ODAG bindings:', window[bindingsCacheKey]);
+                            debugLog('Cached ODAG bindings:', response[0].link.bindings.map(b => b.selectAppParamName || b.selectionAppParamName).join(', '));
+                        } else {
+                            console.error('❌ Unexpected bindings response format');
                         }
                     },
                     error: function(error) {
-                        console.error('❌ Failed to fetch ODAG bindings:', error);
+                        console.error('❌ Failed to fetch ODAG bindings:', error.status, error.statusText);
                     }
                 });
             }
@@ -1488,6 +1494,11 @@ function(qlik, $, properties) {
             };
             
             // Build the ODAG payload
+            // This function creates the correct payload structure with:
+            // - selectionState: Fields the user actually selected (selStatus: "S")
+            // - bindSelectionState: ALL ODAG binding fields:
+            //   * If user selected a binding field → use their selection (selStatus: "S")
+            //   * If user did NOT select a binding field → fetch possible values (selStatus: "O")
             const buildPayload = async function(app, odagConfig, layout) {
                 const enigmaApp = app.model.enigmaModel;
                 const appLayout = await enigmaApp.getAppLayout();
@@ -1506,8 +1517,7 @@ function(qlik, $, properties) {
                 const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
                 const cachedBindings = window[bindingsCacheKey];
 
-                debugLog('Building payload - checking for cached bindings:', bindingsCacheKey);
-                debugLog('Cached bindings:', cachedBindings);
+                debugLog('Building payload - cached bindings:', cachedBindings ? cachedBindings.length + ' fields' : 'none');
 
                 const currentSelections = await getCurrentSelections(app);
                 const variableSelections = await getVariableValues(app, odagConfig.variableMappings || []);
@@ -1551,32 +1561,46 @@ function(qlik, $, properties) {
                             // User did NOT select this field - get possible values with selStatus: "O"
                             debugLog('  → User did NOT select this field, getting possible values');
                             try {
-                                const field = await enigmaApp.getField(fieldName);
-                                const fieldData = await field.getData({
-                                    rows: 10000,  // Get up to 10000 possible values
-                                    frequencyMode: 'V'  // Value frequency
+                                // Create a temporary list object to get field values
+                                const listObj = await enigmaApp.createSessionObject({
+                                    qInfo: { qType: 'ListObject' },
+                                    qListObjectDef: {
+                                        qDef: { qFieldDefs: [fieldName] },
+                                        qInitialDataFetch: [{
+                                            qTop: 0,
+                                            qLeft: 0,
+                                            qWidth: 1,
+                                            qHeight: 10000
+                                        }]
+                                    }
                                 });
 
+                                const layout = await listObj.getLayout();
                                 const possibleValues = [];
 
-                                // Get possible (not excluded) values
-                                if (fieldData && fieldData.rows) {
-                                    debugLog('  → Found', fieldData.rows.length, 'rows for field:', fieldName);
+                                // Get possible (not excluded) values from list object
+                                if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
+                                    const dataPage = layout.qListObject.qDataPages[0];
+                                    debugLog('  → Found', dataPage.qMatrix.length, 'rows for field:', fieldName);
 
-                                    for (const row of fieldData.rows) {
+                                    for (const row of dataPage.qMatrix) {
+                                        const cell = row[0]; // First column
                                         // Only include possible values (not excluded)
                                         // qState: 'O' = Optional/Possible, 'S' = Selected, 'X' = Excluded
-                                        if (row.qState === 'O' || row.qState === 'S') {
+                                        if (cell && (cell.qState === 'O' || cell.qState === 'S')) {
                                             possibleValues.push({
                                                 selStatus: 'O',
-                                                strValue: row.qText,
-                                                numValue: isNaN(row.qNum) ? 'NaN' : row.qNum
+                                                strValue: cell.qText,
+                                                numValue: isNaN(cell.qNum) ? 'NaN' : cell.qNum
                                             });
                                         }
                                     }
 
                                     debugLog('  → Added', possibleValues.length, 'possible values');
                                 }
+
+                                // Destroy temporary object
+                                await enigmaApp.destroySessionObject(listObj.id);
 
                                 if (possibleValues.length > 0) {
                                     bindSelectionState.push({
