@@ -68,26 +68,6 @@ Same reliable ODAG functionality you trust, with a significantly improved user e
 https://github.com/user-attachments/assets/f572f5c3-637f-4186-9bd6-b7fd9445e840
 
 https://github.com/undsoul/qlik-odag-extension/blob/main/How-to.mov
-
-
-**First, create the ODAG link in your template app:**
-1. Open the **template app** in Qlik Sense
-2. Go to **Data load editor**
-3. In the **Sheets panel** on the right, click **Create new**
-4. Select **odag** (App navigation links)
-5. Configure your ODAG link settings
-
-**Then, find the ODAG Link ID using Browser DevTools:**
-1. Open your **selection app** (source app) in Qlik Sense
-2. Make a selection to **trigger ODAG** (this creates an API call)
-3. Open **Browser DevTools** (press F12)
-4. Go to the **Network** tab
-5. Filter by typing `odaglinks` in the filter box
-6. Click on any request in the list
-7. Look at the **Request URL** in the Headers section
-8. Copy the ID from the URL: `/api/v1/odaglinks/{THIS_IS_THE_ID}`
-   - Example: If Request URL is `https://yourtenant/api/v1/odaglinks/68fa291e23ae4f3d33c7bb82`
-   - Your ODAG Link ID is: `68fa291e23ae4f3d33c7bb82`
    
 <img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/264351a2-0282-4f5f-b00b-0683e95c64c6" />
 
