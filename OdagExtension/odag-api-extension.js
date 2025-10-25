@@ -168,7 +168,8 @@ function(qlik, $, properties) {
                 window.odagLinksListFetched = true;
 
                 const xrfkey = 'abcdefghijklmnop';
-                const linksUrl = currentUrl + '/api/odag/v1/links?xrfkey=' + xrfkey;
+                // Try app-specific endpoint first: /api/odag/v1/apps/{appId}/links
+                const linksUrl = currentUrl + '/api/odag/v1/apps/' + app.id + '/links?xrfkey=' + xrfkey;
 
                 debugLog('📋 Fetching available ODAG links from On-Premise...');
 
@@ -184,46 +185,21 @@ function(qlik, $, properties) {
                     timeout: 5000,
                     success: function(links) {
                         if (Array.isArray(links) && links.length > 0) {
-                            // Store all links globally
-                            window.odagAllLinks = links;
+                            // Store links for this app
+                            window['odagAppLinks_' + app.id] = links;
 
-                            // Filter links for current app
-                            const currentAppId = app.id;
-                            const appLinks = links.filter(function(link) {
-                                // Check if link has selectionApp property matching current app
-                                return link.selectionApp && (link.selectionApp.id === currentAppId || link.selectionApp === currentAppId);
-                            });
-
-                            // Store filtered links for this app
-                            window['odagAppLinks_' + currentAppId] = appLinks;
-
-                            console.log('✅ Available ODAG Links on this On-Premise server:');
-                            console.log('  Total links:', links.length);
-                            console.log('  Links for this app (' + currentAppId + '):', appLinks.length);
-
-                            if (appLinks.length > 0) {
-                                console.table(appLinks.map(function(link) {
-                                    return {
-                                        'Link ID': link.id,
-                                        'Name': link.name || '(no name)',
-                                        'Description': link.description || '(no description)',
-                                        'Status': link.status || 'unknown'
-                                    };
-                                }));
-                                console.log('💡 Copy the "Link ID" from the table above and paste it into the ODAG Link ID property field.');
-                            } else {
-                                console.warn('⚠️ No ODAG links found for this app. Showing all links:');
-                                console.table(links.map(function(link) {
-                                    return {
-                                        'Link ID': link.id,
-                                        'Name': link.name || '(no name)',
-                                        'Selection App': link.selectionApp ? (link.selectionApp.id || link.selectionApp) : 'N/A',
-                                        'Status': link.status || 'unknown'
-                                    };
-                                }));
-                            }
+                            console.log('✅ Found ' + links.length + ' ODAG Link(s) for this app:');
+                            console.table(links.map(function(link) {
+                                return {
+                                    'Link ID': link.id,
+                                    'Name': link.name || '(no name)',
+                                    'Template App': link.templateApp ? link.templateApp.name : 'N/A',
+                                    'Status': link.status || 'unknown'
+                                };
+                            }));
+                            console.log('💡 Copy the "Link ID" from the table above and paste it into the ODAG Link ID property field.');
                         } else {
-                            console.log('ℹ️ No ODAG links found on this On-Premise server.');
+                            console.log('ℹ️ No ODAG links found for this app.');
                         }
                     },
                     error: function(xhr, status, error) {
@@ -398,33 +374,19 @@ function(qlik, $, properties) {
                         success: function(links) {
                             let linksHtml = '';
                             if (Array.isArray(links) && links.length > 0) {
-                                // Filter links for current app
-                                const currentAppId = app.id;
-                                const appLinks = links.filter(function(link) {
-                                    return link.selectionApp && (link.selectionApp.id === currentAppId || link.selectionApp === currentAppId);
-                                });
-
-                                const linksToShow = appLinks.length > 0 ? appLinks : links;
-                                const isFiltered = appLinks.length > 0;
-
-                                if (isFiltered) {
-                                    linksHtml += '<div style="color: #16a34a; margin-bottom: 16px;">✅ Found ' + appLinks.length + ' ODAG link(s) for this app:</div>';
-                                } else {
-                                    linksHtml += '<div style="color: #f59e0b; margin-bottom: 16px;">⚠️ No links found for this app. Showing all ' + links.length + ' link(s):</div>';
-                                }
-
+                                linksHtml += '<div style="color: #16a34a; margin-bottom: 16px;">✅ Found ' + links.length + ' ODAG link(s) for this app:</div>';
                                 linksHtml += '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">';
                                 linksHtml += '<thead><tr style="background: #f3f4f6; text-align: left;">';
                                 linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Name</th>';
+                                linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Template App</th>';
                                 linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Link ID</th>';
-                                linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Status</th>';
                                 linksHtml += '</tr></thead><tbody>';
 
-                                linksToShow.forEach(function(link) {
+                                links.forEach(function(link) {
                                     linksHtml += '<tr style="border-bottom: 1px solid #ddd;">';
                                     linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; font-weight: 500;">' + (link.name || '(no name)') + '</td>';
+                                    linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; color: #666; font-size: 12px;">' + (link.templateApp ? link.templateApp.name : 'N/A') + '</td>';
                                     linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; font-family: monospace; font-size: 11px; background: #f9fafb; cursor: pointer;" onclick="navigator.clipboard.writeText(\'' + link.id + '\'); this.style.background=\'#dcfce7\'; setTimeout(() => this.style.background=\'#f9fafb\', 1000);" title="Click to copy">' + link.id + '</td>';
-                                    linksHtml += '<td style="padding: 8px; border: 1px solid #ddd;">' + (link.status || 'unknown') + '</td>';
                                     linksHtml += '</tr>';
                                 });
 
@@ -433,8 +395,8 @@ function(qlik, $, properties) {
                                 linksHtml += '💡 <strong>Tip:</strong> Click any Link ID to copy it, then paste it in the ODAG Link ID property field.';
                                 linksHtml += '</div>';
                             } else {
-                                linksHtml += '<div style="color: #dc2626;">❌ No ODAG links found on this server.</div>';
-                                linksHtml += '<div style="margin-top: 8px; font-size: 12px; color: #666;">Please create an ODAG link in the QMC first.</div>';
+                                linksHtml += '<div style="color: #dc2626;">❌ No ODAG links found for this app.</div>';
+                                linksHtml += '<div style="margin-top: 8px; font-size: 12px; color: #666;">Please create an ODAG link for this selection app in the QMC.</div>';
                             }
 
                             $('#odag-links-list').html(linksHtml);
