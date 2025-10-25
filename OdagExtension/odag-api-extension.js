@@ -127,17 +127,39 @@ function(qlik, $, properties) {
             const currentUrl = window.location.origin;
             const hostname = window.location.hostname;
 
-            // Detect if running on Qlik Cloud or On-Premise
-            const isQlikCloud = hostname.includes('qlikcloud.com') || hostname.includes('qlik-stage.com');
-            const isOnPremise = !isQlikCloud;
-
-            // Store tenant URL and environment globally for API calls
+            // Store tenant URL globally for API calls
             window.qlikTenantUrl = currentUrl;
-            window.qlikEnvironment = isQlikCloud ? 'cloud' : 'onpremise';
 
-            // Always log environment detection (not behind debug flag)
-            console.log('🌍 ODAG Extension - Environment:', window.qlikEnvironment.toUpperCase(), '| Hostname:', hostname);
-            debugLog('Detected environment:', window.qlikEnvironment, '- URL:', currentUrl);
+            // Detect environment if not already detected
+            if (!window.qlikEnvironment) {
+                // Try to detect via /qrs/about endpoint (On-Premise only)
+                $.ajax({
+                    url: currentUrl + '/qrs/about?xrfkey=abcdefghijklmnop',
+                    type: 'GET',
+                    headers: {
+                        'X-Qlik-XrfKey': 'abcdefghijklmnop'
+                    },
+                    timeout: 2000,
+                    success: function(response) {
+                        // If /qrs/about responds, it's On-Premise
+                        if (response && response.buildVersion) {
+                            window.qlikEnvironment = 'onpremise';
+                            console.log('🌍 ODAG Extension - Environment: ONPREMISE (detected via /qrs/about) | Build:', response.buildVersion);
+                        }
+                    },
+                    error: function() {
+                        // If /qrs/about fails, it's Cloud
+                        window.qlikEnvironment = 'cloud';
+                        console.log('🌍 ODAG Extension - Environment: CLOUD (no /qrs/about endpoint) | Hostname:', hostname);
+                    }
+                });
+
+                // Fallback: Use hostname-based detection while waiting for async call
+                const isQlikCloud = hostname.includes('qlikcloud.com') || hostname.includes('qlik-stage.com');
+                window.qlikEnvironment = isQlikCloud ? 'cloud' : 'onpremise';
+            }
+
+            debugLog('Using environment:', window.qlikEnvironment, '- URL:', currentUrl);
 
             // Fetch and cache ODAG bindings if not already cached
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
