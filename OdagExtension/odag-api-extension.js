@@ -246,7 +246,7 @@ function(qlik, $, properties) {
                 const xrfkey = 'abcdefghijklmnop';
                 const apiUrl = isCloud
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
-                    : tenantUrl + '/api/odag/v1/requests?optLinkId=' + odagConfig.odagLinkId + '&xrfkey=' + xrfkey;
+                    : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
                 $.ajax({
                     url: apiUrl,
@@ -476,7 +476,7 @@ function(qlik, $, properties) {
                 const xrfkey = 'abcdefghijklmnop';
                 const apiUrl = isCloud
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
-                    : tenantUrl + '/api/odag/v1/requests?optLinkId=' + odagConfig.odagLinkId + '&xrfkey=' + xrfkey;
+                    : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
                     debugLog('Deleting all existing ODAG apps for Dynamic View...');
 
@@ -678,7 +678,7 @@ function(qlik, $, properties) {
                 const xrfkey = 'abcdefghijklmnop';
                 const apiUrl = isCloud
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
-                    : tenantUrl + '/api/odag/v1/requests?optLinkId=' + odagConfig.odagLinkId + '&xrfkey=' + xrfkey;
+                    : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
                     $.ajax({
                         url: apiUrl,
@@ -1141,7 +1141,7 @@ function(qlik, $, properties) {
                 const xrfkey = 'abcdefghijklmnop';
                 const apiUrl = isCloud
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
-                    : tenantUrl + '/api/odag/v1/requests?optLinkId=' + odagConfig.odagLinkId + '&xrfkey=' + xrfkey;
+                    : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
                     $.ajax({
                         url: apiUrl,
