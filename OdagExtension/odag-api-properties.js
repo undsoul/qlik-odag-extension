@@ -12,67 +12,24 @@ define([], function() {
                     odagLinkId: {
                         type: "string",
                         ref: "odagConfig.odagLinkId",
-                        label: "ODAG Link ID",
+                        label: "ODAG Link ID (or use link selector in extension below)",
                         expression: "optional",
                         defaultValue: ""
                     },
-                    odagLinkIdHelp: {
-                        component: "text",
-                        label: "How to find ODAG Link ID:",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpCloud: {
-                        component: "text",
-                        label: "CLOUD: DevTools Method",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpStep1: {
-                        component: "text",
-                        label: "Step 1: Open Browser DevTools (Press F12 / Cmd+Opt+I)",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpStep1Detail: {
-                        component: "text",
-                        label: "→ Go to Network tab\n→ Clear network log\n",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpStep2: {
-                        component: "text",
-                        label: "Step 2: Create ODAG link",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpStep2Detail: {
-                        component: "text",
-                        label: "→ Go to App navigation links\n→ Create new\n→ Configure settings\n→ Click Create\n",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpStep3: {
-                        component: "text",
-                        label: "Step 3: Find the ID in Network tab",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpStep3Detail: {
-                        component: "text",
-                        label: "→ Find 'selAppLink' request\n→ Click it\n→ Go to Response tab\n→ Copy 'id' value at top",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpOnPremise: {
-                        component: "text",
-                        label: "ON-PREMISE: API Method",
-                        style: "hint"
-                    },
-                    odagLinkIdHelpOnPremiseDetail: {
-                        component: "text",
-                        label: "→ Available links shown in browser console (F12)\n→ Check console for table with Link IDs and names\n→ Copy the Link ID from console table",
-                        style: "hint"
-                    },
-                    odagAvailableLinks: {
+                    odagLinkName: {
                         type: "string",
-                        ref: "odagConfig._availableLinks",
-                        label: "Available ODAG Links (Auto-populated for On-Premise)",
+                        ref: "odagConfig.odagLinkName",
+                        label: "Selected Link Name (read-only)",
                         expression: "optional",
                         defaultValue: "",
-                        show: false  // Hidden field, just for storage
+                        show: function(data) {
+                            return data.odagConfig && data.odagConfig.odagLinkName;
+                        }
+                    },
+                    odagLinkSelectorHint: {
+                        component: "text",
+                        label: "💡 Exit edit mode to see the ODAG Link Selector below",
+                        style: "hint"
                     },
                     includeCurrentSelections: {
                         type: "boolean",
