@@ -161,9 +161,52 @@ function(qlik, $, properties) {
 
             debugLog('Using environment:', window.qlikEnvironment, '- URL:', currentUrl);
 
+            // Fetch available ODAG links for On-Premise (for debugging/helper)
+            const isCloud = window.qlikEnvironment === 'cloud';
+            if (!isCloud && !window.odagLinksListFetched) {
+                // Mark as fetched to avoid repeated calls
+                window.odagLinksListFetched = true;
+
+                const xrfkey = 'abcdefghijklmnop';
+                const linksUrl = currentUrl + '/api/odag/v1/links?xrfkey=' + xrfkey;
+
+                debugLog('📋 Fetching available ODAG links from On-Premise...');
+
+                $.ajax({
+                    url: linksUrl,
+                    type: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Qlik-XrfKey': xrfkey
+                    },
+                    xhrFields: {withCredentials: true},
+                    timeout: 5000,
+                    success: function(links) {
+                        if (Array.isArray(links) && links.length > 0) {
+                            console.log('✅ Available ODAG Links on this On-Premise server:');
+                            console.table(links.map(function(link) {
+                                return {
+                                    'Link ID': link.id,
+                                    'Name': link.name || '(no name)',
+                                    'Description': link.description || '(no description)',
+                                    'Status': link.status || 'unknown'
+                                };
+                            }));
+                            console.log('💡 Copy the "Link ID" from the table above and paste it into the ODAG Link ID property field.');
+                        } else {
+                            console.log('ℹ️ No ODAG links found on this On-Premise server.');
+                        }
+                    },
+                    error: function(xhr, status, error) {
+                        console.warn('⚠️ Could not fetch ODAG links list:', xhr.status, error);
+                        console.log('💡 You can manually get ODAG links by visiting:', linksUrl);
+                    }
+                });
+            }
+
             // Fetch and cache ODAG bindings (Cloud only)
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
-            const isCloud = window.qlikEnvironment === 'cloud';
 
             if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey]) {
                 debugLog('Fetching ODAG bindings for Cloud link:', odagConfig.odagLinkId);
@@ -1248,15 +1291,34 @@ function(qlik, $, properties) {
 
                 // Validate ODAG Link ID format
                 const odagLinkId = String(odagConfig.odagLinkId).trim();
-                if (odagLinkId.length < 20) {
-                    debugLog('WARNING: ODAG Link ID seems too short:', odagLinkId, 'Length:', odagLinkId.length);
-                    $element.html('<div style="padding: 20px; color: red;">❌ Invalid ODAG Link ID<br>Current ID: ' + odagLinkId + '<br>Length: ' + odagLinkId.length + '<br><br>Please check the ODAG Link ID in properties.</div>');
+                const isCloud = window.qlikEnvironment === 'cloud';
+
+                // Cloud IDs are 24-char hex (MongoDB ObjectId), On-Premise are 36-char GUIDs
+                const isValidCloudId = /^[a-f0-9]{24}$/i.test(odagLinkId);
+                const isValidOnPremiseId = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(odagLinkId);
+
+                debugLog('ODAG Link ID validation:', {
+                    id: odagLinkId,
+                    length: odagLinkId.length,
+                    environment: window.qlikEnvironment,
+                    isValidCloudId: isValidCloudId,
+                    isValidOnPremiseId: isValidOnPremiseId
+                });
+
+                if (isCloud && !isValidCloudId && odagLinkId.length !== 24) {
+                    debugLog('WARNING: Cloud ODAG Link ID format incorrect:', odagLinkId);
+                    $element.html('<div style="padding: 20px; color: red;">❌ Invalid Cloud ODAG Link ID<br>Expected: 24-character hex (e.g., 602c0332db186b0001f7dc38)<br>Current: ' + odagLinkId + ' (length: ' + odagLinkId.length + ')<br><br>Please check the ODAG Link ID in properties.</div>');
+                    return;
+                }
+
+                if (!isCloud && !isValidOnPremiseId) {
+                    debugLog('WARNING: On-Premise ODAG Link ID format incorrect:', odagLinkId);
+                    $element.html('<div style="padding: 20px; color: red;">❌ Invalid On-Premise ODAG Link ID<br>Expected: GUID format (e.g., 52792d6c-72d7-462b-bed3-c4bda0481726)<br>Current: ' + odagLinkId + ' (length: ' + odagLinkId.length + ')<br><br>Please check the ODAG Link ID in properties.</div>');
                     return;
                 }
 
                 // Use the dynamic tenant URL
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                const isCloud = window.qlikEnvironment === 'cloud';
                 const xrfkey = 'abcdefghijklmnop';
 
                 const apiUrl = isCloud

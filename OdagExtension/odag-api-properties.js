@@ -21,6 +21,11 @@ define([], function() {
                         label: "How to find ODAG Link ID:",
                         style: "hint"
                     },
+                    odagLinkIdHelpCloud: {
+                        component: "text",
+                        label: "CLOUD: DevTools Method",
+                        style: "hint"
+                    },
                     odagLinkIdHelpStep1: {
                         component: "text",
                         label: "Step 1: Open Browser DevTools (Press F12 / Cmd+Opt+I)",
@@ -49,6 +54,16 @@ define([], function() {
                     odagLinkIdHelpStep3Detail: {
                         component: "text",
                         label: "→ Find 'selAppLink' request\n→ Click it\n→ Go to Response tab\n→ Copy 'id' value at top",
+                        style: "hint"
+                    },
+                    odagLinkIdHelpOnPremise: {
+                        component: "text",
+                        label: "ON-PREMISE: API Method",
+                        style: "hint"
+                    },
+                    odagLinkIdHelpOnPremiseDetail: {
+                        component: "text",
+                        label: "→ Open: https://your-server/api/odag/v1/links?xrfkey=abcdefghijklmnop\n→ Add Header: X-Qlik-XrfKey: abcdefghijklmnop\n→ Find your link in JSON response\n→ Copy 'id' field value",
                         style: "hint"
                     },
                     includeCurrentSelections: {
