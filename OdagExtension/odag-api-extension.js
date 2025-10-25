@@ -184,16 +184,44 @@ function(qlik, $, properties) {
                     timeout: 5000,
                     success: function(links) {
                         if (Array.isArray(links) && links.length > 0) {
+                            // Store all links globally
+                            window.odagAllLinks = links;
+
+                            // Filter links for current app
+                            const currentAppId = app.id;
+                            const appLinks = links.filter(function(link) {
+                                // Check if link has selectionApp property matching current app
+                                return link.selectionApp && (link.selectionApp.id === currentAppId || link.selectionApp === currentAppId);
+                            });
+
+                            // Store filtered links for this app
+                            window['odagAppLinks_' + currentAppId] = appLinks;
+
                             console.log('✅ Available ODAG Links on this On-Premise server:');
-                            console.table(links.map(function(link) {
-                                return {
-                                    'Link ID': link.id,
-                                    'Name': link.name || '(no name)',
-                                    'Description': link.description || '(no description)',
-                                    'Status': link.status || 'unknown'
-                                };
-                            }));
-                            console.log('💡 Copy the "Link ID" from the table above and paste it into the ODAG Link ID property field.');
+                            console.log('  Total links:', links.length);
+                            console.log('  Links for this app (' + currentAppId + '):', appLinks.length);
+
+                            if (appLinks.length > 0) {
+                                console.table(appLinks.map(function(link) {
+                                    return {
+                                        'Link ID': link.id,
+                                        'Name': link.name || '(no name)',
+                                        'Description': link.description || '(no description)',
+                                        'Status': link.status || 'unknown'
+                                    };
+                                }));
+                                console.log('💡 Copy the "Link ID" from the table above and paste it into the ODAG Link ID property field.');
+                            } else {
+                                console.warn('⚠️ No ODAG links found for this app. Showing all links:');
+                                console.table(links.map(function(link) {
+                                    return {
+                                        'Link ID': link.id,
+                                        'Name': link.name || '(no name)',
+                                        'Selection App': link.selectionApp ? (link.selectionApp.id || link.selectionApp) : 'N/A',
+                                        'Status': link.status || 'unknown'
+                                    };
+                                }));
+                            }
                         } else {
                             console.log('ℹ️ No ODAG links found on this On-Premise server.');
                         }
@@ -370,7 +398,21 @@ function(qlik, $, properties) {
                         success: function(links) {
                             let linksHtml = '';
                             if (Array.isArray(links) && links.length > 0) {
-                                linksHtml += '<div style="color: #16a34a; margin-bottom: 16px;">✅ Found ' + links.length + ' ODAG link(s):</div>';
+                                // Filter links for current app
+                                const currentAppId = app.id;
+                                const appLinks = links.filter(function(link) {
+                                    return link.selectionApp && (link.selectionApp.id === currentAppId || link.selectionApp === currentAppId);
+                                });
+
+                                const linksToShow = appLinks.length > 0 ? appLinks : links;
+                                const isFiltered = appLinks.length > 0;
+
+                                if (isFiltered) {
+                                    linksHtml += '<div style="color: #16a34a; margin-bottom: 16px;">✅ Found ' + appLinks.length + ' ODAG link(s) for this app:</div>';
+                                } else {
+                                    linksHtml += '<div style="color: #f59e0b; margin-bottom: 16px;">⚠️ No links found for this app. Showing all ' + links.length + ' link(s):</div>';
+                                }
+
                                 linksHtml += '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">';
                                 linksHtml += '<thead><tr style="background: #f3f4f6; text-align: left;">';
                                 linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Name</th>';
@@ -378,7 +420,7 @@ function(qlik, $, properties) {
                                 linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Status</th>';
                                 linksHtml += '</tr></thead><tbody>';
 
-                                links.forEach(function(link) {
+                                linksToShow.forEach(function(link) {
                                     linksHtml += '<tr style="border-bottom: 1px solid #ddd;">';
                                     linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; font-weight: 500;">' + (link.name || '(no name)') + '</td>';
                                     linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; font-family: monospace; font-size: 11px; background: #f9fafb; cursor: pointer;" onclick="navigator.clipboard.writeText(\'' + link.id + '\'); this.style.background=\'#dcfce7\'; setTimeout(() => this.style.background=\'#f9fafb\', 1000);" title="Click to copy">' + link.id + '</td>';
