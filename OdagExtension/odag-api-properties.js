@@ -63,8 +63,16 @@ define([], function() {
                     },
                     odagLinkIdHelpOnPremiseDetail: {
                         component: "text",
-                        label: "→ Open: https://your-server/api/odag/v1/links?xrfkey=abcdefghijklmnop\n→ Add Header: X-Qlik-XrfKey: abcdefghijklmnop\n→ Find your link in JSON response\n→ Copy 'id' field value",
+                        label: "→ Available links shown in browser console (F12)\n→ Check console for table with Link IDs and names\n→ Copy the Link ID from console table",
                         style: "hint"
+                    },
+                    odagAvailableLinks: {
+                        type: "string",
+                        ref: "odagConfig._availableLinks",
+                        label: "Available ODAG Links (Auto-populated for On-Premise)",
+                        expression: "optional",
+                        defaultValue: "",
+                        show: false  // Hidden field, just for storage
                     },
                     includeCurrentSelections: {
                         type: "boolean",

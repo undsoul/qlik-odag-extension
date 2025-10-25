@@ -343,15 +343,77 @@ function(qlik, $, properties) {
             // Show warning if ODAG Link ID is not configured
             if (!odagConfig.odagLinkId || odagConfig.odagLinkId.trim() === '') {
                 debugLog('ODAG Extension: No ODAG Link ID, showing warning');
-                html += '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center;">';
-                html += '<div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>';
-                html += '<div style="font-size: 18px; font-weight: bold; color: #f59e0b; margin-bottom: 8px;">ODAG Link ID Required</div>';
-                html += '<div style="font-size: 14px; color: #666;">Please configure the ODAG Link ID in the property panel to use this extension.</div>';
-                html += '</div>';
-                html += '</div>'; // Close odag-container
-                debugLog('ODAG Extension: Setting warning HTML');
-                $element.html(html);
-                return qlik.Promise.resolve();
+
+                // For On-Premise, fetch and show available links
+                if (!isCloud) {
+                    html += '<div id="odag-links-container" style="padding: 20px;">';
+                    html += '<div style="font-size: 18px; font-weight: bold; margin-bottom: 16px;">⚙️ ODAG Link Configuration</div>';
+                    html += '<div style="color: #666; margin-bottom: 16px;">No ODAG Link ID configured. Fetching available links...</div>';
+                    html += '<div id="odag-links-list" style="max-height: 400px; overflow-y: auto;"></div>';
+                    html += '</div>';
+                    html += '</div>'; // Close odag-container
+                    $element.html(html);
+
+                    // Fetch available ODAG links
+                    const xrfkey = 'abcdefghijklmnop';
+                    const linksUrl = currentUrl + '/api/odag/v1/links?xrfkey=' + xrfkey;
+
+                    $.ajax({
+                        url: linksUrl,
+                        type: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Qlik-XrfKey': xrfkey
+                        },
+                        xhrFields: {withCredentials: true},
+                        success: function(links) {
+                            let linksHtml = '';
+                            if (Array.isArray(links) && links.length > 0) {
+                                linksHtml += '<div style="color: #16a34a; margin-bottom: 16px;">✅ Found ' + links.length + ' ODAG link(s):</div>';
+                                linksHtml += '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">';
+                                linksHtml += '<thead><tr style="background: #f3f4f6; text-align: left;">';
+                                linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Name</th>';
+                                linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Link ID</th>';
+                                linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Status</th>';
+                                linksHtml += '</tr></thead><tbody>';
+
+                                links.forEach(function(link) {
+                                    linksHtml += '<tr style="border-bottom: 1px solid #ddd;">';
+                                    linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; font-weight: 500;">' + (link.name || '(no name)') + '</td>';
+                                    linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; font-family: monospace; font-size: 11px; background: #f9fafb; cursor: pointer;" onclick="navigator.clipboard.writeText(\'' + link.id + '\'); this.style.background=\'#dcfce7\'; setTimeout(() => this.style.background=\'#f9fafb\', 1000);" title="Click to copy">' + link.id + '</td>';
+                                    linksHtml += '<td style="padding: 8px; border: 1px solid #ddd;">' + (link.status || 'unknown') + '</td>';
+                                    linksHtml += '</tr>';
+                                });
+
+                                linksHtml += '</tbody></table>';
+                                linksHtml += '<div style="margin-top: 16px; padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; font-size: 12px;">';
+                                linksHtml += '💡 <strong>Tip:</strong> Click any Link ID to copy it, then paste it in the ODAG Link ID property field.';
+                                linksHtml += '</div>';
+                            } else {
+                                linksHtml += '<div style="color: #dc2626;">❌ No ODAG links found on this server.</div>';
+                                linksHtml += '<div style="margin-top: 8px; font-size: 12px; color: #666;">Please create an ODAG link in the QMC first.</div>';
+                            }
+
+                            $('#odag-links-list').html(linksHtml);
+                        },
+                        error: function(xhr, status, error) {
+                            $('#odag-links-list').html('<div style="color: #dc2626;">❌ Failed to fetch ODAG links: ' + xhr.status + ' ' + error + '</div>');
+                        }
+                    });
+
+                    return qlik.Promise.resolve();
+                } else {
+                    // Cloud: Show standard warning
+                    html += '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center;">';
+                    html += '<div style="font-size: 48px; margin-bottom: 16px;">⚠️</div>';
+                    html += '<div style="font-size: 18px; font-weight: bold; color: #f59e0b; margin-bottom: 8px;">ODAG Link ID Required</div>';
+                    html += '<div style="font-size: 14px; color: #666;">Please configure the ODAG Link ID in the property panel to use this extension.</div>';
+                    html += '</div>';
+                    html += '</div>'; // Close odag-container
+                    $element.html(html);
+                    return qlik.Promise.resolve();
+                }
             }
 
             // Show warning if in edit mode - don't make any API calls
