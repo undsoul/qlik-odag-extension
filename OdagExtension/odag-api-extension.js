@@ -134,6 +134,9 @@ function(qlik, $, properties) {
             // Store tenant URL and environment globally for API calls
             window.qlikTenantUrl = currentUrl;
             window.qlikEnvironment = isQlikCloud ? 'cloud' : 'onpremise';
+
+            // Always log environment detection (not behind debug flag)
+            console.log('🌍 ODAG Extension - Environment:', window.qlikEnvironment.toUpperCase(), '| Hostname:', hostname);
             debugLog('Detected environment:', window.qlikEnvironment, '- URL:', currentUrl);
 
             // Fetch and cache ODAG bindings if not already cached
