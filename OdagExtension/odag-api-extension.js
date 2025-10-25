@@ -171,8 +171,9 @@ function(qlik, $, properties) {
                 // Different API endpoints for Cloud vs On-Premise
                 let bindingsUrl, bindingsConfig;
                 const xrfkey = 'abcdefghijklmnop'; // 16 character key for On-Premise
+                const isCloud = window.qlikEnvironment === 'cloud';
 
-                if (isQlikCloud) {
+                if (isCloud) {
                     // Qlik Cloud: Use selAppLinkUsages endpoint
                     bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id;
                     bindingsConfig = {
@@ -209,16 +210,17 @@ function(qlik, $, properties) {
                     xhrFields: {withCredentials: true},
                     success: function(response) {
                         let bindings = null;
+                        const isCloud = window.qlikEnvironment === 'cloud';
 
-                        if (isQlikCloud) {
+                        if (isCloud) {
                             // Cloud response format: [{link: {bindings: [...]}}]
                             if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
                                 bindings = response[0].link.bindings;
                             }
                         } else {
-                            // On-Premise response format: {bindings: [...]}
-                            if (response && response.bindings) {
-                                bindings = response.bindings;
+                            // On-Premise response format: [{link: {bindings: [...]}}]
+                            if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                                bindings = response[0].link.bindings;
                             }
                         }
 
