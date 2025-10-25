@@ -127,9 +127,14 @@ function(qlik, $, properties) {
             const currentUrl = window.location.origin;
             const hostname = window.location.hostname;
 
-            // Store tenant URL globally for API calls
+            // Detect if running on Qlik Cloud or On-Premise
+            const isQlikCloud = hostname.includes('qlikcloud.com') || hostname.includes('qlik-stage.com');
+            const isOnPremise = !isQlikCloud;
+
+            // Store tenant URL and environment globally for API calls
             window.qlikTenantUrl = currentUrl;
-            debugLog('Detected Qlik tenant URL:', currentUrl);
+            window.qlikEnvironment = isQlikCloud ? 'cloud' : 'onpremise';
+            debugLog('Detected environment:', window.qlikEnvironment, '- URL:', currentUrl);
 
             // Fetch and cache ODAG bindings if not already cached
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
@@ -138,21 +143,59 @@ function(qlik, $, properties) {
 
                 const csrfToken = getCookie('_csrfToken');
 
+                // Different API endpoints for Cloud vs On-Premise
+                let bindingsUrl, bindingsConfig;
+
+                if (isQlikCloud) {
+                    // Qlik Cloud: Use selAppLinkUsages endpoint
+                    bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id;
+                    bindingsConfig = {
+                        type: 'POST',
+                        data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
+                        contentType: 'application/json',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': '*/*',
+                            'qlik-csrf-token': csrfToken || ''
+                        }
+                    };
+                } else {
+                    // Qlik On-Premise: Use direct link endpoint
+                    bindingsUrl = currentUrl + '/links/' + odagConfig.odagLinkId;
+                    bindingsConfig = {
+                        type: 'GET',
+                        headers: {
+                            'Accept': 'application/json',
+                            'X-Qlik-XrfKey': 'abcdefghijklmnop'
+                        }
+                    };
+                }
+
                 $.ajax({
-                    url: currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id,
-                    type: 'POST',
-                    data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
-                    contentType: 'application/json',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': '*/*',
-                        'qlik-csrf-token': csrfToken || ''
-                    },
+                    url: bindingsUrl,
+                    type: bindingsConfig.type,
+                    data: bindingsConfig.data,
+                    contentType: bindingsConfig.contentType,
+                    headers: bindingsConfig.headers,
                     xhrFields: {withCredentials: true},
                     success: function(response) {
-                        if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                            window[bindingsCacheKey] = response[0].link.bindings;
-                            debugLog('Cached ODAG bindings:', response[0].link.bindings.map(b => b.selectAppParamName || b.selectionAppParamName).join(', '));
+                        let bindings = null;
+
+                        if (isQlikCloud) {
+                            // Cloud response format: [{link: {bindings: [...]}}]
+                            if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                                bindings = response[0].link.bindings;
+                            }
+                        } else {
+                            // On-Premise response format: {bindings: [...]}
+                            if (response && response.bindings) {
+                                bindings = response.bindings;
+                            }
+                        }
+
+                        if (bindings) {
+                            window[bindingsCacheKey] = bindings;
+                            debugLog('Cached ODAG bindings:', bindings.map(b => b.selectAppParamName || b.selectionAppParamName).join(', '));
                         } else {
                             console.error('❌ Unexpected bindings response format');
                         }
@@ -195,7 +238,10 @@ function(qlik, $, properties) {
                 window[configKey] = currentConfig;
 
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true';
+                const isCloud = window.qlikEnvironment === 'cloud';
+                const apiUrl = isCloud
+                    ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
+                    : tenantUrl + '/requests?optLinkId=' + odagConfig.odagLinkId;
 
                 $.ajax({
                     url: apiUrl,
@@ -223,7 +269,7 @@ function(qlik, $, properties) {
 
                             appsToDelete.forEach(function(app) {
                                 $.ajax({
-                                    url: tenantUrl + '/api/v1/odagrequests/' + app.id + '/app',
+                                    url: (window.qlikEnvironment === 'cloud' ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/requests/') + app.id + '/app',
                                     type: 'DELETE',
                                     headers: {
                                         'qlik-csrf-token': getCookie('_csrfToken') || ''
@@ -421,7 +467,10 @@ function(qlik, $, properties) {
                 // Function to delete all existing ODAG apps
                 const deleteAllODAGApps = function(callback) {
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                    const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true';
+                    const isCloud = window.qlikEnvironment === 'cloud';
+                const apiUrl = isCloud
+                    ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
+                    : tenantUrl + '/requests?optLinkId=' + odagConfig.odagLinkId;
 
                     debugLog('Deleting all existing ODAG apps for Dynamic View...');
 
@@ -447,7 +496,7 @@ function(qlik, $, properties) {
                                     // Delete the generated app itself, not the request
                                     // Use the /app endpoint to delete the actual app
                                     $.ajax({
-                                        url: tenantUrl + '/api/v1/odagrequests/' + request.id + '/app',
+                                        url: (window.qlikEnvironment === 'cloud' ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/requests/') + request.id + '/app',
                                         type: 'DELETE',
                                         headers: {
                                             'qlik-csrf-token': getCookie('_csrfToken') || ''
@@ -558,7 +607,7 @@ function(qlik, $, properties) {
                                                     deletedApps.add(oldRequestId);
 
                                                     $.ajax({
-                                                        url: tenantUrl + '/api/v1/odagrequests/' + oldRequestId + '/app',
+                                                        url: (window.qlikEnvironment === 'cloud' ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/requests/') + oldRequestId + '/app',
                                                         type: 'DELETE',
                                                         headers: {
                                                             'qlik-csrf-token': getCookie('_csrfToken') || ''
@@ -619,7 +668,10 @@ function(qlik, $, properties) {
 
                 const loadLatestODAGApp = function() {
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                    const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true';
+                    const isCloud = window.qlikEnvironment === 'cloud';
+                const apiUrl = isCloud
+                    ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
+                    : tenantUrl + '/requests?optLinkId=' + odagConfig.odagLinkId;
 
                     $.ajax({
                         url: apiUrl,
@@ -1078,7 +1130,10 @@ function(qlik, $, properties) {
 
                     // Simply call loadLatestODAGApp to refresh the current state
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                    const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true';
+                    const isCloud = window.qlikEnvironment === 'cloud';
+                const apiUrl = isCloud
+                    ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
+                    : tenantUrl + '/requests?optLinkId=' + odagConfig.odagLinkId;
 
                     $.ajax({
                         url: apiUrl,
@@ -1658,28 +1713,42 @@ function(qlik, $, properties) {
             const callODAGAPI = async function(odagLinkId, payload) {
                 // Use dynamic tenant URL
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                const url = tenantUrl + '/api/v1/odaglinks/' + odagLinkId + '/requests';
+                const isCloud = window.qlikEnvironment === 'cloud';
 
-                debugLog('Calling ODAG API:', url);
+                // Different API paths for Cloud vs On-Premise
+                const url = isCloud
+                    ? tenantUrl + '/api/v1/odaglinks/' + odagLinkId + '/requests'
+                    : tenantUrl + '/links/' + odagLinkId + '/requests';
+
+                debugLog('Calling ODAG API:', url, '(Environment:', window.qlikEnvironment + ')');
                 debugLog('Payload:', JSON.stringify(payload, null, 2));
-                
+
                 const csrfToken = getCookie('_csrfToken');
-                
-                if (!csrfToken) {
+
+                if (isCloud && !csrfToken) {
                     console.error('No CSRF token found!');
                 }
-                
+
+                // Build headers based on environment
+                const headers = isCloud
+                    ? {
+                        'Content-Type': 'application/json',
+                        'Accept': '*/*',
+                        'qlik-csrf-token': csrfToken || ''
+                      }
+                    : {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Qlik-XrfKey': 'abcdefghijklmnop'
+                      };
+
                 return new Promise(function(resolve) {
                     $.ajax({
                         url: url,
                         type: 'POST',
                         data: JSON.stringify(payload),
                         contentType: 'application/json',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': '*/*',
-                            'qlik-csrf-token': csrfToken || ''
-                        },
+                        headers: headers,
                         xhrFields: {
                             withCredentials: true
                         },
@@ -2112,7 +2181,7 @@ function(qlik, $, properties) {
                         // Delete ODAG app via API
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
                         $.ajax({
-                            url: tenantUrl + '/api/v1/odagrequests/' + requestId + '/app',
+                            url: (window.qlikEnvironment === 'cloud' ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/requests/') + requestId + '/app',
                             type: 'DELETE',
                             headers: {
                                 'qlik-csrf-token': getCookie('_csrfToken') || ''
