@@ -161,72 +161,33 @@ function(qlik, $, properties) {
 
             debugLog('Using environment:', window.qlikEnvironment, '- URL:', currentUrl);
 
-            // Fetch and cache ODAG bindings if not already cached
+            // Fetch and cache ODAG bindings (Cloud only)
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
-            if (odagConfig.odagLinkId && !window[bindingsCacheKey]) {
-                debugLog('Fetching ODAG bindings for link:', odagConfig.odagLinkId);
+            const isCloud = window.qlikEnvironment === 'cloud';
+
+            if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey]) {
+                debugLog('Fetching ODAG bindings for Cloud link:', odagConfig.odagLinkId);
 
                 const csrfToken = getCookie('_csrfToken');
-
-                // Different API endpoints for Cloud vs On-Premise
-                let bindingsUrl, bindingsConfig;
-                const xrfkey = 'abcdefghijklmnop'; // 16 character key for On-Premise
-                const isCloud = window.qlikEnvironment === 'cloud';
-
-                if (isCloud) {
-                    // Qlik Cloud: Use selAppLinkUsages endpoint
-                    bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id;
-                    bindingsConfig = {
-                        type: 'POST',
-                        data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
-                        contentType: 'application/json',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': '*/*',
-                            'qlik-csrf-token': csrfToken || ''
-                        }
-                    };
-                } else {
-                    // Qlik On-Premise: Use selAppLinkUsages with /api/odag/v1/ path
-                    bindingsUrl = currentUrl + '/api/odag/v1/apps/' + app.id + '/selAppLinkUsages?xrfkey=' + xrfkey;
-                    bindingsConfig = {
-                        type: 'POST',
-                        data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
-                        contentType: 'application/json',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-Qlik-XrfKey': xrfkey
-                        }
-                    };
-                }
+                const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id;
 
                 $.ajax({
                     url: bindingsUrl,
-                    type: bindingsConfig.type,
-                    data: bindingsConfig.data,
-                    contentType: bindingsConfig.contentType,
-                    headers: bindingsConfig.headers,
+                    type: 'POST',
+                    data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
+                    contentType: 'application/json',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': '*/*',
+                        'qlik-csrf-token': csrfToken || ''
+                    },
                     xhrFields: {withCredentials: true},
                     success: function(response) {
-                        let bindings = null;
-                        const isCloud = window.qlikEnvironment === 'cloud';
-
-                        if (isCloud) {
-                            // Cloud response format: [{link: {bindings: [...]}}]
-                            if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                                bindings = response[0].link.bindings;
-                            }
-                        } else {
-                            // On-Premise response format: [{link: {bindings: [...]}}]
-                            if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                                bindings = response[0].link.bindings;
-                            }
-                        }
-
-                        if (bindings) {
+                        // Cloud response format: [{link: {bindings: [...]}}]
+                        if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                            const bindings = response[0].link.bindings;
                             window[bindingsCacheKey] = bindings;
-                            debugLog('Cached ODAG bindings:', bindings.map(b => b.selectAppParamName || b.selectionAppParamName).join(', '));
+                            debugLog('✅ Cloud bindings cached:', bindings.length, 'bindings');
                         } else {
                             console.error('❌ Unexpected bindings response format');
                         }
@@ -235,6 +196,10 @@ function(qlik, $, properties) {
                         console.error('❌ Failed to fetch ODAG bindings:', error.status, error.statusText);
                     }
                 });
+            } else if (!isCloud) {
+                // On-Premise: Skip bindings fetch, rely on ODAG template configuration
+                debugLog('✅ On-Premise: Using ODAG template configuration (no bindings fetch needed)');
+                window[bindingsCacheKey] = []; // Set empty to avoid repeated checks
             }
 
             // Check if extension is large enough for iframe view
@@ -1291,19 +1256,34 @@ function(qlik, $, properties) {
 
                 // Use the dynamic tenant URL
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                const apiUrl = tenantUrl + '/api/v1/odaglinks/' + odagLinkId + '/requests?pending=true';
+                const isCloud = window.qlikEnvironment === 'cloud';
+                const xrfkey = 'abcdefghijklmnop';
+
+                const apiUrl = isCloud
+                    ? tenantUrl + '/api/v1/odaglinks/' + odagLinkId + '/requests?pending=true'
+                    : tenantUrl + '/api/odag/v1/links/' + odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
+
                 debugLog('Loading existing ODAG requests from:', apiUrl);
                 debugLog('  - Tenant URL:', tenantUrl);
+                debugLog('  - Environment:', window.qlikEnvironment);
                 debugLog('  - ODAG Link ID:', odagLinkId);
                 debugLog('  - ODAG Link ID length:', odagLinkId.length);
+
+                const headers = isCloud
+                    ? {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                      }
+                    : {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json',
+                        'X-Qlik-XrfKey': xrfkey
+                      };
 
                 $.ajax({
                     url: apiUrl,
                     type: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    },
+                    headers: headers,
                     xhrFields: {
                         withCredentials: true
                     },
