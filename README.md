@@ -63,20 +63,32 @@ Same reliable ODAG functionality you trust, with a significantly improved user e
 
 ### ODAG Configuration
 
-#### Finding Your ODAG Link ID
+#### Qlik Cloud
+In Qlik Cloud, you'll manually enter the ODAG Link ID:
 
 https://github.com/user-attachments/assets/f572f5c3-637f-4186-9bd6-b7fd9445e840
 
 https://github.com/undsoul/qlik-odag-extension/blob/main/How-to.mov
-   
+
 <img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/264351a2-0282-4f5f-b00b-0683e95c64c6" />
 
+#### On-Premise
+In On-Premise environments, the extension automatically:
+- Fetches all available ODAG links from your app
+- Displays them in a searchable dropdown
+- Shows link name and template app for easy selection
+- Auto-refreshes when you change the ODAG link
 
 **🚨 Check CSP settings allow `cdn.jsdelivr.net`🚨  add to the Content security Policy 🚨**
 
 #### Settings
-- **ODAG Link ID**: The ID from the steps above (required)
+- **ODAG Link ID/Selector**:
+  - Cloud: Manual text input (required)
+  - On-Premise: Dropdown selector (required)
 - **Include Current Selections**: Whether to pass current selections to ODAG template (default: true)
+- **Embed Mode**:
+  - `classic/app`: Shows app with selection bar
+  - `analytics/sheet`: Shows app without selection bar (cleaner view)
 
 ### Variable Mappings
 
@@ -273,29 +285,32 @@ Both view modes support showing a specific sheet instead of the full app:
 
 ## 🆕 Recent Improvements
 
-### Version 1.0 Updates
+### Version 3.0 Updates
 
-**Simplified View Modes** (Latest)
-- Consolidated from 3 view modes to 2 for better UX
-- Single Sheet ID field now works for both Standard and Dynamic View
-- Clearer configuration with fewer options
+**Environment Support**
+- ✅ Full support for both Qlik Cloud and On-Premise environments
+- ✅ On-Premise: Dropdown selector showing all available ODAG links
+- ✅ Cloud: Manual ODAG Link ID input
+- ✅ Automatic environment detection and API endpoint routing
 
-**Dynamic View Enhancements**
-- ✅ Cleanup now runs immediately when switching to Dynamic View (even in edit mode)
-- ✅ Fixed cleanup logic to handle first-time entry
-- ✅ Sheet ID support added to Dynamic View
-- ✅ Proper embed UI types (`analytics/sheet` for sheets, `classic/app` for full app)
+**Embed Mode Enhancements**
+- ✅ Two embed modes: `classic/app` (with selection bar) and `analytics/sheet` (without selection bar)
+- ✅ Fixed critical paint() cycle issue causing embed destruction
+- ✅ Proper attribute handling: `object-id` for analytics/sheet, `sheet-id` for classic/app
+- ✅ All view mode combinations now work correctly without flashing
+
+**Dynamic View Improvements**
+- ✅ Fixed flashing issue in analytics/sheet mode
+- ✅ Prevented HTML rebuilds after initialization to preserve embeds
+- ✅ Proper initKey management for both List View and Dynamic View
+- ✅ Removed race conditions in embed creation
 
 **Bug Fixes**
-- ✅ Fixed `getCookie` reference error in cleanup code
-- ✅ Fixed "unknown ui: analytics/app" error
-- ✅ Fixed sheet-id validation errors when switching view modes
-- ✅ Improved edit mode detection and cleanup triggers
-
-**Configuration Improvements**
-- ✅ Default theme changed to `horizon` (modern Qlik theme)
-- ✅ Sheet ID field always visible for easier configuration
-- ✅ Backward compatible with existing extensions
+- ✅ Fixed embed destruction during paint() cycles
+- ✅ Fixed "Waiting for ODAG app..." overlay issue
+- ✅ Fixed querySelector not finding qlik-embed elements
+- ✅ Fixed timing issues with embed initialization
+- ✅ All four mode combinations now stable (List/Dynamic × classic/analytics)
 
 ---
 
@@ -344,12 +359,19 @@ Both view modes support showing a specific sheet instead of the full app:
 
 ## API Endpoints Used
 
-This extension uses the following Qlik Cloud APIs:
+### Qlik Cloud APIs
 - `GET /api/v1/odaglinks/{id}/requests` - List ODAG requests
 - `POST /api/v1/odaglinks/{id}/requests` - Create new ODAG request
 - `DELETE /api/v1/odagrequests/{id}` - Cancel pending request
 - `DELETE /api/v1/odagrequests/{id}/app` - Delete generated app
 - `POST /api/v1/odagrequests/{id}/reloadApp` - Reload app data
+
+### On-Premise APIs
+- `GET /api/odag/v1/links` - List all ODAG links (for dropdown)
+- `GET /api/odag/v1/links/{id}/requests` - List ODAG requests
+- `POST /api/odag/v1/links/{id}/requests` - Create new ODAG request
+- `DELETE /api/odag/v1/requests/{id}` - Cancel pending request
+- `DELETE /api/odag/v1/requests/{id}/app` - Delete generated app
 
 ## Architecture
 
@@ -396,9 +418,10 @@ Console output is suppressed when debug mode is off (production-ready).
 
 ## Requirements
 
-- Qlik Sense Cloud (April 2024 or later)
+- Qlik Sense Cloud (April 2024 or later) OR Qlik Sense Enterprise On-Premise
 - ODAG license and configured ODAG links
 - Appropriate permissions to create/delete apps
+- For embed functionality: CSP settings must allow `cdn.jsdelivr.net`
 
 ## Troubleshooting
 
