@@ -30,6 +30,38 @@ define([], function() {
                             }];
                         },
                         defaultValue: "",
+                        change: function(layout) {
+                            // Clear cached bindings when ODAG Link ID changes
+                            var odagLinkId = layout.odagConfig && layout.odagConfig.odagLinkId;
+                            if (odagLinkId && window.odagLastLinkId && odagLinkId !== window.odagLastLinkId) {
+                                var oldCacheKey = 'odagBindings_' + window.odagLastLinkId;
+
+                                // Clear old cache
+                                if (window[oldCacheKey]) {
+                                    delete window[oldCacheKey];
+                                }
+
+                                // Clear stored bindings from layout since we're switching to a different ODAG link
+                                var app = window.qlik ? window.qlik.currApp() : null;
+                                if (app) {
+                                    app.getObject(layout.qInfo.qId).then(function(model) {
+                                        model.getProperties().then(function(props) {
+                                            // Preserve all existing properties
+                                            if (props.odagConfig) {
+                                                props.odagConfig._cachedBindingFields = '';
+                                                props.odagConfig.odagLinkId = odagLinkId;
+                                            }
+                                            model.setProperties(props);
+                                        });
+                                    });
+                                }
+
+                                console.log('🔄 ODAG Link ID changed from', window.odagLastLinkId, 'to', odagLinkId, '- cleared old bindings, will fetch new bindings on next paint');
+                            }
+
+                            // Store current link ID
+                            window.odagLastLinkId = odagLinkId;
+                        },
                         show: function() {
                             return window.qlikEnvironment !== 'cloud';
                         }
@@ -41,6 +73,38 @@ define([], function() {
                         label: "ODAG Link ID",
                         expression: "optional",
                         defaultValue: "",
+                        change: function(layout) {
+                            // Clear cached bindings when ODAG Link ID changes
+                            var odagLinkId = layout.odagConfig && layout.odagConfig.odagLinkId;
+                            if (odagLinkId && window.odagLastLinkId && odagLinkId !== window.odagLastLinkId) {
+                                var oldCacheKey = 'odagBindings_' + window.odagLastLinkId;
+
+                                // Clear old cache
+                                if (window[oldCacheKey]) {
+                                    delete window[oldCacheKey];
+                                }
+
+                                // Clear stored bindings from layout since we're switching to a different ODAG link
+                                var app = window.qlik ? window.qlik.currApp() : null;
+                                if (app) {
+                                    app.getObject(layout.qInfo.qId).then(function(model) {
+                                        model.getProperties().then(function(props) {
+                                            // Preserve all existing properties
+                                            if (props.odagConfig) {
+                                                props.odagConfig._cachedBindingFields = '';
+                                                props.odagConfig.odagLinkId = odagLinkId;
+                                            }
+                                            model.setProperties(props);
+                                        });
+                                    });
+                                }
+
+                                console.log('🔄 ODAG Link ID changed from', window.odagLastLinkId, 'to', odagLinkId, '- cleared old bindings, will fetch new bindings on next paint');
+                            }
+
+                            // Store current link ID
+                            window.odagLastLinkId = odagLinkId;
+                        },
                         show: function() {
                             return window.qlikEnvironment === 'cloud';
                         }
@@ -50,6 +114,69 @@ define([], function() {
                         ref: "odagConfig.includeCurrentSelections",
                         label: "Include Current Selections",
                         defaultValue: true
+                    },
+                    cachedBindingFields: {
+                        type: "string",
+                        ref: "odagConfig._cachedBindingFields",
+                        label: "Required Binding Fields (auto-fetched)",
+                        expression: "optional",
+                        defaultValue: "",
+                        readOnly: true,
+                        show: function(layout) {
+                            var odagLinkId = layout.odagConfig && layout.odagConfig.odagLinkId;
+                            return odagLinkId && odagLinkId.trim() !== '';
+                        }
+                    },
+                    refreshBindingsBtn: {
+                        component: "button",
+                        label: "Refresh Binding Fields",
+                        action: function(layout) {
+                            var odagLinkId = layout.odagConfig && layout.odagConfig.odagLinkId;
+                            if (!odagLinkId) {
+                                alert('⚠️ Please enter an ODAG Link ID first.');
+                                return;
+                            }
+
+                            // Clear the cached bindings to force a refresh
+                            var bindingsCacheKey = 'odagBindings_' + odagLinkId;
+                            delete window[bindingsCacheKey];
+
+                            // Clear the stored binding fields in layout
+                            var app = window.qlik ? window.qlik.currApp() : null;
+                            if (app) {
+                                app.getObject(layout.qInfo.qId).then(function(model) {
+                                    model.getProperties().then(function(props) {
+                                        // Preserve all existing properties
+                                        if (props.odagConfig) {
+                                            props.odagConfig._cachedBindingFields = '';
+                                        }
+                                        model.setProperties(props);
+                                        console.log('🔄 Cleared bindings cache. They will be re-fetched automatically.');
+                                        alert('✅ Bindings cache cleared!\n\nThe binding fields will be automatically re-fetched in a moment.\n\nClose and reopen this properties panel to see the updated fields.');
+                                    });
+                                });
+                            }
+                        },
+                        show: function(layout) {
+                            var odagLinkId = layout.odagConfig && layout.odagConfig.odagLinkId;
+                            return odagLinkId && odagLinkId.trim() !== '';
+                        }
+                    },
+                    bindingsInfo: {
+                        component: "text",
+                        label: "",
+                        template: function() {
+                            return '<div style="padding: 8px; background: #e0f2fe; border-left: 3px solid #0284c7; border-radius: 4px; color: #0c4a6e; font-size: 11px;">' +
+                                   '<strong>ℹ️ About Binding Fields:</strong><br/>' +
+                                   '• Binding fields are automatically fetched when you enter an ODAG Link ID<br/>' +
+                                   '• They are cached and reused for all generation requests (no repeated API calls)<br/>' +
+                                   '• If the ODAG link configuration is updated in Qlik, click "Refresh Binding Fields" to reload them<br/>' +
+                                   '• Switching to a different ODAG Link ID automatically clears the old bindings</div>';
+                        },
+                        show: function(layout) {
+                            var odagLinkId = layout.odagConfig && layout.odagConfig.odagLinkId;
+                            return odagLinkId && odagLinkId.trim() !== '';
+                        }
                     }
                 }
             },
@@ -126,19 +253,26 @@ define([], function() {
                         }],
                         defaultValue: "odagApp"
                     },
+                    embedMode: {
+                        type: "string",
+                        component: "dropdown",
+                        ref: "odagConfig.embedMode",
+                        label: "Embed Mode",
+                        options: [{
+                            value: "classic/app",
+                            label: "Classic App (with selection bar)"
+                        }, {
+                            value: "analytics/sheet",
+                            label: "Analytics Sheet (no selection bar)"
+                        }],
+                        defaultValue: "classic/app"
+                    },
                     templateSheetId: {
                         type: "string",
                         ref: "odagConfig.templateSheetId",
                         label: "Sheet ID (Optional - leave empty for full app)",
                         expression: "optional",
                         defaultValue: ""
-                    },
-                    embedTheme: {
-                        type: "string",
-                        ref: "odagConfig.embedTheme",
-                        label: "Theme",
-                        expression: "optional",
-                        defaultValue: "sense"
                     },
                     allowInteractions: {
                         type: "boolean",

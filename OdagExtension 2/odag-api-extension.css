@@ -129,7 +129,6 @@ qlik-embed {
     overflow: hidden;
     flex-shrink: 0;
     border-right: 1px solid #e1e5eb;
-    transition: margin-left 0.3s ease;
 }
 
 /* List header */
@@ -539,53 +538,4 @@ qlik-embed {
 
 .odag-notification {
     z-index: 10000;
-}
-
-/* Mobile responsive styles */
-.odag-content-mobile {
-    display: flex;
-    flex-direction: column;
-    height: 100%;
-}
-
-.mobile-controls {
-    background: white;
-    border-bottom: 1px solid #e1e5eb;
-    padding: 12px;
-    flex-shrink: 0;
-}
-
-.mobile-app-selector {
-    flex: 1;
-    padding: 10px;
-    font-size: 14px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
-    background: white;
-    color: #374151;
-    cursor: pointer;
-    transition: border-color 0.2s;
-}
-
-.mobile-app-selector:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-}
-
-.mobile-app-selector option {
-    padding: 8px;
-}
-
-/* Dynamic View mobile responsiveness */
-@media (max-width: 768px) {
-    .dynamic-top-bar {
-        flex-direction: column !important;
-        gap: 8px !important;
-        align-items: stretch !important;
-    }
-
-    .dynamic-top-bar > div {
-        width: 100%;
-    }
 }
