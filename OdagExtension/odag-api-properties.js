@@ -9,27 +9,41 @@ define([], function() {
                 type: "items",
                 label: "ODAG Configuration",
                 items: {
-                    odagLinkId: {
+                    // On-Premise: Dropdown with all links
+                    odagLinkIdOnPremise: {
                         type: "string",
+                        component: "dropdown",
                         ref: "odagConfig.odagLinkId",
-                        label: "ODAG Link ID (or use link selector in extension below)",
-                        expression: "optional",
-                        defaultValue: ""
-                    },
-                    odagLinkName: {
-                        type: "string",
-                        ref: "odagConfig.odagLinkName",
-                        label: "Selected Link Name (read-only)",
-                        expression: "optional",
+                        label: "Select ODAG Link",
+                        options: function() {
+                            if (window.odagAllLinks && Array.isArray(window.odagAllLinks)) {
+                                return window.odagAllLinks.map(function(link) {
+                                    return {
+                                        value: link.id,
+                                        label: link.name + ' → ' + (link.templateApp ? link.templateApp.name : 'N/A')
+                                    };
+                                });
+                            }
+                            return [{
+                                value: "",
+                                label: "Loading links... (refresh properties panel)"
+                            }];
+                        },
                         defaultValue: "",
-                        show: function(data) {
-                            return data.odagConfig && data.odagConfig.odagLinkName;
+                        show: function() {
+                            return window.qlikEnvironment !== 'cloud';
                         }
                     },
-                    odagLinkSelectorHint: {
-                        component: "text",
-                        label: "💡 Exit edit mode to see the ODAG Link Selector below",
-                        style: "hint"
+                    // Cloud: Manual input
+                    odagLinkIdCloud: {
+                        type: "string",
+                        ref: "odagConfig.odagLinkId",
+                        label: "ODAG Link ID",
+                        expression: "optional",
+                        defaultValue: "",
+                        show: function() {
+                            return window.qlikEnvironment === 'cloud';
+                        }
                     },
                     includeCurrentSelections: {
                         type: "boolean",

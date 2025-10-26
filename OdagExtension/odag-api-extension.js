@@ -420,124 +420,17 @@ function(qlik, $, properties) {
                 }
             }
 
-            // Show link selector in edit mode
+            // Show standard message in edit mode
             if (isEditMode) {
-                debugLog('ODAG Extension: In edit mode, showing link selector');
-
-                // Show link selector for On-Premise
-                if (!isCloud) {
-                    html += '<div id="odag-link-selector" style="padding: 20px;">';
-                    html += '<div style="font-size: 18px; font-weight: bold; margin-bottom: 16px;">🔗 ODAG Link Selector</div>';
-                    html += '<div style="color: #666; margin-bottom: 16px;">Select an ODAG link from the list below. The link ID will be saved automatically.</div>';
-                    html += '<div style="margin-bottom: 16px;">';
-                    html += '<input type="text" id="odag-link-search" placeholder="🔍 Search links by name or template app..." style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 14px;">';
-                    html += '</div>';
-                    html += '<div id="odag-links-list" style="max-height: 500px; overflow-y: auto;">Loading links...</div>';
-                    html += '</div>';
-                    html += '</div>'; // Close odag-container
-                    $element.html(html);
-
-                    // Fetch all ODAG links
-                    const xrfkey = 'abcdefghijklmnop';
-                    const linksUrl = currentUrl + '/api/odag/v1/links?xrfkey=' + xrfkey;
-
-                    $.ajax({
-                        url: linksUrl,
-                        type: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-Qlik-XrfKey': xrfkey
-                        },
-                        xhrFields: {withCredentials: true},
-                        success: function(links) {
-                            window.odagAllLinks = links || [];
-                            renderLinksList(links);
-
-                            // Add search functionality
-                            $('#odag-link-search').on('input', function() {
-                                const searchTerm = $(this).val().toLowerCase();
-                                const filtered = window.odagAllLinks.filter(function(link) {
-                                    const name = (link.name || '').toLowerCase();
-                                    const templateName = (link.templateApp && link.templateApp.name || '').toLowerCase();
-                                    return name.includes(searchTerm) || templateName.includes(searchTerm);
-                                });
-                                renderLinksList(filtered);
-                            });
-                        },
-                        error: function(xhr, status, error) {
-                            $('#odag-links-list').html('<div style="color: #dc2626;">❌ Failed to fetch ODAG links: ' + xhr.status + ' ' + error + '</div>');
-                        }
-                    });
-
-                    // Function to render links list
-                    function renderLinksList(links) {
-                        let linksHtml = '';
-                        if (Array.isArray(links) && links.length > 0) {
-                            linksHtml += '<div style="color: #16a34a; margin-bottom: 16px;">✅ Found ' + links.length + ' ODAG link(s)</div>';
-                            linksHtml += '<table style="width: 100%; border-collapse: collapse; font-size: 13px;">';
-                            linksHtml += '<thead><tr style="background: #f3f4f6; text-align: left;">';
-                            linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Name</th>';
-                            linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Template App</th>';
-                            linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Link ID</th>';
-                            linksHtml += '<th style="padding: 8px; border: 1px solid #ddd;">Action</th>';
-                            linksHtml += '</tr></thead><tbody>';
-
-                            links.forEach(function(link) {
-                                const isSelected = link.id === odagConfig.odagLinkId;
-                                const rowStyle = isSelected ? 'background: #dcfce7;' : '';
-                                linksHtml += '<tr style="border-bottom: 1px solid #ddd; ' + rowStyle + '">';
-                                linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; font-weight: 500;">' + (link.name || '(no name)') + '</td>';
-                                linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; color: #666; font-size: 12px;">' + (link.templateApp ? link.templateApp.name : 'N/A') + '</td>';
-                                linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; font-family: monospace; font-size: 10px;">' + link.id + '</td>';
-                                linksHtml += '<td style="padding: 8px; border: 1px solid #ddd; text-align: center;">';
-                                if (isSelected) {
-                                    linksHtml += '<span style="color: #16a34a; font-weight: bold;">✓ Selected</span>';
-                                } else {
-                                    linksHtml += '<button class="odag-select-link" data-link-id="' + link.id + '" data-link-name="' + (link.name || '(no name)') + '" style="padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px;">Select</button>';
-                                }
-                                linksHtml += '</td>';
-                                linksHtml += '</tr>';
-                            });
-
-                            linksHtml += '</tbody></table>';
-                        } else {
-                            linksHtml += '<div style="color: #dc2626;">❌ No ODAG links found.</div>';
-                        }
-
-                        $('#odag-links-list').html(linksHtml);
-
-                        // Add click handlers for select buttons
-                        $('.odag-select-link').on('click', function() {
-                            const linkId = $(this).data('link-id');
-                            const linkName = $(this).data('link-name');
-
-                            // Update the property
-                            app.model.engineApp.getProperties().then(function(props) {
-                                props.odagConfig = props.odagConfig || {};
-                                props.odagConfig.odagLinkId = linkId;
-                                props.odagConfig.odagLinkName = linkName;
-                                return app.model.engineApp.setProperties(props);
-                            }).then(function() {
-                                console.log('✅ ODAG Link selected:', linkName, '(' + linkId + ')');
-                                // Re-render to show selection
-                                renderLinksList(window.odagAllLinks);
-                            });
-                        });
-                    }
-
-                    return qlik.Promise.resolve();
-                } else {
-                    // Cloud: Show standard edit mode message
-                    html += '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center;">';
-                    html += '<div style="font-size: 48px; margin-bottom: 16px;">✏️ 📝</div>';
-                    html += '<div style="font-size: 18px; font-weight: bold; color: #666; margin-bottom: 8px;">Edit Mode</div>';
-                    html += '<div style="font-size: 14px; color: #999;">Extension is paused while in edit mode. Exit edit mode to activate.</div>';
-                    html += '</div>';
-                    html += '</div>'; // Close odag-container
-                    $element.html(html);
-                    return qlik.Promise.resolve();
-                }
+                debugLog('ODAG Extension: In edit mode, showing edit message');
+                html += '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center;">';
+                html += '<div style="font-size: 48px; margin-bottom: 16px;">✏️ 📝</div>';
+                html += '<div style="font-size: 18px; font-weight: bold; color: #666; margin-bottom: 8px;">Edit Mode</div>';
+                html += '<div style="font-size: 14px; color: #999;">Configure ODAG settings in the properties panel →</div>';
+                html += '</div>';
+                html += '</div>'; // Close odag-container
+                $element.html(html);
+                return qlik.Promise.resolve();
             }
 
             debugLog('ODAG Extension: ODAG Link ID configured, continuing with normal rendering...');
