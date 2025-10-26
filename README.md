@@ -418,7 +418,7 @@ Console output is suppressed when debug mode is off (production-ready).
 
 ## Requirements
 
-- Qlik Sense Cloud (April 2024 or later) OR Qlik Sense Enterprise On-Premise
+- Qlik Sense Cloud OR Qlik Sense Enterprise On-Premise
 - ODAG license and configured ODAG links
 - Appropriate permissions to create/delete apps
 - For embed functionality: CSP settings must allow `cdn.jsdelivr.net`
