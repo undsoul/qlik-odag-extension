@@ -1,0 +1,34 @@
+{
+    "name": "ODAG Extension w/Variable Support",
+    "description": "Generate On-Demand Apps with variable support and dynamic field mapping",
+    "type": "visualization",
+    "version": "3.0.0",
+    "icon": "extension",
+    "author": "MuchachoAI",
+    "homepage": "",
+    "keywords": [
+        "qlik-sense",
+        "odag",
+        "on-demand",
+        "variable",
+        "extension"
+    ],
+    "license": "MIT",
+    "repository": "",
+    "dependencies": {
+        "qlik-sense": ">=3.2.x"
+    },
+    "support": {
+        "email": "support@yourcompany.com"
+    },
+    "preview": "preview.png",
+    "supportsSnapshot": false,
+    "exportEnabled": false,
+    "importEnabled": false,
+    "supportsProxyMode": true,
+    "bundle": {
+        "id": "odag-variable-extension",
+        "name": "ODAG Extension w/Variable Support",
+        "description": "Generate On-Demand Apps with variable support"
+    }
+}

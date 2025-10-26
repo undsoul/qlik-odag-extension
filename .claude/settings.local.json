@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//Users/onderaltinbilek/Downloads/**)",
+      "WebFetch(domain:help.qlik.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
