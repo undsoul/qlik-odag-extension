@@ -168,14 +168,14 @@ function(qlik, $, properties) {
                 window.odagLinksListFetched = true;
 
                 const xrfkey = 'abcdefghijklmnop';
-                // Try app-specific endpoint first: /api/odag/v1/apps/{appId}/links
-                const linksUrl = currentUrl + '/api/odag/v1/apps/' + app.id + '/links?xrfkey=' + xrfkey;
+                // Get all ODAG links
+                const linksUrl = currentUrl + '/api/odag/v1/links?xrfkey=' + xrfkey;
 
                 debugLog('📋 Fetching available ODAG links from On-Premise...');
 
                 $.ajax({
                     url: linksUrl,
-                    type: 'GET',
+                    type: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
@@ -364,7 +364,7 @@ function(qlik, $, properties) {
 
                     $.ajax({
                         url: linksUrl,
-                        type: 'GET',
+                        type: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
