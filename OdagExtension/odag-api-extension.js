@@ -175,7 +175,7 @@ function(qlik, $, properties) {
 
                 $.ajax({
                     url: linksUrl,
-                    type: 'POST',
+                    type: 'GET',
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
@@ -364,7 +364,7 @@ function(qlik, $, properties) {
 
                     $.ajax({
                         url: linksUrl,
-                        type: 'POST',
+                        type: 'GET',
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
@@ -443,7 +443,7 @@ function(qlik, $, properties) {
 
                     $.ajax({
                         url: linksUrl,
-                        type: 'POST',
+                        type: 'GET',
                         headers: {
                             'Content-Type': 'application/json',
                             'Accept': 'application/json',
