@@ -349,6 +349,29 @@ function(qlik, $, properties) {
                             debugLog('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
                             debugLog('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
 
+                            // Cache row estimation config from ODAG link (On-Premise)
+                            const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+                            if (linkDetails.objectDef) {
+                                const objectDef = linkDetails.objectDef;
+
+                                // Extract rowEstExpr and curRowEstHighBound from On-Premise structure
+                                let rowEstExpr = objectDef.rowEstExpr;
+                                let curRowEstHighBound = null;
+
+                                // Check for row estimation range configuration
+                                if (objectDef.rowEstRange && Array.isArray(objectDef.rowEstRange) &&
+                                    objectDef.rowEstRange.length > 0) {
+                                    curRowEstHighBound = objectDef.rowEstRange[0].highBound;
+                                }
+
+                                window[rowEstCacheKey] = {
+                                    rowEstExpr: rowEstExpr,
+                                    curRowEstHighBound: curRowEstHighBound
+                                };
+
+                                debugLog('✅ [PAINT] On-Premise row estimation config:', window[rowEstCacheKey]);
+                            }
+
                             // Extract field names and store in layout for properties panel display
                             const fieldNames = bindings.map(function(b) {
                                 return b.selectAppParamName || b.selectionAppParamName || b.fieldName || b.name;
@@ -640,7 +663,7 @@ function(qlik, $, properties) {
                 html += 'padding: ' + (isMobile ? '8px 12px' : '12px 16px') + '; display: flex; ';
                 html += 'flex-direction: ' + (isMobile ? 'column' : 'row') + '; ';
                 html += 'justify-content: space-between; align-items: ' + (isMobile ? 'stretch' : 'center') + '; ';
-                html += 'gap: ' + (isMobile ? '8px' : '0') + '; ';
+                html += 'gap: ' + (isMobile ? '8px' : '0') + '; pointer-events: none; ';
                 html += 'transition: transform 0.3s ease, opacity 0.3s ease; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">';
 
                 // Status indicator on the left
@@ -653,12 +676,12 @@ function(qlik, $, properties) {
                 html += '</div>';
 
                 // Button container on the right
-                html += '<div style="display: flex; gap: 8px;">';
+                html += '<div style="display: flex; gap: 8px; pointer-events: auto;">';
 
                 // Cancel button (hidden by default)
                 html += '<button class="odag-cancel-btn" id="cancel-btn-' + layout.qInfo.qId + '" ';
                 html += 'style="background: #ef4444; border: 1px solid #dc2626; border-radius: 4px; color: white; ';
-                html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; ';
+                html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: none; align-items: center; gap: 4px;">';
                 html += '<span style="font-size: 16px;">⏹</span> Cancel';
                 html += '</button>';
@@ -666,7 +689,7 @@ function(qlik, $, properties) {
                 // Refresh button
                 html += '<button class="odag-refresh-btn" id="refresh-btn-' + layout.qInfo.qId + '" ';
                 html += 'style="background: white; border: 1px solid #ccc; border-radius: 4px; ';
-                html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; ';
+                html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 2px 4px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px;">';
                 html += '<span style="font-size: 16px;">↻</span> Refresh';
                 html += '</button>';
@@ -3371,6 +3394,30 @@ function(qlik, $, properties) {
                                         window[bindingsCacheKey] = bindings;
                                         debugLog('✅ On-Premise bindings cached:', bindings.length, 'bindings');
                                         debugLog('✅ Bindings array:', JSON.stringify(bindings, null, 2));
+
+                                        // Cache row estimation config from ODAG link (On-Premise)
+                                        const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+                                        if (linkDetails.objectDef) {
+                                            const objectDef = linkDetails.objectDef;
+
+                                            // Extract rowEstExpr and curRowEstHighBound from On-Premise structure
+                                            let rowEstExpr = objectDef.rowEstExpr;
+                                            let curRowEstHighBound = null;
+
+                                            // Check for row estimation range configuration
+                                            if (objectDef.rowEstRange && Array.isArray(objectDef.rowEstRange) &&
+                                                objectDef.rowEstRange.length > 0) {
+                                                curRowEstHighBound = objectDef.rowEstRange[0].highBound;
+                                            }
+
+                                            window[rowEstCacheKey] = {
+                                                rowEstExpr: rowEstExpr,
+                                                curRowEstHighBound: curRowEstHighBound
+                                            };
+
+                                            debugLog('✅ On-Premise row estimation config:', window[rowEstCacheKey]);
+                                        }
+
                                         resolve();
                                     } else {
                                         console.error('❌ No bindings found in ODAG link details');
