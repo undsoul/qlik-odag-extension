@@ -660,38 +660,38 @@ function(qlik, $, properties) {
                 // Mobile: Make it stack vertically if needed
                 html += '<div id="dynamic-top-bar-' + layout.qInfo.qId + '" class="dynamic-top-bar" style="position: absolute; top: 0; left: 0; right: 0; z-index: 100; ';
                 html += 'background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid #e5e7eb; ';
-                html += 'padding: ' + (isMobile ? '6px 10px' : '8px 12px') + '; display: flex; ';
+                html += 'padding: ' + (isMobile ? '8px 12px' : '12px 16px') + '; display: flex; ';
                 html += 'flex-direction: ' + (isMobile ? 'column' : 'row') + '; ';
                 html += 'justify-content: space-between; align-items: ' + (isMobile ? 'stretch' : 'center') + '; ';
-                html += 'gap: ' + (isMobile ? '6px' : '0') + '; pointer-events: none; ';
+                html += 'gap: ' + (isMobile ? '8px' : '0') + '; pointer-events: none; ';
                 html += 'transition: transform 0.3s ease, opacity 0.3s ease; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">';
 
                 // Status indicator on the left
                 html += '<div id="dynamic-status-' + layout.qInfo.qId + '" style="display: flex; align-items: center; gap: 8px; ';
-                html += 'font-size: 12px; color: #374151; font-weight: 500;">';
-                html += '<span class="status-spinner" style="display: inline-block; width: 12px; height: 12px; ';
+                html += 'font-size: 13px; color: #374151; font-weight: 500;">';
+                html += '<span class="status-spinner" style="display: inline-block; width: 14px; height: 14px; ';
                 html += 'border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-left-color: #3b82f6; ';
                 html += 'border-radius: 50%; animation: spin 0.8s linear infinite;"></span>';
                 html += '<span>Loading latest app...</span>';
                 html += '</div>';
 
                 // Button container on the right
-                html += '<div style="display: flex; gap: 6px; pointer-events: auto;">';
+                html += '<div style="display: flex; gap: 8px; pointer-events: auto;">';
 
                 // Cancel button (hidden by default)
                 html += '<button class="odag-cancel-btn" id="cancel-btn-' + layout.qInfo.qId + '" ';
                 html += 'style="background: #ef4444; border: 1px solid #dc2626; border-radius: 3px; color: white; ';
-                html += 'padding: 4px 10px; cursor: pointer; font-size: 13px; pointer-events: auto; ';
+                html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: none; align-items: center; gap: 4px;">';
-                html += '<span style="font-size: 14px;">⏹</span> Cancel';
+                html += '<span style="font-size: 16px;">⏹</span> Cancel';
                 html += '</button>';
 
                 // Refresh button
                 html += '<button class="odag-refresh-btn" id="refresh-btn-' + layout.qInfo.qId + '" ';
                 html += 'style="background: white; border: 1px solid #ccc; border-radius: 3px; ';
-                html += 'padding: 4px 10px; cursor: pointer; font-size: 13px; pointer-events: auto; ';
+                html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px;">';
-                html += '<span style="font-size: 14px;">↻</span> Refresh';
+                html += '<span style="font-size: 16px;">↻</span> Refresh';
                 html += '</button>';
 
                 html += '</div>'; // Close button container
