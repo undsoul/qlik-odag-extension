@@ -873,8 +873,8 @@ function(qlik, $, properties) {
                             'border': '1px solid #ef5350',
                             'color': '#c62828'
                         }).html('⚠️ <strong>Cannot generate:</strong> Current selections result in ' +
-                                rowEstResult.actualRowEst + ' distinct values, exceeding the limit of ' +
-                                rowEstResult.curRowEstHighBound + '. Please refine your selections.');
+                                rowEstResult.actualRowEst + ' rows, exceeding the limit of ' +
+                                rowEstResult.curRowEstHighBound + ' rows. Please refine your selections.');
 
                         debugLog('🚫 ODAG validation FAILED:', rowEstResult);
                     } else {
