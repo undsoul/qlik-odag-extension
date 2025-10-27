@@ -508,6 +508,10 @@ function(qlik, $, properties) {
             // Store current mode for next paint cycle
             window[modeKey] = currentMode;
 
+            // Note: When switching modes, Qlik may throw a console error "TypeError: u[e] is not a function"
+            // in NebulaApp.jsx during embed cleanup. This is a known Qlik framework limitation and does not
+            // affect functionality. See README Troubleshooting section for details.
+
             // Detect mobile viewport (width < 768px)
             const isMobile = elementWidth < 768;
             debugLog('ODAG Extension: isMobile =', isMobile, 'elementWidth =', elementWidth);

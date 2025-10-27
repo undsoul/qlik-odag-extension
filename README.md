@@ -445,6 +445,13 @@ Console output is suppressed when debug mode is off (production-ready).
 - Check ODAG request ID is valid
 - Enable debug mode for detailed error messages
 
+### Console error: "TypeError: u[e] is not a function" in NebulaApp.jsx
+- **This is a known Qlik embed framework limitation**, not an extension bug
+- Occurs when qlik-embed elements are destroyed during mode switches (edit ↔ analysis)
+- **Does not affect functionality** - the extension continues to work normally
+- The error happens inside Qlik's own code (`qmfe-embed.js`, `NebulaApp.jsx`)
+- Safe to ignore - it's a harmless cleanup timing issue in Qlik's framework
+
 ## Security
 
 This extension:
