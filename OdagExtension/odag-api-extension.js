@@ -206,16 +206,20 @@ function(qlik, $, properties) {
 
             // Fetch and cache ODAG bindings (for both Cloud and On-Premise)
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
+            const bindingsFetchingKey = 'odagBindingsFetching_' + odagConfig.odagLinkId;
 
             debugLog('🔍 Bindings check:', {
                 isCloud: isCloud,
                 odagLinkId: odagConfig.odagLinkId,
                 bindingsCacheKey: bindingsCacheKey,
                 cached: window[bindingsCacheKey],
-                shouldFetch: isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey]
+                fetching: window[bindingsFetchingKey],
+                shouldFetch: isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]
             });
 
-            if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey]) {
+            if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
+                // Set fetching flag to prevent duplicate requests
+                window[bindingsFetchingKey] = true;
                 console.log('📋 [PAINT] Fetching ODAG bindings for Cloud link:', odagConfig.odagLinkId);
 
                 const csrfToken = getCookie('_csrfToken');
@@ -265,14 +269,20 @@ function(qlik, $, properties) {
                             console.error('[PAINT] Response:', response);
                             window[bindingsCacheKey] = [];
                         }
+                        // Clear fetching flag
+                        delete window[bindingsFetchingKey];
                     },
                     error: function(xhr, status, error) {
                         console.error('❌ [PAINT] Failed to fetch Cloud ODAG bindings:', xhr.status, error);
                         console.error('[PAINT] Response:', xhr.responseText);
                         window[bindingsCacheKey] = [];
+                        // Clear fetching flag
+                        delete window[bindingsFetchingKey];
                     }
                 });
-            } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey]) {
+            } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
+                // Set fetching flag to prevent duplicate requests
+                window[bindingsFetchingKey] = true;
                 // On-Premise: Fetch bindings from ODAG link details
                 debugLog('Fetching ODAG bindings for On-Premise link:', odagConfig.odagLinkId);
 
@@ -335,10 +345,14 @@ function(qlik, $, properties) {
                             }
                             window[bindingsCacheKey] = []; // Empty array to avoid repeated fetches
                         }
+                        // Clear fetching flag
+                        delete window[bindingsFetchingKey];
                     },
                     error: function(xhr, status, error) {
                         console.error('❌ Failed to fetch ODAG link details for bindings:', xhr.status, error);
                         window[bindingsCacheKey] = []; // Empty array to avoid repeated fetches
+                        // Clear fetching flag
+                        delete window[bindingsFetchingKey];
                     }
                 });
             }
