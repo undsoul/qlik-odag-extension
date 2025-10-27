@@ -3211,8 +3211,13 @@ function(qlik, $, properties) {
                         debugLog('Dynamic View already initialized with embed, restoring state');
                         return restoreDynamicView(debugLog);
                     } else {
-                        debugLog('Dynamic View initialized but embed not created yet, waiting...');
-                        return qlik.Promise.resolve();
+                        // Embed was destroyed (e.g., by NebulaApp error during mode switch or edit/analysis transition)
+                        // Reinitialize instead of waiting indefinitely
+                        debugLog('⚠️ Dynamic View embed missing, reinitializing...');
+                        delete window[dynamicViewKey]; // Clear flag to allow reinitialization
+                        delete window[configKey]; // Clear config to force fresh setup
+                        debugLog('🔄 Cleared Dynamic View flags, will reinitialize below');
+                        // Fall through to initialization logic below instead of returning
                     }
                 }
             } else if (!isDynamicView && window[dynamicViewKey]) {
