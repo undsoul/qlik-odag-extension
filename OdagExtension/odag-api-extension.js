@@ -1843,13 +1843,30 @@ function(qlik, $, properties) {
                 });
 
                 // Hide top bar when clicking outside of it
-                $element.on('click', function(e) {
+                // Use document-level event because embedded app may capture clicks
+                const clickOutsideHandler = function(e) {
                     const $target = $(e.target);
+                    const $topBarElement = $('#dynamic-top-bar-' + layout.qInfo.qId);
 
-                    // Check if click is outside the top bar
-                    if (!$target.closest('#dynamic-top-bar-' + layout.qInfo.qId).length) {
-                        hideTopBar();
+                    // Check if top bar exists and is visible
+                    if ($topBarElement.length > 0) {
+                        const isVisible = $topBarElement.css('opacity') !== '0';
+
+                        // Check if click is outside the top bar and top bar is visible
+                        if (isVisible && !$target.closest('#dynamic-top-bar-' + layout.qInfo.qId).length) {
+                            // Check if click is inside the extension area
+                            if ($target.closest($element).length > 0 || $element.find(e.target).length > 0) {
+                                hideTopBar();
+                            }
+                        }
                     }
+                };
+
+                $(document).on('click', clickOutsideHandler);
+
+                // Store handler for cleanup
+                CleanupManager.addCleanupFunction(function() {
+                    $(document).off('click', clickOutsideHandler);
                 });
             }
 
