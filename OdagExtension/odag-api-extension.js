@@ -860,6 +860,105 @@ function(qlik, $, properties) {
 
             $element.html(html);
 
+            // Calculate row estimation for ODAG validation
+            const calculateRowEstimation = async function(app, odagLinkId) {
+                const rowEstCacheKey = 'odagRowEstConfig_' + odagLinkId;
+                const rowEstConfig = window[rowEstCacheKey];
+
+                // If no row estimation config, allow generation (no restrictions)
+                if (!rowEstConfig || !rowEstConfig.rowEstExpr) {
+                    debugLog('📊 No row estimation config found - allowing generation');
+                    return {
+                        actualRowEst: 1,
+                        curRowEstHighBound: null,
+                        canGenerate: true,
+                        message: null
+                    };
+                }
+
+                const rowEstExpr = rowEstConfig.rowEstExpr;
+                const curRowEstHighBound = rowEstConfig.curRowEstHighBound;
+
+                debugLog('📊 Calculating row estimation:', {
+                    rowEstExpr: rowEstExpr,
+                    curRowEstHighBound: curRowEstHighBound
+                });
+
+                try {
+                    // Create a temporary session object to evaluate expression in CURRENT selection state
+                    const enigmaApp = app.model.enigmaModel;
+
+                    // Create a hypercube session object to get live evaluation
+                    const tempObj = await enigmaApp.createSessionObject({
+                        qInfo: { qType: 'RowEstValidator' },
+                        qHyperCubeDef: {
+                            qDimensions: [],
+                            qMeasures: [{
+                                qDef: {
+                                    qDef: rowEstExpr
+                                }
+                            }],
+                            qInitialDataFetch: [{
+                                qTop: 0,
+                                qLeft: 0,
+                                qWidth: 1,
+                                qHeight: 1
+                            }]
+                        }
+                    });
+
+                    // Get the layout to evaluate the expression in current selection context
+                    const objLayout = await tempObj.getLayout();
+
+                    // Extract value from hypercube data matrix
+                    let actualRowEst = 0;
+                    if (objLayout.qHyperCube &&
+                        objLayout.qHyperCube.qDataPages &&
+                        objLayout.qHyperCube.qDataPages[0] &&
+                        objLayout.qHyperCube.qDataPages[0].qMatrix &&
+                        objLayout.qHyperCube.qDataPages[0].qMatrix[0] &&
+                        objLayout.qHyperCube.qDataPages[0].qMatrix[0][0]) {
+                        actualRowEst = Math.round(objLayout.qHyperCube.qDataPages[0].qMatrix[0][0].qNum);
+                    }
+
+                    // Destroy the temporary object
+                    await enigmaApp.destroySessionObject(tempObj.id);
+
+                    // Handle undefined curRowEstHighBound (no limit configured)
+                    const hasLimit = curRowEstHighBound !== undefined && curRowEstHighBound !== null;
+                    const canGenerate = !hasLimit || actualRowEst <= curRowEstHighBound;
+
+                    debugLog('📊 Row estimation calculated:', {
+                        actualRowEst: actualRowEst,
+                        curRowEstHighBound: curRowEstHighBound,
+                        hasLimit: hasLimit,
+                        canGenerate: canGenerate
+                    });
+
+                    const message = canGenerate ? null :
+                        'Cannot generate ODAG app: The current selections would result in ' +
+                        actualRowEst.toLocaleString() + ' rows, which exceeds the maximum allowed ' +
+                        curRowEstHighBound.toLocaleString() + ' rows. Please refine your selections to reduce the data volume.';
+
+                    return {
+                        actualRowEst: actualRowEst,
+                        curRowEstHighBound: curRowEstHighBound,
+                        canGenerate: canGenerate,
+                        message: message
+                    };
+
+                } catch (error) {
+                    console.error('❌ Failed to calculate row estimation:', error);
+                    // On error, allow generation (fail open)
+                    return {
+                        actualRowEst: 1,
+                        curRowEstHighBound: null,
+                        canGenerate: true,
+                        message: null
+                    };
+                }
+            };
+
             // Real-time validation check function - runs on every paint/selection change
             const checkODAGValidation = async function() {
                 try {
@@ -1844,7 +1943,15 @@ function(qlik, $, properties) {
 
                 // Hide top bar when clicking outside of it
                 // Use document-level event because embedded app may capture clicks
-                const clickOutsideHandler = function(e) {
+                const clickHandlerKey = 'clickHandler_' + layout.qInfo.qId;
+
+                // Remove old handler if exists
+                if (window[clickHandlerKey]) {
+                    $(document).off('click', window[clickHandlerKey]);
+                }
+
+                // Create new handler
+                window[clickHandlerKey] = function(e) {
                     const $target = $(e.target);
                     const $topBarElement = $('#dynamic-top-bar-' + layout.qInfo.qId);
 
@@ -1862,12 +1969,7 @@ function(qlik, $, properties) {
                     }
                 };
 
-                $(document).on('click', clickOutsideHandler);
-
-                // Store handler for cleanup
-                CleanupManager.addCleanupFunction(function() {
-                    $(document).off('click', clickOutsideHandler);
-                });
+                $(document).on('click', window[clickHandlerKey]);
             }
 
             // Keep track of generated apps (not for dynamic view)
@@ -2288,106 +2390,6 @@ function(qlik, $, properties) {
                 }
 
                 return mappedSelections;
-            };
-
-            // Calculate actual row estimation based on rowEstExpr from ODAG link
-            // Returns: {actualRowEst: number, canGenerate: boolean, message: string}
-            const calculateRowEstimation = async function(app, odagLinkId) {
-                const rowEstCacheKey = 'odagRowEstConfig_' + odagLinkId;
-                const rowEstConfig = window[rowEstCacheKey];
-
-                // If no row estimation config, allow generation (no restrictions)
-                if (!rowEstConfig || !rowEstConfig.rowEstExpr) {
-                    debugLog('📊 No row estimation config found - allowing generation');
-                    return {
-                        actualRowEst: 1,
-                        curRowEstHighBound: null,
-                        canGenerate: true,
-                        message: null
-                    };
-                }
-
-                const rowEstExpr = rowEstConfig.rowEstExpr;
-                const curRowEstHighBound = rowEstConfig.curRowEstHighBound;
-
-                debugLog('📊 Calculating row estimation:', {
-                    rowEstExpr: rowEstExpr,
-                    curRowEstHighBound: curRowEstHighBound
-                });
-
-                try {
-                    // Create a temporary session object to evaluate expression in CURRENT selection state
-                    const enigmaApp = app.model.enigmaModel;
-
-                    // Create a hypercube session object to get live evaluation
-                    const tempObj = await enigmaApp.createSessionObject({
-                        qInfo: { qType: 'RowEstValidator' },
-                        qHyperCubeDef: {
-                            qDimensions: [],
-                            qMeasures: [{
-                                qDef: {
-                                    qDef: rowEstExpr
-                                }
-                            }],
-                            qInitialDataFetch: [{
-                                qTop: 0,
-                                qLeft: 0,
-                                qWidth: 1,
-                                qHeight: 1
-                            }]
-                        }
-                    });
-
-                    // Get the layout to evaluate the expression in current selection context
-                    const objLayout = await tempObj.getLayout();
-
-                    // Extract value from hypercube data matrix
-                    let actualRowEst = 0;
-                    if (objLayout.qHyperCube &&
-                        objLayout.qHyperCube.qDataPages &&
-                        objLayout.qHyperCube.qDataPages[0] &&
-                        objLayout.qHyperCube.qDataPages[0].qMatrix &&
-                        objLayout.qHyperCube.qDataPages[0].qMatrix[0] &&
-                        objLayout.qHyperCube.qDataPages[0].qMatrix[0][0]) {
-                        actualRowEst = Math.round(objLayout.qHyperCube.qDataPages[0].qMatrix[0][0].qNum);
-                    }
-
-                    // Destroy the temporary object
-                    await enigmaApp.destroySessionObject(tempObj.id);
-
-                    // Handle undefined curRowEstHighBound (no limit configured)
-                    const hasLimit = curRowEstHighBound !== undefined && curRowEstHighBound !== null;
-                    const canGenerate = !hasLimit || actualRowEst <= curRowEstHighBound;
-
-                    debugLog('📊 Row estimation calculated:', {
-                        actualRowEst: actualRowEst,
-                        curRowEstHighBound: curRowEstHighBound,
-                        hasLimit: hasLimit,
-                        canGenerate: canGenerate
-                    });
-
-                    const message = canGenerate ? null :
-                        'Cannot generate ODAG app: The current selections would result in ' +
-                        actualRowEst.toLocaleString() + ' rows, which exceeds the maximum allowed ' +
-                        curRowEstHighBound.toLocaleString() + ' rows. Please refine your selections to reduce the data volume.';
-
-                    return {
-                        actualRowEst: actualRowEst,
-                        curRowEstHighBound: curRowEstHighBound,
-                        canGenerate: canGenerate,
-                        message: message
-                    };
-
-                } catch (error) {
-                    console.error('❌ Failed to calculate row estimation:', error);
-                    // On error, allow generation (fail open)
-                    return {
-                        actualRowEst: 1,
-                        curRowEstHighBound: null,
-                        canGenerate: true,
-                        message: null
-                    };
-                }
             };
 
             // Build the ODAG payload
