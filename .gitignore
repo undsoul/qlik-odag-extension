@@ -1,0 +1,15 @@
+# Claude Code
+.claude/
+
+# Zip files
+*.zip
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Node modules
+node_modules/
