@@ -514,9 +514,19 @@ function(qlik, $, properties) {
             const currentMode = isEditMode ? 'edit' : 'analysis';
 
             if (window[initKey] && previousMode === currentMode && !isEditMode) {
-                // Already initialized and staying in analysis mode - skip rebuild
-                debugLog('⏭️ ODAG Extension already initialized - skipping HTML rebuild to preserve embeds');
-                return qlik.Promise.resolve();
+                // Check if actual DOM content still exists (not destroyed by page navigation)
+                const hasContent = $element.children().length > 0;
+                if (hasContent) {
+                    // Already initialized and staying in analysis mode - skip rebuild
+                    debugLog('⏭️ ODAG Extension already initialized - skipping HTML rebuild to preserve embeds');
+                    return qlik.Promise.resolve();
+                } else {
+                    // DOM was cleared (likely due to page navigation), need to reinitialize
+                    debugLog('🔄 DOM content missing despite init flag - reinitializing after page navigation');
+                    delete window[initKey];
+                    const dynamicViewKey = 'dynamicView_' + layout.qInfo.qId;
+                    delete window[dynamicViewKey];
+                }
             }
 
             // Store current mode for next paint cycle
