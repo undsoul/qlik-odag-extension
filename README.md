@@ -285,6 +285,33 @@ Both view modes support showing a specific sheet instead of the full app:
 
 ## 🆕 Recent Improvements
 
+### Version 3.1 Updates (Latest Stable)
+
+**On-Premise API Fixes**
+- ✅ Fixed all On-Premise API endpoints in Dynamic View mode
+- ✅ Status check endpoint now uses correct On-Premise path
+- ✅ Cancel request endpoints fixed for both List and Dynamic View
+- ✅ Reload app endpoint updated for On-Premise compatibility
+- ✅ Environment-aware API routing throughout the extension
+
+**User Experience Improvements**
+- ✅ Added Sheet ID validation with helpful error messages
+- ✅ Detects common mistakes (URLs, paths, /state/analysis)
+- ✅ Clear guidance on correct Sheet ID format
+- ✅ Prevents cryptic "Object not found" errors
+
+**Mode Switching Fixes**
+- ✅ Fixed Dynamic View not showing when exiting edit mode
+- ✅ Smart mode tracking (edit vs analysis) prevents blank screens
+- ✅ Proper HTML rebuild logic for mode transitions
+
+**Documentation**
+- ✅ Documented Qlik embed framework console error as harmless
+- ✅ Clarified CSP `cdn.jsdelivr.net` requirement is Cloud-only
+- ✅ Updated troubleshooting section with common issues
+
+---
+
 ### Version 3.0 Updates
 
 **Environment Support**
