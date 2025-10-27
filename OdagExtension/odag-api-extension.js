@@ -676,7 +676,7 @@ function(qlik, $, properties) {
                 html += '</div>';
 
                 // Button container on the right
-                html += '<div style="display: flex; gap: 8px; pointer-events: auto;">';
+                html += '<div style="display: flex; gap: 8px; align-items: center; pointer-events: auto;">';
 
                 // Cancel button (hidden by default)
                 html += '<button class="odag-cancel-btn" id="cancel-btn-' + layout.qInfo.qId + '" ';
@@ -692,6 +692,15 @@ function(qlik, $, properties) {
                 html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px;">';
                 html += '<span style="font-size: 16px;">↻</span> Refresh';
+                html += '</button>';
+
+                // Close button to hide top bar
+                html += '<button class="odag-close-topbar-btn" id="close-topbar-btn-' + layout.qInfo.qId + '" ';
+                html += 'style="background: transparent; border: none; color: #666; cursor: pointer; ';
+                html += 'font-size: 20px; padding: 0; width: 24px; height: 24px; pointer-events: auto; ';
+                html += 'display: flex; align-items: center; justify-content: center; border-radius: 3px;" ';
+                html += 'title="Hide top bar">';
+                html += '×';
                 html += '</button>';
 
                 html += '</div>'; // Close button container
@@ -1941,21 +1950,12 @@ function(qlik, $, properties) {
                     lastSelectionState = newState;
                 });
 
-                // Hide top bar when clicking anywhere in the extension (outside top bar)
-                $element.on('mousedown', function(e) {
-                    const $target = $(e.target);
-                    const $topBarElement = $('#dynamic-top-bar-' + layout.qInfo.qId);
-
-                    // Check if click is outside the top bar
-                    if (!$target.closest('#dynamic-top-bar-' + layout.qInfo.qId).length) {
-                        const isVisible = $topBarElement.css('opacity') !== '0' &&
-                                         $topBarElement.css('transform') === 'matrix(1, 0, 0, 1, 0, 0)';
-
-                        if (isVisible) {
-                            debugLog('🖱️ Click outside top bar detected - hiding');
-                            hideTopBar();
-                        }
-                    }
+                // Close button handler - hide top bar when clicked
+                $('#close-topbar-btn-' + layout.qInfo.qId).on('click', function(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    debugLog('❌ Close button clicked - hiding top bar');
+                    hideTopBar();
                 });
             }
 
