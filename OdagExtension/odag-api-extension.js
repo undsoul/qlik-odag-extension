@@ -891,8 +891,11 @@ function(qlik, $, properties) {
                                 // Wait and check periodically if new app is ready
                                 const deleteCheckInterval = CleanupManager.addInterval(setInterval(function() {
                                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                                    const statusUrl = (isCloud
+                                        ? tenantUrl + '/api/v1/odagrequests/'
+                                        : tenantUrl + '/api/odag/v1/requests/') + odagData.id;
                                     $.ajax({
-                                        url: tenantUrl + '/api/v1/odagrequests/' + odagData.id,
+                                        url: statusUrl,
                                         type: 'GET',
                                         headers: {'Accept': 'application/json'},
                                         xhrFields: {withCredentials: true},
@@ -1188,8 +1191,10 @@ function(qlik, $, properties) {
                         });
 
                         // Check if any key attributes changed
-                        // analytics/sheet uses object-id, classic/app uses sheet-id
-                        const sheetIdChanged = embedMode === 'analytics/sheet'
+                        // On-Premise: Always use sheet-id
+                        // Cloud: analytics/sheet uses object-id, classic/app uses sheet-id
+                        const isCloud = window.qlikEnvironment === 'cloud';
+                        const sheetIdChanged = (embedMode === 'analytics/sheet' && isCloud)
                             ? (hasValidSheetId && currentObjectId !== sheetId.trim())
                             : (hasValidSheetId && currentSheetId !== sheetId.trim());
 
@@ -1237,13 +1242,15 @@ function(qlik, $, properties) {
                     embedElement += 'app-id="' + appId + '" ';
 
                     if (hasValidSheetId) {
-                        // analytics/sheet uses object-id, classic/app uses sheet-id
-                        if (embedMode === 'analytics/sheet') {
+                        // On-Premise: Always use sheet-id
+                        // Cloud: analytics/sheet uses object-id, classic/app uses sheet-id
+                        const isCloud = window.qlikEnvironment === 'cloud';
+                        if (embedMode === 'analytics/sheet' && isCloud) {
                             embedElement += 'object-id="' + sheetId.trim() + '" ';
-                            debugLog('Creating analytics/sheet embed with object-id:', sheetId.trim());
+                            debugLog('Creating analytics/sheet embed with object-id (Cloud):', sheetId.trim());
                         } else {
                             embedElement += 'sheet-id="' + sheetId.trim() + '" ';
-                            debugLog('Creating classic/app embed with sheet-id:', sheetId.trim());
+                            debugLog('Creating embed with sheet-id:', sheetId.trim(), 'Mode:', embedMode);
                         }
                     } else {
                         // No sheet ID configured, show app overview
@@ -1415,8 +1422,12 @@ function(qlik, $, properties) {
 
                         // Cancel via API - Use PUT to update state to 'cancelled'
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                        const isCloud = window.qlikEnvironment === 'cloud';
+                        const cancelUrl = (isCloud
+                            ? tenantUrl + '/api/v1/odagrequests/'
+                            : tenantUrl + '/api/odag/v1/requests/') + currentRequestId;
                         $.ajax({
-                            url: tenantUrl + '/api/v1/odagrequests/' + currentRequestId,
+                            url: cancelUrl,
                             type: 'PUT',
                             headers: {
                                 'qlik-csrf-token': getCookie('_csrfToken') || '',
@@ -2492,13 +2503,15 @@ function(qlik, $, properties) {
                                 embedElement += 'ui="' + embedMode + '" ';
                                 embedElement += 'app-id="' + embedAppId + '" ';
 
-                                // analytics/sheet uses object-id, classic/app uses sheet-id
-                                if (embedMode === 'analytics/sheet') {
+                                // On-Premise: Always use sheet-id
+                                // Cloud: analytics/sheet uses object-id, classic/app uses sheet-id
+                                const isCloud = window.qlikEnvironment === 'cloud';
+                                if (embedMode === 'analytics/sheet' && isCloud) {
                                     embedElement += 'object-id="' + odagConfig.templateSheetId.trim() + '" ';
-                                    debugLog('LIST VIEW - Adding object-id for analytics/sheet:', odagConfig.templateSheetId.trim());
+                                    debugLog('LIST VIEW - Adding object-id for analytics/sheet (Cloud):', odagConfig.templateSheetId.trim());
                                 } else {
                                     embedElement += 'sheet-id="' + odagConfig.templateSheetId.trim() + '" ';
-                                    debugLog('LIST VIEW - Adding sheet-id for classic/app:', odagConfig.templateSheetId.trim());
+                                    debugLog('LIST VIEW - Adding sheet-id:', odagConfig.templateSheetId.trim(), 'Mode:', embedMode);
                                 }
 
                                 embedElement += 'host="' + hostName + '" ';
@@ -2563,8 +2576,10 @@ function(qlik, $, properties) {
                                 });
 
                                 // Check if any key attributes changed
-                                // analytics/sheet uses object-id, classic/app uses sheet-id
-                                const sheetIdChanged = embedMode === 'analytics/sheet'
+                                // On-Premise: Always use sheet-id
+                                // Cloud: analytics/sheet uses object-id, classic/app uses sheet-id
+                                const isCloud = window.qlikEnvironment === 'cloud';
+                                const sheetIdChanged = (embedMode === 'analytics/sheet' && isCloud)
                                     ? (sheetId && currentObjectId !== sheetId)
                                     : (sheetId && currentSheetId !== sheetId);
 
@@ -2698,8 +2713,12 @@ function(qlik, $, properties) {
                     if (confirm('Are you sure you want to cancel generation of "' + appName + '"?')) {
                         // Cancel ODAG app generation via DELETE
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                        const isCloud = window.qlikEnvironment === 'cloud';
+                        const cancelUrl = (isCloud
+                            ? tenantUrl + '/api/v1/odagrequests/'
+                            : tenantUrl + '/api/odag/v1/requests/') + requestId;
                         $.ajax({
-                            url: tenantUrl + '/api/v1/odagrequests/' + requestId,
+                            url: cancelUrl,
                             type: 'DELETE',
                             headers: {
                                 'qlik-csrf-token': getCookie('_csrfToken') || ''
@@ -2727,11 +2746,18 @@ function(qlik, $, properties) {
                     e.stopPropagation();
                     const requestId = $(this).closest('.odag-app-item').data('request-id');
                     const $item = $(this).closest('.odag-app-item');
-                    
+
                     // Reload ODAG app
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                    const isCloud = window.qlikEnvironment === 'cloud';
+
+                    // Note: Reload endpoint may not be available in On-Premise
+                    const reloadUrl = isCloud
+                        ? tenantUrl + '/api/v1/odagrequests/' + requestId + '/reloadApp'
+                        : tenantUrl + '/api/odag/v1/requests/' + requestId + '/reloadApp';
+
                     $.ajax({
-                        url: tenantUrl + '/api/v1/odagrequests/' + requestId + '/reloadApp',
+                        url: reloadUrl,
                         type: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
