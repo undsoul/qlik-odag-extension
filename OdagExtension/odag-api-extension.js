@@ -1941,35 +1941,22 @@ function(qlik, $, properties) {
                     lastSelectionState = newState;
                 });
 
-                // Hide top bar when clicking outside of it
-                // Use document-level event because embedded app may capture clicks
-                const clickHandlerKey = 'clickHandler_' + layout.qInfo.qId;
-
-                // Remove old handler if exists
-                if (window[clickHandlerKey]) {
-                    $(document).off('click', window[clickHandlerKey]);
-                }
-
-                // Create new handler
-                window[clickHandlerKey] = function(e) {
+                // Hide top bar when clicking anywhere in the extension (outside top bar)
+                $element.on('mousedown', function(e) {
                     const $target = $(e.target);
                     const $topBarElement = $('#dynamic-top-bar-' + layout.qInfo.qId);
 
-                    // Check if top bar exists and is visible
-                    if ($topBarElement.length > 0) {
-                        const isVisible = $topBarElement.css('opacity') !== '0';
+                    // Check if click is outside the top bar
+                    if (!$target.closest('#dynamic-top-bar-' + layout.qInfo.qId).length) {
+                        const isVisible = $topBarElement.css('opacity') !== '0' &&
+                                         $topBarElement.css('transform') === 'matrix(1, 0, 0, 1, 0, 0)';
 
-                        // Check if click is outside the top bar and top bar is visible
-                        if (isVisible && !$target.closest('#dynamic-top-bar-' + layout.qInfo.qId).length) {
-                            // Check if click is inside the extension area
-                            if ($target.closest($element).length > 0 || $element.find(e.target).length > 0) {
-                                hideTopBar();
-                            }
+                        if (isVisible) {
+                            debugLog('🖱️ Click outside top bar detected - hiding');
+                            hideTopBar();
                         }
                     }
-                };
-
-                $(document).on('click', window[clickHandlerKey]);
+                });
             }
 
             // Keep track of generated apps (not for dynamic view)
