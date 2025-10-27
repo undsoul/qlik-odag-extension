@@ -149,10 +149,16 @@ define([], function() {
                                         // Preserve all existing properties
                                         if (props.odagConfig) {
                                             props.odagConfig._cachedBindingFields = '';
+                                            // Add a timestamp to force repaint
+                                            props.odagConfig._refreshTimestamp = Date.now();
                                         }
-                                        model.setProperties(props);
-                                        console.log('🔄 Cleared bindings cache. They will be re-fetched automatically.');
-                                        alert('✅ Bindings cache cleared!\n\nThe binding fields will be automatically re-fetched in a moment.\n\nClose and reopen this properties panel to see the updated fields.');
+                                        model.setProperties(props).then(function() {
+                                            console.log('🔄 Cleared bindings cache and triggered repaint.');
+                                            // Wait a moment for the repaint to complete, then notify
+                                            setTimeout(function() {
+                                                alert('✅ Binding fields refreshed!\n\nThe updated binding fields should now appear in the field above.');
+                                            }, 500);
+                                        });
                                     });
                                 });
                             }
