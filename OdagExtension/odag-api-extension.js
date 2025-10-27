@@ -1848,10 +1848,7 @@ function(qlik, $, properties) {
 
                     // Check if click is outside the top bar
                     if (!$target.closest('#dynamic-top-bar-' + layout.qInfo.qId).length) {
-                        // Only hide if not currently generating (auto-hide is enabled)
-                        if (hideTimer !== null || $topBar.css('transform') === 'matrix(1, 0, 0, 1, 0, 0)') {
-                            hideTopBar();
-                        }
+                        hideTopBar();
                     }
                 });
             }
