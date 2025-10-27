@@ -320,6 +320,9 @@ Both view modes support showing a specific sheet instead of the full app:
 - ✅ Remains visible for 10 seconds after successful completion
 - ✅ Users can clearly see generation status and completion messages
 - ✅ Auto-hide re-enabled after status is visible long enough
+- ✅ Fixed top bar blocking interactions with embedded app selection bar
+- ✅ More compact top bar design (reduced height and padding)
+- ✅ Hover activation distance reduced from 100px to 30px for less intrusion
 
 **Debug Mode Improvements**
 - ✅ All verbose console logs moved to `debugLog()` function
