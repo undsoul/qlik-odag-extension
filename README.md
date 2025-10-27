@@ -27,19 +27,22 @@ Same reliable ODAG functionality you trust, with a significantly improved user e
 
 ## Features
 
-### 🎯 Dynamic View Mode
+### 🎯 Dynamic View Mode (Desktop Only)
 - **Smart App Management**: Automatically maintains only the latest ODAG app
 - **Selection Change Detection**: Visual indicators when selections change
 - **Auto-Refresh**: Pulse animation on refresh button when selections differ
 - **Blur Overlay**: Visual feedback during app generation
 - **One-Click Refresh**: Regenerate apps with current selections instantly
+- **Note**: Mobile devices automatically use List View for better navigation
 
 ### 📊 Standard List View
-- **Side-by-Side Layout**: Apps list on left, embedded app preview on right
+- **Side-by-Side Layout**: Apps list on left, embedded app preview on right (desktop)
+- **Mobile Layout**: Vertical stacking with dropdown selector and app preview below
 - **Real-time Status**: Live monitoring of app generation progress
 - **Batch Operations**: Delete all apps with one click
-- **Flexible Display**: Show full app or specific sheet based on Sheet ID configuration
+- **Flexible Display**: Show full app or specific sheet based on Sheet ID configuration (desktop only)
 - **Auto-Show**: Automatically displays newly generated apps
+- **Mobile Optimization**: Automatically switches to list view on mobile devices (width < 768px)
 
 ### 🔧 Advanced Features
 - **Variable Mapping**: Map Qlik variables to ODAG template fields
@@ -145,7 +148,7 @@ Displays generated ODAG apps in a side-by-side layout with live preview.
 - **Sheet ID Set**: Shows the specific sheet from the generated app
 - Applies to all apps in the list
 
-#### 2. Dynamic View (Latest ODAG App Only)
+#### 2. Dynamic View (Latest ODAG App Only) - Desktop Only
 Specialized mode that maintains **only ONE latest ODAG app** at all times.
 
 **Philosophy**: Perfect for dashboards and real-time analysis where you always want the most current data with current selections.
@@ -167,6 +170,11 @@ Specialized mode that maintains **only ONE latest ODAG app** at all times.
 - **Generating New App**: Old app deleted automatically when new one succeeds
 - **Edit Mode Switch**: Cleanup runs even while in edit mode for instant results
 - **Subsequent Loads**: Uses existing app if available, no unnecessary regeneration
+
+**Mobile Behavior:**
+- Dynamic View is **disabled on mobile devices** (width < 768px)
+- Mobile automatically uses Standard List View with dropdown selector
+- This ensures better navigation and usability on smaller screens
 
 ### Configuration Options
 
@@ -285,7 +293,43 @@ Both view modes support showing a specific sheet instead of the full app:
 
 ## 🆕 Recent Improvements
 
-### Version 3.2 Updates (Latest Stable)
+### Version 3.3.0 Updates (Latest)
+
+**Dynamic View Stability - Complete Fix**
+- ✅ Fixed intermittent initialization when switching between edit/analysis modes
+- ✅ Dynamic View now consistently reinitializes every time (no more "1 work, 1 doesn't" pattern)
+- ✅ Missing embed detection now triggers immediate reinitialization in same execution
+- ✅ Preserved configuration state prevents false "configuration changed" detections
+- ✅ Enhanced debug logging shows initialization decision-making process
+
+**Mobile Optimizations**
+- ✅ Mobile devices (width < 768px) now force list view mode - never Dynamic View
+- ✅ Mobile always uses `classic/app` embed mode (full app overview)
+- ✅ Mobile embeds never use sheet IDs - always show app overview for better navigation
+- ✅ Viewport change detection properly clears Dynamic View when switching to mobile
+- ✅ Added safeguards preventing Dynamic View initialization on mobile devices
+
+**Configuration State Management**
+- ✅ ConfigKey preservation across mode transitions for accurate change detection
+- ✅ Proper flag cleanup when switching view modes or viewport sizes
+- ✅ Enhanced viewport tracking detects mobile ↔ desktop transitions
+- ✅ Immediate Dynamic View flag clearing when entering mobile mode
+
+**Technical Improvements**
+- ✅ Direct `initDynamicView()` call when embed is missing (no waiting for next paint cycle)
+- ✅ Comprehensive debug logging for config comparison and initialization decisions
+- ✅ Better separation of mobile vs desktop logic throughout the extension
+- ✅ Cleaner code flow with explicit mobile checks in Dynamic View logic
+
+**User Experience**
+- ✅ Consistent behavior across all mode transitions (edit ↔ analysis, mobile ↔ desktop)
+- ✅ Mobile users get optimized list view with dropdown selector
+- ✅ Desktop users retain full Dynamic View and List View capabilities
+- ✅ No more stuck states or missing embeds after mode switches
+
+---
+
+### Version 3.2 Updates
 
 **Dynamic View Stability Fixes**
 - ✅ Fixed Dynamic View stuck state when switching between edit/analysis modes
