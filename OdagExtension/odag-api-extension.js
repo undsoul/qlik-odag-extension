@@ -354,6 +354,15 @@ function(qlik, $, properties) {
                             if (linkDetails.objectDef) {
                                 const objectDef = linkDetails.objectDef;
 
+                                debugLog('🔍 [PAINT] objectDef structure:', {
+                                    hasRowEstExpr: !!objectDef.rowEstExpr,
+                                    rowEstExpr: objectDef.rowEstExpr,
+                                    hasRowEstRange: !!objectDef.rowEstRange,
+                                    rowEstRange: objectDef.rowEstRange,
+                                    hasRowEst: !!objectDef.rowEst,
+                                    rowEst: objectDef.rowEst
+                                });
+
                                 // Extract rowEstExpr and curRowEstHighBound from On-Premise structure
                                 let rowEstExpr = objectDef.rowEstExpr;
                                 let curRowEstHighBound = null;
