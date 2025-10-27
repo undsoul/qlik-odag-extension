@@ -146,13 +146,13 @@ function(qlik, $, properties) {
                         // If /qrs/about responds, it's On-Premise
                         if (response && response.buildVersion) {
                             window.qlikEnvironment = 'onpremise';
-                            console.log('🌍 ODAG Extension - Environment: ONPREMISE (detected via /qrs/about) | Build:', response.buildVersion);
+                            debugLog('🌍 ODAG Extension - Environment: ONPREMISE (detected via /qrs/about) | Build:', response.buildVersion);
                         }
                     },
                     error: function() {
                         // If /qrs/about fails, it's Cloud
                         window.qlikEnvironment = 'cloud';
-                        console.log('🌍 ODAG Extension - Environment: CLOUD (no /qrs/about endpoint) | Hostname:', hostname);
+                        debugLog('🌍 ODAG Extension - Environment: CLOUD (no /qrs/about endpoint) | Hostname:', hostname);
                     }
                 });
 
@@ -190,16 +190,16 @@ function(qlik, $, properties) {
                             // Store links globally for property panel dropdown
                             window.odagAllLinks = links;
 
-                            console.log('✅ Found ' + links.length + ' ODAG Link(s) for this app.');
+                            debugLog('✅ Found ' + links.length + ' ODAG Link(s) for this app.');
                             debugLog('ODAG Links loaded:', links);
                         } else {
-                            console.log('ℹ️ No ODAG links found for this app.');
+                            debugLog('ℹ️ No ODAG links found for this app.');
                             window.odagAllLinks = [];
                         }
                     },
                     error: function(xhr, status, error) {
                         console.warn('⚠️ Could not fetch ODAG links list:', xhr.status, error);
-                        console.log('💡 You can manually get ODAG links by visiting:', linksUrl);
+                        debugLog('💡 You can manually get ODAG links by visiting:', linksUrl);
                     }
                 });
             }
@@ -220,7 +220,7 @@ function(qlik, $, properties) {
             if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
                 // Set fetching flag to prevent duplicate requests
                 window[bindingsFetchingKey] = true;
-                console.log('📋 [PAINT] Fetching ODAG bindings for Cloud link:', odagConfig.odagLinkId);
+                debugLog('📋 [PAINT] Fetching ODAG bindings for Cloud link:', odagConfig.odagLinkId);
 
                 const csrfToken = getCookie('_csrfToken');
                 const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id;
@@ -237,14 +237,44 @@ function(qlik, $, properties) {
                     },
                     xhrFields: {withCredentials: true},
                     success: function(response) {
-                        console.log('🔍 [PAINT] Cloud bindings response:', response);
+                        debugLog('🔍 [PAINT] Cloud bindings response:', response);
 
-                        // Cloud response format: [{link: {bindings: [...]}}]
+                        // Cloud response format: [{link: {bindings: [...], rowEstExpr, curRowEstHighBound}}]
                         if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                            const bindings = response[0].link.bindings;
+                            const linkData = response[0].link;
+                            const bindings = linkData.bindings;
                             window[bindingsCacheKey] = bindings;
-                            console.log('✅ [PAINT] Cloud bindings cached:', bindings.length, 'bindings');
-                            console.log('✅ [PAINT] Cloud bindings array:', JSON.stringify(bindings, null, 2));
+
+                            // Cache row estimation config from ODAG link
+                            // Check multiple possible locations for curRowEstHighBound
+                            const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+                            debugLog('🔍 [PAINT] Full link data structure:', JSON.stringify(linkData, null, 2));
+                            debugLog('🔍 [PAINT] Checking rowEstExpr locations:', {
+                                'linkData.rowEstExpr': linkData.rowEstExpr,
+                                'linkData.link.rowEstExpr': linkData.link && linkData.link.rowEstExpr,
+                                'response[0].rowEstExpr': response[0].rowEstExpr
+                            });
+                            debugLog('🔍 [PAINT] Checking curRowEstHighBound locations:', {
+                                'linkData.curRowEstHighBound': linkData.curRowEstHighBound,
+                                'linkData.link.curRowEstHighBound': linkData.link && linkData.link.curRowEstHighBound,
+                                'response[0].curRowEstHighBound': response[0].curRowEstHighBound
+                            });
+
+                            // Extract curRowEstHighBound from properties.rowEstRange[0].highBound
+                            let curRowEstHighBound = linkData.curRowEstHighBound;
+                            if (!curRowEstHighBound && linkData.properties && linkData.properties.rowEstRange &&
+                                linkData.properties.rowEstRange.length > 0) {
+                                curRowEstHighBound = linkData.properties.rowEstRange[0].highBound;
+                            }
+
+                            window[rowEstCacheKey] = {
+                                rowEstExpr: linkData.rowEstExpr || response[0].rowEstExpr,
+                                curRowEstHighBound: curRowEstHighBound
+                            };
+
+                            debugLog('✅ [PAINT] Cloud bindings cached:', bindings.length, 'bindings');
+                            debugLog('✅ [PAINT] Cloud bindings array:', JSON.stringify(bindings, null, 2));
+                            debugLog('✅ [PAINT] Row estimation config:', window[rowEstCacheKey]);
 
                             // Extract field names and store in layout for properties panel display
                             const fieldNames = bindings.map(function(b) {
@@ -260,7 +290,7 @@ function(qlik, $, properties) {
                                             props.odagConfig._cachedBindingFields = fieldNames.join(', ');
                                         }
                                         model.setProperties(props);
-                                        console.log('✅ Saved bindings to layout:', fieldNames.join(', '));
+                                        debugLog('✅ Saved bindings to layout:', fieldNames.join(', '));
                                     });
                                 });
                             }
@@ -300,7 +330,7 @@ function(qlik, $, properties) {
                     xhrFields: {withCredentials: true},
                     timeout: 5000,
                     success: function(linkDetails) {
-                        console.log('🔍 [PAINT] FULL On-Premise link details response:', linkDetails);
+                        debugLog('🔍 [PAINT] FULL On-Premise link details response:', linkDetails);
 
                         // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
                         // Bindings are inside objectDef, not at top level
@@ -312,12 +342,12 @@ function(qlik, $, properties) {
                             bindings = linkDetails.bindings;
                         }
 
-                        console.log('🔍 [PAINT] Extracted bindings:', bindings);
+                        debugLog('🔍 [PAINT] Extracted bindings:', bindings);
 
                         if (bindings && Array.isArray(bindings) && bindings.length > 0) {
                             window[bindingsCacheKey] = bindings;
-                            console.log('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
-                            console.log('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
+                            debugLog('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
+                            debugLog('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
 
                             // Extract field names and store in layout for properties panel display
                             const fieldNames = bindings.map(function(b) {
@@ -333,7 +363,7 @@ function(qlik, $, properties) {
                                             props.odagConfig._cachedBindingFields = fieldNames.join(', ');
                                         }
                                         model.setProperties(props);
-                                        console.log('✅ Saved bindings to layout:', fieldNames.join(', '));
+                                        debugLog('✅ Saved bindings to layout:', fieldNames.join(', '));
                                     });
                                 });
                             }
@@ -642,6 +672,10 @@ function(qlik, $, properties) {
                 html += '</button>';
 
                 html += '</div>'; // Close button container
+
+                // Validation status indicator for Dynamic View
+                html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin: 8px 16px; padding: 8px 12px; border-radius: 4px; font-size: 13px; display: none;"></div>';
+
                 html += '</div>'; // Close top bar
 
                 // Embed container takes full space
@@ -736,6 +770,7 @@ function(qlik, $, properties) {
                     html += '<span class="btn-icon">⚡</span>';
                     html += '<span class="btn-text">' + (odagConfig.buttonText || 'Generate ODAG App') + '</span>';
                     html += '</button>';
+                    html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin-top: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; text-align: center; font-weight: 500;"></div>';
                     html += '</div>';
                     html += '<div class="odag-apps-list" id="apps-list-' + layout.qInfo.qId + '">';
                     html += '<div class="list-empty">No apps generated yet</div>';
@@ -786,20 +821,111 @@ function(qlik, $, properties) {
                 html += '</button>';
                 html += '</div>';
                 html += '</div>';
-                html += '<button class="odag-generate-btn-compact" style="';
+                html += '<button class="odag-generate-btn-compact" id="generate-btn-' + layout.qInfo.qId + '" style="';
                 html += 'background-color:' + (odagConfig.buttonColor || '#009845') + ';';
                 html += 'color:' + (odagConfig.buttonTextColor || '#ffffff') + '; width: 100%;">';
                 html += '<span class="btn-icon">⚡</span>';
                 html += '<span class="btn-text">' + (odagConfig.buttonText || 'Generate ODAG App') + '</span>';
                 html += '</button>';
+                html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin-top: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; text-align: center; font-weight: 500;"></div>';
                 html += '</div>';
                 html += '<div class="odag-apps-list" id="apps-list-' + layout.qInfo.qId + '"></div>';
                 html += '</div>';
             }
             
             html += '</div>';
-            
+
             $element.html(html);
+
+            // Real-time validation check function - runs on every paint/selection change
+            const checkODAGValidation = async function() {
+                try {
+                    const rowEstResult = await calculateRowEstimation(app, odagConfig.odagLinkId);
+                    const $statusDiv = $('#validation-status-' + layout.qInfo.qId);
+
+                    // Select all generate buttons (List View may have multiple)
+                    const $generateBtn = isDynamicView ?
+                        $('#refresh-btn-' + layout.qInfo.qId) :
+                        $element.find('.odag-generate-btn-compact');
+
+                    debugLog('🔍 Validation check:', {
+                        isDynamicView: isDynamicView,
+                        buttonCount: $generateBtn.length,
+                        rowEstResult: rowEstResult
+                    });
+
+                    if (!rowEstResult.canGenerate) {
+                        // BLOCK: Hide/disable button and show error
+                        if (isDynamicView) {
+                            // In Dynamic View: HIDE Refresh button when validation fails
+                            $generateBtn.hide();
+                        } else {
+                            // In List View: Disable Generate button (gray it out)
+                            $generateBtn.prop('disabled', true).css({
+                                'opacity': '0.5',
+                                'cursor': 'not-allowed',
+                                'pointer-events': 'none'
+                            });
+                        }
+
+                        $statusDiv.show().css({
+                            'background': '#ffebee',
+                            'border': '1px solid #ef5350',
+                            'color': '#c62828'
+                        }).html('⚠️ <strong>Cannot generate:</strong> Current selections result in ' +
+                                rowEstResult.actualRowEst + ' distinct values, exceeding the limit of ' +
+                                rowEstResult.curRowEstHighBound + '. Please refine your selections.');
+
+                        debugLog('🚫 ODAG validation FAILED:', rowEstResult);
+                    } else {
+                        // ALLOW: Show/enable button and HIDE status message
+                        if (isDynamicView) {
+                            // In Dynamic View: SHOW Refresh button when validation passes
+                            $generateBtn.show();
+                        } else {
+                            // In List View: Enable Generate button
+                            $generateBtn.prop('disabled', false).css({
+                                'opacity': '1',
+                                'cursor': 'pointer',
+                                'pointer-events': 'auto'
+                            });
+                        }
+
+                        // Hide validation status when validation passes - no need to show success message
+                        $statusDiv.hide();
+
+                        debugLog('✅ ODAG validation PASSED:', rowEstResult);
+                    }
+                } catch (error) {
+                    console.error('❌ Validation check error:', error);
+                    // On error, allow generation (fail open)
+                }
+            };
+
+            // Store validation function globally so it can be called on every paint
+            window['checkODAGValidation_' + layout.qInfo.qId] = checkODAGValidation;
+
+            // Subscribe to selection state changes to trigger validation
+            if (!window['odagSelectionListener_' + layout.qInfo.qId]) {
+                app.model.enigmaModel.on('changed', function() {
+                    // Debounce validation check on selection changes
+                    if (window['selectionChangeTimeout_' + layout.qInfo.qId]) {
+                        clearTimeout(window['selectionChangeTimeout_' + layout.qInfo.qId]);
+                    }
+                    window['selectionChangeTimeout_' + layout.qInfo.qId] = setTimeout(function() {
+                        if (window['checkODAGValidation_' + layout.qInfo.qId]) {
+                            debugLog('🔄 Selection changed - triggering validation');
+                            window['checkODAGValidation_' + layout.qInfo.qId]();
+                        }
+                    }, 300);
+                });
+                window['odagSelectionListener_' + layout.qInfo.qId] = true;
+            }
+
+            // Run validation check immediately after HTML is rendered
+            setTimeout(function() {
+                checkODAGValidation();
+            }, 500);
 
             // Store reference for Dynamic View initialization later
             let initDynamicView = null;
@@ -926,7 +1052,17 @@ function(qlik, $, properties) {
 
                     try {
                         // Build payload with current selections
-                        const payload = await buildPayload(app, odagConfig, layout);
+                        const buildResult = await buildPayload(app, odagConfig, layout);
+                        const payload = buildResult.payload;
+                        const rowEstResult = buildResult.rowEstResult;
+
+                        // Check if generation is allowed based on row estimation
+                        if (!rowEstResult.canGenerate) {
+                            $button.removeClass('loading').prop('disabled', false);
+                            $('#cancel-btn-' + layout.qInfo.qId).hide();
+                            alert(rowEstResult.message);
+                            return;
+                        }
 
                         // Store this payload to compare for future selection changes
                         lastGeneratedPayload = payload;
@@ -1142,9 +1278,16 @@ function(qlik, $, properties) {
                                             getStatusHTML('succeeded', latestAppName, false)
                                         );
 
-                                        // Enable auto-hide now that generation is complete
+                                        // Keep top bar visible for 10 seconds after successful generation
+                                        // so user can see the completion status
                                         if (window['showDynamicTopBar_' + layout.qInfo.qId]) {
-                                            window['showDynamicTopBar_' + layout.qInfo.qId](true);
+                                            window['showDynamicTopBar_' + layout.qInfo.qId](false); // Keep visible
+                                            // Then enable auto-hide after 10 seconds
+                                            setTimeout(function() {
+                                                if (window['showDynamicTopBar_' + layout.qInfo.qId]) {
+                                                    window['showDynamicTopBar_' + layout.qInfo.qId](true);
+                                                }
+                                            }, 10000);
                                         }
 
                                         // Store the selection state from this app as baseline (if not already set)
@@ -1456,7 +1599,8 @@ function(qlik, $, properties) {
                             // We found an existing app, capture current selections as baseline
                             if (!lastGeneratedPayload) {
                                 try {
-                                    lastGeneratedPayload = await buildPayload(app, odagConfig, layout);
+                                    const buildResult = await buildPayload(app, odagConfig, layout);
+                                    lastGeneratedPayload = buildResult.payload;
                                     debugLog('Stored initial selection state:', lastGeneratedPayload.bindSelectionState);
                                 } catch (error) {
                                     console.error('Error storing initial payload:', error);
@@ -2108,7 +2252,107 @@ function(qlik, $, properties) {
 
                 return mappedSelections;
             };
-            
+
+            // Calculate actual row estimation based on rowEstExpr from ODAG link
+            // Returns: {actualRowEst: number, canGenerate: boolean, message: string}
+            const calculateRowEstimation = async function(app, odagLinkId) {
+                const rowEstCacheKey = 'odagRowEstConfig_' + odagLinkId;
+                const rowEstConfig = window[rowEstCacheKey];
+
+                // If no row estimation config, allow generation (no restrictions)
+                if (!rowEstConfig || !rowEstConfig.rowEstExpr) {
+                    debugLog('📊 No row estimation config found - allowing generation');
+                    return {
+                        actualRowEst: 1,
+                        curRowEstHighBound: null,
+                        canGenerate: true,
+                        message: null
+                    };
+                }
+
+                const rowEstExpr = rowEstConfig.rowEstExpr;
+                const curRowEstHighBound = rowEstConfig.curRowEstHighBound;
+
+                debugLog('📊 Calculating row estimation:', {
+                    rowEstExpr: rowEstExpr,
+                    curRowEstHighBound: curRowEstHighBound
+                });
+
+                try {
+                    // Create a temporary session object to evaluate expression in CURRENT selection state
+                    const enigmaApp = app.model.enigmaModel;
+
+                    // Create a hypercube session object to get live evaluation
+                    const tempObj = await enigmaApp.createSessionObject({
+                        qInfo: { qType: 'RowEstValidator' },
+                        qHyperCubeDef: {
+                            qDimensions: [],
+                            qMeasures: [{
+                                qDef: {
+                                    qDef: rowEstExpr
+                                }
+                            }],
+                            qInitialDataFetch: [{
+                                qTop: 0,
+                                qLeft: 0,
+                                qWidth: 1,
+                                qHeight: 1
+                            }]
+                        }
+                    });
+
+                    // Get the layout to evaluate the expression in current selection context
+                    const objLayout = await tempObj.getLayout();
+
+                    // Extract value from hypercube data matrix
+                    let actualRowEst = 0;
+                    if (objLayout.qHyperCube &&
+                        objLayout.qHyperCube.qDataPages &&
+                        objLayout.qHyperCube.qDataPages[0] &&
+                        objLayout.qHyperCube.qDataPages[0].qMatrix &&
+                        objLayout.qHyperCube.qDataPages[0].qMatrix[0] &&
+                        objLayout.qHyperCube.qDataPages[0].qMatrix[0][0]) {
+                        actualRowEst = Math.round(objLayout.qHyperCube.qDataPages[0].qMatrix[0][0].qNum);
+                    }
+
+                    // Destroy the temporary object
+                    await enigmaApp.destroySessionObject(tempObj.id);
+
+                    // Handle undefined curRowEstHighBound (no limit configured)
+                    const hasLimit = curRowEstHighBound !== undefined && curRowEstHighBound !== null;
+                    const canGenerate = !hasLimit || actualRowEst <= curRowEstHighBound;
+
+                    debugLog('📊 Row estimation calculated:', {
+                        actualRowEst: actualRowEst,
+                        curRowEstHighBound: curRowEstHighBound,
+                        hasLimit: hasLimit,
+                        canGenerate: canGenerate
+                    });
+
+                    const message = canGenerate ? null :
+                        'Cannot generate ODAG app: The current selections would result in ' +
+                        actualRowEst.toLocaleString() + ' rows, which exceeds the maximum allowed ' +
+                        curRowEstHighBound.toLocaleString() + ' rows. Please refine your selections to reduce the data volume.';
+
+                    return {
+                        actualRowEst: actualRowEst,
+                        curRowEstHighBound: curRowEstHighBound,
+                        canGenerate: canGenerate,
+                        message: message
+                    };
+
+                } catch (error) {
+                    console.error('❌ Failed to calculate row estimation:', error);
+                    // On error, allow generation (fail open)
+                    return {
+                        actualRowEst: 1,
+                        curRowEstHighBound: null,
+                        canGenerate: true,
+                        message: null
+                    };
+                }
+            };
+
             // Build the ODAG payload
             // This function creates the correct payload structure with:
             // - selectionState: Fields the user actually selected (selStatus: "S")
@@ -2160,7 +2404,7 @@ function(qlik, $, properties) {
                 if (cachedBindings && cachedBindings.length > 0) {
                     // Process each binding field
                     debugLog('✅ Found cached ODAG bindings:', cachedBindings.length);
-                    console.log('📋 Raw bindings structure:', cachedBindings);
+                    debugLog('📋 Raw bindings structure:', cachedBindings);
 
                     for (const binding of cachedBindings) {
                         // Try multiple possible field names from binding object
@@ -2265,9 +2509,12 @@ function(qlik, $, properties) {
                     debugLog('Could not get sheet ID');
                 }
 
+                // Calculate row estimation based on ODAG link configuration
+                const rowEstResult = await calculateRowEstimation(app, odagConfig.odagLinkId);
+
                 const payload = {
                     clientContextHandle: generateContextHandle(),
-                    actualRowEst: 1,
+                    actualRowEst: rowEstResult.actualRowEst,
                     selectionApp: appId,
                     bindSelectionState: bindSelectionState,
                     selectionState: selectionState
@@ -2277,14 +2524,19 @@ function(qlik, $, properties) {
                     payload.sheetname = sheetId;
                 }
 
-                console.log('✅ Built ODAG payload:', {
+                debugLog('✅ Built ODAG payload:', {
                     selectionState: selectionState.map(s => s.selectionAppParamName),
                     bindSelectionState: bindSelectionState.map(s => s.selectionAppParamName),
                     bindSelectionStateCount: bindSelectionState.length,
+                    actualRowEst: rowEstResult.actualRowEst,
+                    canGenerate: rowEstResult.canGenerate,
                     fullPayload: payload
                 });
 
-                return payload;
+                return {
+                    payload: payload,
+                    rowEstResult: rowEstResult
+                };
             };
             
             // Make the API call
@@ -3023,7 +3275,7 @@ function(qlik, $, properties) {
                     const currentUrl = window.qlikTenantUrl || window.location.origin;
 
                     if (isCloud && !window[bindingsCacheKey]) {
-                        console.log('⏳ Cloud bindings not cached yet, fetching before generation...');
+                        debugLog('⏳ Cloud bindings not cached yet, fetching before generation...');
 
                         // Fetch Cloud bindings synchronously before generating
                         const csrfToken = getCookie('_csrfToken');
@@ -3043,13 +3295,31 @@ function(qlik, $, properties) {
                                 xhrFields: {withCredentials: true},
                                 timeout: 10000,
                                 success: function(response) {
-                                    console.log('🔍 Cloud bindings response:', response);
+                                    debugLog('🔍 Cloud bindings response:', response);
 
                                     if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                                        const bindings = response[0].link.bindings;
+                                        const linkData = response[0].link;
+                                        const bindings = linkData.bindings;
                                         window[bindingsCacheKey] = bindings;
-                                        console.log('✅ Cloud bindings cached for generation:', bindings.length, 'bindings');
-                                        console.log('✅ Bindings:', JSON.stringify(bindings, null, 2));
+
+                                        // Cache row estimation config from ODAG link
+                                        const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+
+                                        // Extract curRowEstHighBound from properties.rowEstRange[0].highBound
+                                        let curRowEstHighBound = linkData.curRowEstHighBound;
+                                        if (!curRowEstHighBound && linkData.properties && linkData.properties.rowEstRange &&
+                                            linkData.properties.rowEstRange.length > 0) {
+                                            curRowEstHighBound = linkData.properties.rowEstRange[0].highBound;
+                                        }
+
+                                        window[rowEstCacheKey] = {
+                                            rowEstExpr: linkData.rowEstExpr,
+                                            curRowEstHighBound: curRowEstHighBound
+                                        };
+
+                                        debugLog('✅ Cloud bindings cached for generation:', bindings.length, 'bindings');
+                                        debugLog('✅ Bindings:', JSON.stringify(bindings, null, 2));
+                                        debugLog('✅ Row estimation config:', window[rowEstCacheKey]);
                                         resolve();
                                     } else {
                                         console.error('❌ Unexpected Cloud bindings response format');
@@ -3065,7 +3335,7 @@ function(qlik, $, properties) {
                             });
                         });
                     } else if (!isCloud && !window[bindingsCacheKey]) {
-                        console.log('⏳ On-Premise bindings not cached yet, fetching before generation...');
+                        debugLog('⏳ On-Premise bindings not cached yet, fetching before generation...');
 
                         // Fetch On-Premise bindings synchronously before generating
                         const xrfkey = 'abcdefghijklmnop';
@@ -3083,7 +3353,7 @@ function(qlik, $, properties) {
                                 xhrFields: {withCredentials: true},
                                 timeout: 10000,
                                 success: function(linkDetails) {
-                                    console.log('🔍 FULL On-Premise link details response:', linkDetails);
+                                    debugLog('🔍 FULL On-Premise link details response:', linkDetails);
 
                                     // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
                                     // Bindings are inside objectDef, not at top level
@@ -3095,12 +3365,12 @@ function(qlik, $, properties) {
                                         bindings = linkDetails.bindings;
                                     }
 
-                                    console.log('🔍 Extracted bindings:', bindings);
+                                    debugLog('🔍 Extracted bindings:', bindings);
 
                                     if (bindings && Array.isArray(bindings) && bindings.length > 0) {
                                         window[bindingsCacheKey] = bindings;
-                                        console.log('✅ On-Premise bindings cached:', bindings.length, 'bindings');
-                                        console.log('✅ Bindings array:', JSON.stringify(bindings, null, 2));
+                                        debugLog('✅ On-Premise bindings cached:', bindings.length, 'bindings');
+                                        debugLog('✅ Bindings array:', JSON.stringify(bindings, null, 2));
                                         resolve();
                                     } else {
                                         console.error('❌ No bindings found in ODAG link details');
@@ -3121,8 +3391,17 @@ function(qlik, $, properties) {
                         });
                     }
 
-                    const payload = await buildPayload(app, odagConfig, layout);
-                    
+                    const buildResult = await buildPayload(app, odagConfig, layout);
+                    const payload = buildResult.payload;
+                    const rowEstResult = buildResult.rowEstResult;
+
+                    // Check if generation is allowed based on row estimation
+                    if (!rowEstResult.canGenerate) {
+                        $button.removeClass('loading').prop('disabled', false);
+                        alert(rowEstResult.message);
+                        return;
+                    }
+
                     const result = await callODAGAPI(odagConfig.odagLinkId, payload);
                     
                     if (result.success && result.data) {
@@ -3528,6 +3807,18 @@ function(qlik, $, properties) {
             // Check for selection changes on every paint (for Dynamic View)
             if (isDynamicView && window['checkSelectionsChanged_' + layout.qInfo.qId]) {
                 window['checkSelectionsChanged_' + layout.qInfo.qId]();
+            }
+
+            // Run validation check on EVERY paint to update button state when selections change
+            if (window['checkODAGValidation_' + layout.qInfo.qId]) {
+                // Clear any pending validation check to avoid running multiple times
+                if (window['validationCheckTimeout_' + layout.qInfo.qId]) {
+                    clearTimeout(window['validationCheckTimeout_' + layout.qInfo.qId]);
+                }
+                // Delay validation to ensure Qlik engine has processed selection changes
+                window['validationCheckTimeout_' + layout.qInfo.qId] = setTimeout(function() {
+                    window['checkODAGValidation_' + layout.qInfo.qId]();
+                }, 300);
             }
 
             return qlik.Promise.resolve();
