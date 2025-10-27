@@ -493,11 +493,20 @@ function(qlik, $, properties) {
             debugLog('ODAG Extension: ODAG Link ID configured, continuing with normal rendering...');
 
             // Check if already initialized - if so, skip HTML rebuild to preserve existing embeds
+            // BUT: Only skip if we're staying in the same mode (edit or analysis)
             const initKey = 'odagInit_' + layout.qInfo.qId;
-            if (window[initKey]) {
+            const modeKey = 'odagMode_' + layout.qInfo.qId;
+            const previousMode = window[modeKey];
+            const currentMode = isEditMode ? 'edit' : 'analysis';
+
+            if (window[initKey] && previousMode === currentMode && !isEditMode) {
+                // Already initialized and staying in analysis mode - skip rebuild
                 debugLog('⏭️ ODAG Extension already initialized - skipping HTML rebuild to preserve embeds');
                 return qlik.Promise.resolve();
             }
+
+            // Store current mode for next paint cycle
+            window[modeKey] = currentMode;
 
             // Detect mobile viewport (width < 768px)
             const isMobile = elementWidth < 768;
