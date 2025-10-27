@@ -1826,7 +1826,7 @@ function(qlik, $, properties) {
                     const elementRect = $element[0].getBoundingClientRect();
                     const relativeY = e.clientY - elementRect.top;
 
-                    if (relativeY < 100) { // Mouse near top of extension
+                    if (relativeY < 30) { // Mouse very close to top of extension
                         showTopBar();
                     }
                 });
