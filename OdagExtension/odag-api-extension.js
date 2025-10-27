@@ -359,9 +359,13 @@ function(qlik, $, properties) {
 
             // Check if extension is large enough for iframe view
             const isLargeView = elementHeight > 400 && elementWidth > 600;
-            const isDynamicView = odagConfig.viewMode === 'dynamicView';
+            // Detect mobile viewport early (width < 768px) for use in initialization logic
+            const isMobile = elementWidth < 768;
+            // On mobile, force list view (not dynamic view) and classic/app embed mode
+            const isDynamicView = isMobile ? false : odagConfig.viewMode === 'dynamicView';
+            const effectiveEmbedMode = isMobile ? 'classic/app' : (odagConfig.embedMode || 'classic/app');
 
-            debugLog('ODAG Extension: isEditMode =', isEditMode, 'isDynamicView =', isDynamicView, 'odagLinkId =', odagConfig.odagLinkId);
+            debugLog('ODAG Extension: isEditMode =', isEditMode, 'isDynamicView =', isDynamicView, 'isMobile =', isMobile, 'effectiveEmbedMode =', effectiveEmbedMode, 'odagLinkId =', odagConfig.odagLinkId);
 
             // Check if we're switching TO Dynamic View (even in edit mode)
             // This cleanup happens BEFORE edit mode check so it runs immediately
@@ -376,6 +380,17 @@ function(qlik, $, properties) {
             });
             const previousConfig = window[configKey];
             const previousViewMode = previousConfig ? JSON.parse(previousConfig).viewMode : null;
+
+            // Debug config comparison
+            if (isDynamicView && previousConfig) {
+                debugLog('Config comparison:', {
+                    same: previousConfig === currentConfig,
+                    prevLength: previousConfig.length,
+                    currLength: currentConfig.length,
+                    prevConfig: previousConfig.substring(0, 100),
+                    currConfig: currentConfig.substring(0, 100)
+                });
+            }
 
             // Detect if we're switching TO Dynamic View:
             // 1. If previousViewMode exists and changed from non-dynamic to dynamic
@@ -513,8 +528,15 @@ function(qlik, $, properties) {
             const previousMode = window[modeKey];
             const currentMode = isEditMode ? 'edit' : 'analysis';
 
-            if (window[initKey] && previousMode === currentMode && !isEditMode) {
+            // Track mobile state to detect viewport changes
+            const mobileStateKey = 'odagMobileState_' + layout.qInfo.qId;
+            const previousMobileState = window[mobileStateKey];
+            const viewportChanged = previousMobileState !== undefined && previousMobileState !== isMobile;
+
+            if (window[initKey] && previousMode === currentMode && !isEditMode && !isMobile && !viewportChanged) {
                 // Check if actual DOM content still exists (not destroyed by page navigation)
+                // Note: Skip this optimization on mobile to ensure event handlers are re-attached
+                // Also skip if viewport changed (mobile <-> desktop transition)
                 const hasContent = $element.children().length > 0;
                 if (hasContent) {
                     // Already initialized and staying in analysis mode - skip rebuild
@@ -529,15 +551,26 @@ function(qlik, $, properties) {
                 }
             }
 
-            // Store current mode for next paint cycle
+            if (viewportChanged) {
+                debugLog('🔄 Viewport changed (mobile <-> desktop), rebuilding layout');
+                delete window[initKey];
+                // Also clear Dynamic View flags when switching to mobile
+                if (isMobile) {
+                    const dynamicViewKey = 'dynamicView_' + layout.qInfo.qId;
+                    delete window[dynamicViewKey];
+                    debugLog('🔄 Switched to mobile - clearing Dynamic View flags');
+                }
+            }
+
+            // Store current mode and mobile state for next paint cycle
             window[modeKey] = currentMode;
+            window[mobileStateKey] = isMobile;
 
             // Note: When switching modes, Qlik may throw a console error "TypeError: u[e] is not a function"
             // in NebulaApp.jsx during embed cleanup. This is a known Qlik framework limitation and does not
             // affect functionality. See README Troubleshooting section for details.
 
-            // Detect mobile viewport (width < 768px)
-            const isMobile = elementWidth < 768;
+            // isMobile already defined earlier (line 364) for use in initialization logic
             debugLog('ODAG Extension: isMobile =', isMobile, 'elementWidth =', elementWidth);
 
             // Helper function to generate status HTML with spinner (used by Dynamic View)
@@ -621,14 +654,15 @@ function(qlik, $, properties) {
                 html += '</div>';
             }
             // Main content area - simplified layout: always list left, iframe right
-            else if (isLargeView && !isDynamicView) {
+            // On mobile, always use this view (with dropdown) regardless of size
+            else if ((isLargeView || isMobile) && !isDynamicView) {
                 const listWidth = 350; // Fixed width for the list panel
 
-                // MOBILE VIEW: Vertical stacking with dropdown
+                // MOBILE VIEW: Vertical stacking with dropdown and embed underneath
                 if (isMobile) {
                     html += '<div class="odag-content-mobile" style="display: flex; flex-direction: column; height: 100%;">';
 
-                    // Top section: Dropdown selector and controls
+                    // Top section: Controls with dropdown
                     html += '<div class="mobile-controls" style="background: white; border-bottom: 1px solid #e1e5eb; padding: 12px; flex-shrink: 0;">';
 
                     // Generate button
@@ -666,15 +700,11 @@ function(qlik, $, properties) {
 
                     html += '</div>'; // Close mobile-controls
 
-                    // Bottom section: Embedded app (takes remaining space)
+                    // Bottom section: Embedded app UNDERNEATH dropdown (takes remaining space)
                     html += '<div class="odag-iframe-panel" id="iframe-container-' + layout.qInfo.qId + '" style="flex: 1; overflow: hidden;">';
                     html += '<div class="iframe-placeholder">';
                     html += '<div class="placeholder-icon">📊</div>';
-                    if (odagConfig.templateSheetId && odagConfig.templateSheetId.trim() !== '') {
-                        html += '<div class="placeholder-text">Select an app to view its sheet</div>';
-                    } else {
-                        html += '<div class="placeholder-text">Select an app from the dropdown to preview</div>';
-                    }
+                    html += '<div class="placeholder-text">Select an app from the dropdown to preview</div>';
                     html += '</div>';
                     html += '</div>';
 
@@ -3178,8 +3208,15 @@ function(qlik, $, properties) {
             // Note: configKey and currentConfig already declared at top of paint() for cleanup logic
             const configChanged = previousConfig && previousConfig !== currentConfig;
 
-            if (isDynamicView && initDynamicView) {
+            // Dynamic View should NEVER run on mobile - double check
+            if (isDynamicView && initDynamicView && !isMobile) {
                 const initInProgressKey = 'dynamicViewInitInProgress_' + layout.qInfo.qId;
+
+                debugLog('Dynamic View initialization check:', {
+                    hasDynamicViewKey: !!window[dynamicViewKey],
+                    configChanged: configChanged,
+                    willInitialize: !window[dynamicViewKey] || configChanged
+                });
 
                 if (!window[dynamicViewKey] || configChanged) {
                     // Mark as initialized to prevent duplicate runs
@@ -3225,13 +3262,21 @@ function(qlik, $, properties) {
                         // Reinitialize instead of waiting indefinitely
                         debugLog('⚠️ Dynamic View embed missing, reinitializing...');
                         delete window[dynamicViewKey]; // Clear flag to allow reinitialization
-                        delete window[configKey]; // Clear config to force fresh setup
-                        debugLog('🔄 Cleared Dynamic View flags, will reinitialize below');
-                        // Fall through to initialization logic below instead of returning
+                        // NOTE: Do NOT delete configKey - preserve it to prevent false "config changed" detection
+                        delete window[initKey]; // Clear init flag to prevent early return on next paint
+                        debugLog('🔄 Cleared Dynamic View flags, reinitializing now...');
+
+                        // Trigger reinitialization by calling initDynamicView directly
+                        // This happens in the same execution instead of waiting for next paint()
+                        window[dynamicViewKey] = true;
+                        window[configKey] = currentConfig;
+                        window[initKey] = true;
+                        return initDynamicView(debugLog);
                     }
                 }
             } else if (!isDynamicView && window[dynamicViewKey]) {
-                // Clean up flags if switching away from dynamic view
+                // Clean up flags if switching away from dynamic view (including when switching to mobile)
+                debugLog('🔄 Switching away from Dynamic View (isMobile=' + isMobile + '), clearing flags');
                 delete window[dynamicViewKey];
                 delete window[configKey];
             }
@@ -3435,41 +3480,48 @@ function(qlik, $, properties) {
                     const $iframeContainer = $('#iframe-container-' + layout.qInfo.qId);
                     $iframeContainer.empty();
 
-                    // Build embed URL
+                    // Mobile always uses classic/app mode (full app overview, no sheet ID)
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                    const isCloud = window.qlikEnvironment === 'cloud';
-                    const embedMode = odagConfig.embedMode || 'classic/app';
-                    const sheetId = odagConfig.templateSheetId || '';
+                    const embedMode = 'classic/app';
                     const allowInteractions = odagConfig.allowInteractions !== false;
+                    const hostName = window.location.hostname;
 
-                    let embedUrl;
-                    if (isCloud) {
-                        if (sheetId && sheetId.trim() !== '') {
-                            embedUrl = tenantUrl + '/sense/' + embedMode + '/' + selectedApp.appId + '/sheet/' + sheetId + '/state/analysis';
-                        } else {
-                            embedUrl = tenantUrl + '/sense/' + embedMode + '/' + selectedApp.appId + '/state/analysis';
+                    debugLog('Mobile: Embedding app in classic/app mode:', selectedApp.appId);
+
+                    // Generate unique key for this embed instance
+                    const embedKey = 'mobile-embed-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+
+                    // Create and add qlik-embed - no sheet ID for mobile
+                    let embedElement = '<qlik-embed ' +
+                        'key="' + embedKey + '" ' +
+                        'ui="' + embedMode + '" ' +
+                        'app-id="' + selectedApp.appId + '" ';
+
+                    embedElement += 'host="' + hostName + '" ' +
+                        'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
+
+                    const context = {
+                        interactions: {
+                            select: allowInteractions,
+                            edit: false
                         }
-                    } else {
-                        if (sheetId && sheetId.trim() !== '') {
-                            embedUrl = tenantUrl + '/sense/' + embedMode + '/' + selectedApp.appId + '/sheet/' + sheetId + '/state/analysis';
-                        } else {
-                            embedUrl = tenantUrl + '/sense/' + embedMode + '/' + selectedApp.appId + '/state/analysis';
-                        }
-                    }
+                    };
+                    embedElement += "context___json='" + JSON.stringify(context) + "' ";
+                    embedElement += '></qlik-embed>';
 
-                    debugLog('Mobile: Embedding URL:', embedUrl);
+                    // Add a small delay to ensure proper cleanup before creating new embed
+                    setTimeout(function() {
+                        // Ensure container is visible
+                        $iframeContainer.show();
 
-                    // Create and add qlik-embed
-                    const embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; width: 100%; height: 100%; overflow: hidden;">' +
-                        '<qlik-embed ui="' + embedMode + '" app-id="' + selectedApp.appId + '"' +
-                        (sheetId && sheetId.trim() !== '' ? ' sheet-id="' + sheetId + '"' : '') +
-                        ' theme="horizon"' +
-                        (allowInteractions ? '' : ' disable-interactions') +
-                        '></qlik-embed>' +
-                        '</div>';
+                        // Wrap embed in a container div for proper positioning
+                        const embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">' +
+                            embedElement +
+                            '</div>';
 
-                    $iframeContainer.html(embedHtml);
-                    $iframeContainer.show();
+                        debugLog('Mobile: Setting embed HTML');
+                        $iframeContainer.html(embedHtml);
+                    }, 100);
                 });
             }
 
