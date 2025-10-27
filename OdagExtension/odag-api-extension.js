@@ -1234,6 +1234,40 @@ function(qlik, $, properties) {
                     // Generate unique key for refresh - include app ID to force new instance
                     const embedKey = 'dynamic-' + appId + '-' + Date.now();
 
+                    // Validate Sheet ID format if provided
+                    if (hasValidSheetId) {
+                        const rawSheetId = sheetId.trim();
+
+                        // Check for common mistakes: URLs, paths, or extra content
+                        if (rawSheetId.includes('/') || rawSheetId.includes('\\') ||
+                            rawSheetId.includes('sheet') || rawSheetId.includes('state') ||
+                            rawSheetId.includes('http') || rawSheetId.includes('sense/app')) {
+
+                            const errorMsg = '⚠️ Invalid Sheet ID Format\n\n' +
+                                'Sheet ID should be ONLY the sheet identifier (36 characters).\n\n' +
+                                'You entered: ' + rawSheetId + '\n\n' +
+                                'Example of CORRECT format:\n' +
+                                '✅ 56cb1a8e-ee80-4dba-8984-69bec687e28f\n\n' +
+                                'Example of WRONG formats:\n' +
+                                '❌ 56cb1a8e-ee80-4dba-8984-69bec687e28f/state/analysis\n' +
+                                '❌ https://demo.com/sense/app/ABC/sheet/56cb1a8e.../state/analysis\n\n' +
+                                'How to find the Sheet ID:\n' +
+                                '1. Open your ODAG template app\n' +
+                                '2. Open the sheet you want to display\n' +
+                                '3. Copy ONLY the ID after /sheet/ in the URL\n' +
+                                '   (before /state/analysis)';
+
+                            $element.html(
+                                '<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 8px; font-family: monospace; white-space: pre-wrap; line-height: 1.6;">' +
+                                errorMsg +
+                                '</div>'
+                            );
+
+                            console.error('❌ Invalid Sheet ID:', rawSheetId);
+                            return qlik.Promise.resolve();
+                        }
+                    }
+
                     // Create qlik-embed element with timestamp to force refresh
                     let embedElement = '<qlik-embed ';
                     embedElement += 'key="' + embedKey + '" ';
@@ -2492,10 +2526,42 @@ function(qlik, $, properties) {
                             const embedKey = 'embed-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
                             if (odagConfig.templateSheetId && odagConfig.templateSheetId.trim() !== '') {
+                                // Validate Sheet ID format
+                                const rawSheetId = odagConfig.templateSheetId.trim();
+
+                                // Check for common mistakes: URLs, paths, or extra content
+                                if (rawSheetId.includes('/') || rawSheetId.includes('\\') ||
+                                    rawSheetId.includes('sheet') || rawSheetId.includes('state') ||
+                                    rawSheetId.includes('http') || rawSheetId.includes('sense/app')) {
+
+                                    const errorMsg = '⚠️ Invalid Sheet ID Format\n\n' +
+                                        'Sheet ID should be ONLY the sheet identifier (36 characters).\n\n' +
+                                        'You entered: ' + rawSheetId + '\n\n' +
+                                        'Example of CORRECT format:\n' +
+                                        '✅ 56cb1a8e-ee80-4dba-8984-69bec687e28f\n\n' +
+                                        'Example of WRONG formats:\n' +
+                                        '❌ 56cb1a8e-ee80-4dba-8984-69bec687e28f/state/analysis\n' +
+                                        '❌ https://demo.com/sense/app/ABC/sheet/56cb1a8e.../state/analysis\n\n' +
+                                        'How to find the Sheet ID:\n' +
+                                        '1. Open your ODAG template app\n' +
+                                        '2. Open the sheet you want to display\n' +
+                                        '3. Copy ONLY the ID after /sheet/ in the URL\n' +
+                                        '   (before /state/analysis)';
+
+                                    $listContainer.html(
+                                        '<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 8px; font-family: monospace; white-space: pre-wrap; line-height: 1.6;">' +
+                                        errorMsg +
+                                        '</div>'
+                                    );
+
+                                    console.error('❌ Invalid Sheet ID:', rawSheetId);
+                                    return;
+                                }
+
                                 // Show specific sheet from the generated ODAG app
                                 // Use the actual generated app ID, not the template
                                 embedAppId = actualAppId;
-                                debugLog('Using generated ODAG app for sheet view:', embedAppId, 'Sheet:', odagConfig.templateSheetId);
+                                debugLog('Using generated ODAG app for sheet view:', embedAppId, 'Sheet:', rawSheetId);
                                 debugLog('LIST VIEW - embedMode:', embedMode);
 
                                 embedElement = '<qlik-embed ';
@@ -2507,11 +2573,11 @@ function(qlik, $, properties) {
                                 // Cloud: analytics/sheet uses object-id, classic/app uses sheet-id
                                 const isCloud = window.qlikEnvironment === 'cloud';
                                 if (embedMode === 'analytics/sheet' && isCloud) {
-                                    embedElement += 'object-id="' + odagConfig.templateSheetId.trim() + '" ';
-                                    debugLog('LIST VIEW - Adding object-id for analytics/sheet (Cloud):', odagConfig.templateSheetId.trim());
+                                    embedElement += 'object-id="' + rawSheetId + '" ';
+                                    debugLog('LIST VIEW - Adding object-id for analytics/sheet (Cloud):', rawSheetId);
                                 } else {
-                                    embedElement += 'sheet-id="' + odagConfig.templateSheetId.trim() + '" ';
-                                    debugLog('LIST VIEW - Adding sheet-id:', odagConfig.templateSheetId.trim(), 'Mode:', embedMode);
+                                    embedElement += 'sheet-id="' + rawSheetId + '" ';
+                                    debugLog('LIST VIEW - Adding sheet-id:', rawSheetId, 'Mode:', embedMode);
                                 }
 
                                 embedElement += 'host="' + hostName + '" ';
