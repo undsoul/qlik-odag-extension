@@ -332,11 +332,12 @@ Both view modes support showing a specific sheet instead of the full app:
 - ✅ Critical errors and warnings still logged regardless of debug mode
 
 **Technical Implementation**
-- ✅ Extracts `curRowEstHighBound` from ODAG API `properties.rowEstRange[0].highBound`
+- ✅ **Cloud**: Extracts from `/api/v1/odaglinks/{id}` → `properties.rowEstRange[0].highBound`
+- ✅ **On-Premise**: Extracts from `/api/odag/v1/links/{id}` → `objectDef.properties.rowEstRange[0].highBound`
 - ✅ Creates temporary hypercube session objects for live expression evaluation
 - ✅ Validates before API calls to prevent unnecessary ODAG requests
 - ✅ Graceful fallback: allows generation if no row limits configured
-- ✅ Works with any ODAG link that has row estimation settings
+- ✅ Works with any ODAG link that has row estimation settings in both Cloud and On-Premise
 
 **User Experience Benefits**
 - ✅ Prevents wasted time generating apps that will fail server-side validation
