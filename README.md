@@ -321,7 +321,7 @@ Both view modes support showing a specific sheet instead of the full app:
 - ✅ Users can clearly see generation status and completion messages
 - ✅ Auto-hide re-enabled after status is visible long enough
 - ✅ Fixed top bar blocking interactions with embedded app selection bar
-- ✅ More compact top bar design (reduced height and padding)
+- ✅ Added × close button for manual top bar hiding
 - ✅ Hover activation distance reduced from 100px to 30px for less intrusion
 
 **Debug Mode Improvements**
