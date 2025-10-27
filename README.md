@@ -79,7 +79,7 @@ In On-Premise environments, the extension automatically:
 - Shows link name and template app for easy selection
 - Auto-refreshes when you change the ODAG link
 
-**🚨 Check CSP settings allow `cdn.jsdelivr.net`🚨  add to the Content security Policy 🚨**
+**🚨 Qlik Cloud Only: Check CSP settings allow `cdn.jsdelivr.net`** - Add to Content Security Policy for embed functionality 🚨
 
 #### Settings
 - **ODAG Link ID/Selector**:
@@ -421,7 +421,7 @@ Console output is suppressed when debug mode is off (production-ready).
 - Qlik Sense Cloud OR Qlik Sense Enterprise On-Premise
 - ODAG license and configured ODAG links
 - Appropriate permissions to create/delete apps
-- For embed functionality: CSP settings must allow `cdn.jsdelivr.net`
+- **Qlik Cloud only**: CSP settings must allow `cdn.jsdelivr.net` for embed functionality
 
 ## Troubleshooting
 
@@ -436,7 +436,8 @@ Console output is suppressed when debug mode is off (production-ready).
 - Check that selections are being applied to fields mapped in ODAG template
 
 ### Embed not loading
-- 🚨 Check CSP settings allow `cdn.jsdelivr.net`🚨  add to the Content security Policy 🚨 
+- **Qlik Cloud**: Check CSP settings allow `cdn.jsdelivr.net` (add to Content Security Policy)
+- **On-Premise**: CSP configuration not required
 - Verify app ID is valid
 - Check browser console for errors
 
