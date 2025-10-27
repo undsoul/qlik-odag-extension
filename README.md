@@ -293,7 +293,58 @@ Both view modes support showing a specific sheet instead of the full app:
 
 ## 🆕 Recent Improvements
 
-### Version 3.3.0 Updates (Latest)
+### Version 3.3.1 Updates (Latest)
+
+**ODAG Row Estimation Validation**
+- ✅ Client-side validation based on `rowEstExpr` and `curRowEstHighBound` from ODAG configuration
+- ✅ Real-time evaluation of row estimation expression (e.g., `count(DISTINCT BOLGE_ADI)`)
+- ✅ Automatic comparison against configured row limit
+- ✅ Prevents ODAG app generation when selection would exceed limits
+
+**Dynamic UI Feedback**
+- ✅ **List View**: Generate button grays out and becomes disabled when limit exceeded
+- ✅ **Dynamic View**: Refresh button hides completely when limit exceeded
+- ✅ Clear warning messages showing exact counts (e.g., "7 distinct values exceeds limit of 5")
+- ✅ Clean UI when validation passes - no unnecessary success messages
+- ✅ Red warning banner with actionable guidance to refine selections
+
+**Real-Time Selection Tracking**
+- ✅ Subscribes to Qlik's `changed` event to detect selection changes instantly
+- ✅ Uses hypercube session objects for fresh, non-cached data evaluation
+- ✅ Debounced validation (300ms) prevents rapid-fire checks during multi-selection
+- ✅ Button states and messages update immediately as selections change
+- ✅ Works seamlessly in both List View and Dynamic View modes
+
+**Enhanced Dynamic View Behavior**
+- ✅ Top bar stays visible during entire ODAG generation process
+- ✅ Remains visible for 10 seconds after successful completion
+- ✅ Users can clearly see generation status and completion messages
+- ✅ Auto-hide re-enabled after status is visible long enough
+
+**Debug Mode Improvements**
+- ✅ All verbose console logs moved to `debugLog()` function
+- ✅ Production console stays clean - no clutter
+- ✅ Enable "Debug Mode" in properties to see detailed validation logs
+- ✅ Debug logs include row estimation calculations, validation results, and selection tracking
+- ✅ Critical errors and warnings still logged regardless of debug mode
+
+**Technical Implementation**
+- ✅ Extracts `curRowEstHighBound` from ODAG API `properties.rowEstRange[0].highBound`
+- ✅ Creates temporary hypercube session objects for live expression evaluation
+- ✅ Validates before API calls to prevent unnecessary ODAG requests
+- ✅ Graceful fallback: allows generation if no row limits configured
+- ✅ Works with any ODAG link that has row estimation settings
+
+**User Experience Benefits**
+- ✅ Prevents wasted time generating apps that will fail server-side validation
+- ✅ Immediate feedback when selections need refinement
+- ✅ Clear guidance on what to do (reduce selections)
+- ✅ No cryptic error messages - shows actual numbers
+- ✅ Maintains consistent validation state across mode switches
+
+---
+
+### Version 3.3.0 Updates
 
 **Dynamic View Stability - Complete Fix**
 - ✅ Fixed intermittent initialization when switching between edit/analysis modes
