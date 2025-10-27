@@ -354,23 +354,18 @@ function(qlik, $, properties) {
                             if (linkDetails.objectDef) {
                                 const objectDef = linkDetails.objectDef;
 
-                                debugLog('🔍 [PAINT] objectDef structure:', {
-                                    hasRowEstExpr: !!objectDef.rowEstExpr,
-                                    rowEstExpr: objectDef.rowEstExpr,
-                                    hasRowEstRange: !!objectDef.rowEstRange,
-                                    rowEstRange: objectDef.rowEstRange,
-                                    hasRowEst: !!objectDef.rowEst,
-                                    rowEst: objectDef.rowEst
-                                });
-
                                 // Extract rowEstExpr and curRowEstHighBound from On-Premise structure
+                                // On-Premise: rowEstExpr is in objectDef.rowEstExpr
+                                // On-Premise: highBound is in objectDef.properties.rowEstRange[0].highBound
                                 let rowEstExpr = objectDef.rowEstExpr;
                                 let curRowEstHighBound = null;
 
-                                // Check for row estimation range configuration
-                                if (objectDef.rowEstRange && Array.isArray(objectDef.rowEstRange) &&
-                                    objectDef.rowEstRange.length > 0) {
-                                    curRowEstHighBound = objectDef.rowEstRange[0].highBound;
+                                // Check for row estimation range in properties.rowEstRange (On-Premise structure)
+                                if (objectDef.properties &&
+                                    objectDef.properties.rowEstRange &&
+                                    Array.isArray(objectDef.properties.rowEstRange) &&
+                                    objectDef.properties.rowEstRange.length > 0) {
+                                    curRowEstHighBound = objectDef.properties.rowEstRange[0].highBound;
                                 }
 
                                 window[rowEstCacheKey] = {
