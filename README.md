@@ -285,7 +285,34 @@ Both view modes support showing a specific sheet instead of the full app:
 
 ## 🆕 Recent Improvements
 
-### Version 3.1 Updates (Latest Stable)
+### Version 3.2 Updates (Latest Stable)
+
+**Dynamic View Stability Fixes**
+- ✅ Fixed Dynamic View stuck state when switching between edit/analysis modes
+- ✅ Auto-recovery when embed is destroyed during mode transitions
+- ✅ Enhanced reinitialization logic clears flags and recreates embeds properly
+- ✅ No more "Waiting for ODAG app..." indefinitely - extension now auto-recovers
+
+**Bindings Management Improvements**
+- ✅ Fixed "Refresh Binding Fields" button not updating displayed fields
+- ✅ Button now triggers proper repaint via _refreshTimestamp property
+- ✅ Eliminated duplicate bindings API calls with fetching flag mechanism
+- ✅ Prevented race conditions from multiple paint() cycles
+
+**Mode Transition Enhancements**
+- ✅ Better tracking of edit vs analysis mode transitions
+- ✅ Configuration changes properly trigger Dynamic View reinitialization
+- ✅ Improved embed lifecycle management during mode switches
+- ✅ Cleaner handling of embed destruction and recreation
+
+**Code Quality**
+- ✅ Added detailed debug logging for Dynamic View initialization
+- ✅ Improved error recovery patterns
+- ✅ Better state management with window global variables
+
+---
+
+### Version 3.1 Updates
 
 **On-Premise API Fixes**
 - ✅ Fixed all On-Premise API endpoints in Dynamic View mode
