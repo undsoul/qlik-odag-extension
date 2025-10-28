@@ -146,26 +146,19 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // Detect environment if not already detected
             if (!window.qlikEnvironment) {
                 // Try to detect via /qrs/about endpoint (On-Premise only)
-                $.ajax({
-                    url: currentUrl + '/qrs/about?xrfkey=' + CONSTANTS.API.XRF_KEY,
-                    type: 'GET',
-                    headers: {
-                        'X-Qlik-XrfKey': CONSTANTS.API.XRF_KEY
-                    },
-                    timeout: CONSTANTS.TIMING.STATUS_CHECK_INTERVAL_MS,
-                    success: function(response) {
+                ApiService.fetchSystemInfo()
+                    .then(function(response) {
                         // If /qrs/about responds, it's On-Premise
                         if (response && response.buildVersion) {
                             window.qlikEnvironment = 'onpremise';
                             debugLog('🌍 ODAG Extension - Environment: ONPREMISE (detected via /qrs/about) | Build:', response.buildVersion);
                         }
-                    },
-                    error: function() {
+                    })
+                    .catch(function() {
                         // If /qrs/about fails, it's Cloud
                         window.qlikEnvironment = 'cloud';
                         debugLog('🌍 ODAG Extension - Environment: CLOUD (no /qrs/about endpoint) | Hostname:', hostname);
-                    }
-                });
+                    });
 
                 // Fallback: Use hostname-based detection while waiting for async call
                 const isQlikCloud = hostname.includes('qlikcloud.com') || hostname.includes('qlik-stage.com');
@@ -186,17 +179,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 debugLog('📋 Fetching available ODAG links from On-Premise...');
 
-                $.ajax({
-                    url: linksUrl,
-                    type: 'GET',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-Qlik-XrfKey': xrfkey
-                    },
-                    xhrFields: {withCredentials: true},
-                    timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS,
-                    success: function(links) {
+                ApiService.fetchAllLinks()
+                    .then(function(links) {
                         if (Array.isArray(links) && links.length > 0) {
                             // Store links globally for property panel dropdown
                             window.odagAllLinks = links;
@@ -207,12 +191,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('ℹ️ No ODAG links found for this app.');
                             window.odagAllLinks = [];
                         }
-                    },
-                    error: function(xhr, status, error) {
-                        console.warn('⚠️ Could not fetch ODAG links list:', xhr.status, error);
-                        debugLog('💡 You can manually get ODAG links by visiting:', linksUrl);
-                    }
-                });
+                    })
+                    .catch(function(error) {
+                        console.warn('⚠️ Could not fetch ODAG links list:', error);
+                        debugLog('💡 You can manually get ODAG links from the On-Premise ODAG Links API');
+                    });
             }
 
             // Fetch and cache ODAG bindings (for both Cloud and On-Premise)
