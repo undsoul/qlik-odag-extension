@@ -2117,25 +2117,6 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Show initially with auto-hide
                 showTopBar(true);
 
-                // Show on mouse hover over top area - with debouncing to prevent instability
-                let mouseNearTop = false;
-                $element.on('mousemove', function(e) {
-                    const elementRect = $element[0].getBoundingClientRect();
-                    const relativeY = e.clientY - elementRect.top;
-                    const isNearTop = relativeY < CONSTANTS.UI.HOVER_ACTIVATION_DISTANCE_PX;
-
-                    // Only trigger showTopBar once when mouse enters top area (not on every move)
-                    if (isNearTop && !mouseNearTop) {
-                        mouseNearTop = true;
-                        // Only show if currently hidden
-                        if (!isTopBarVisible) {
-                            showTopBar(true); // Show with auto-hide enabled
-                        }
-                    } else if (!isNearTop && mouseNearTop) {
-                        mouseNearTop = false;
-                    }
-                });
-
                 // Show when selections change - use Qlik's selection API
                 app.getList('SelectionObject', function(reply) {
                     const newState = JSON.stringify(reply.qSelectionObject.qSelections);
