@@ -678,8 +678,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += 'transition: transform 0.3s ease, opacity 0.3s ease; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">';
 
                 // Close button positioned absolutely at top-right corner (outside flex layout)
+                // Center-aligned vertically with the content
                 html += '<button class="odag-close-topbar-btn" id="close-topbar-btn-' + layout.qInfo.qId + '" ';
-                html += 'style="position: absolute; top: ' + (isMobile ? '8px' : '12px') + '; right: ' + (isMobile ? '12px' : '16px') + '; ';
+                html += 'style="position: absolute; top: 50%; right: ' + (isMobile ? '12px' : '16px') + '; transform: translateY(-50%); ';
                 html += 'background: transparent; border: none; color: #666; cursor: pointer; ';
                 html += 'font-size: 20px; padding: 0; width: 24px; height: 24px; pointer-events: auto; ';
                 html += 'display: flex; align-items: center; justify-content: center; border-radius: 3px; z-index: 1;" ';
@@ -718,7 +719,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += '</div>'; // Close button container
 
                 // Validation status indicator for Dynamic View
-                html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin: 8px 16px; padding: 8px 12px; border-radius: 4px; font-size: 13px; display: none;"></div>';
+                // Added right padding to make space for close button
+                html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin: 8px 16px; margin-right: 48px; padding: 8px 12px; border-radius: 4px; font-size: 13px; display: none;"></div>';
 
                 html += '</div>'; // Close top bar
 
