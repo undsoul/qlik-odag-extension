@@ -1620,6 +1620,13 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         // Load the app in embed - only if it's a new app
                                         if (isNewApp) {
                                             debugLog('New ODAG app detected, refreshing embed:', appId);
+
+                                            // Reset top bar close flag so it can show for new content
+                                            const resetFunc = StateManager.get(extensionId, 'resetTopBarCloseFlag');
+                                            if (resetFunc) {
+                                                resetFunc();
+                                            }
+
                                             loadDynamicEmbed(appId, latestAppName);
                                         } else {
                                             debugLog('Same app already loaded, skipping refresh:', appId);
@@ -2106,8 +2113,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
                 };
 
-                // Make showTopBar accessible via StateManager for status updates
+                // Function to reset the permanent close flag (for new generations)
+                const resetTopBarCloseFlag = function() {
+                    isTopBarPermanentlyClosed = false;
+                    debugLog('🔓 Top bar close flag reset - can show again for new content');
+                };
+
+                // Make functions accessible via StateManager
                 StateManager.set(extensionId, 'showDynamicTopBar', showTopBar);
+                StateManager.set(extensionId, 'resetTopBarCloseFlag', resetTopBarCloseFlag);
 
                 // Show initially with auto-hide
                 showTopBar(true);
