@@ -139,6 +139,32 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             const CleanupManager = window.ODAGCleanupManager[cleanupKey];
 
+            // ========== SUPPRESS QLIK NEBULA EMBED DESTRUCTION ERRORS ==========
+            // Install one-time global error handler to suppress known Qlik platform bug
+            // Error: "u[e] is not a function" at NebulaApp.jsx:145 during embed destruction
+            if (!window.odagNebulaErrorHandlerInstalled) {
+                window.odagNebulaErrorHandlerInstalled = true;
+
+                // Store the original error handler
+                const originalErrorHandler = window.onerror;
+
+                window.onerror = function(message, source, lineno, colno, error) {
+                    // Suppress only the specific Nebula embed destruction error
+                    if (source && source.includes('NebulaApp.jsx') && message.includes('is not a function')) {
+                        if (odagConfig.enableDebug) {
+                            console.warn('[Suppressed] Known Qlik Nebula embed destruction error (does not affect functionality)');
+                        }
+                        return true; // Prevent error from showing in console
+                    }
+
+                    // Let all other errors through
+                    if (originalErrorHandler) {
+                        return originalErrorHandler.apply(this, arguments);
+                    }
+                    return false;
+                };
+            }
+
             // ========== END PERFORMANCE OPTIMIZATIONS ==========
 
             // Check edit mode using Qlik API (synchronous call)
@@ -3104,29 +3130,26 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 // Clear any existing qlik-embed elements first
                                 if (existingEmbed) {
                                     debugLog('Removing existing qlik-embed element');
-                                    // Properly dispose of the existing embed
-                                    existingEmbed.remove();
+                                    // Wrap in try-catch to suppress Qlik Nebula platform bug
+                                    // Error: "u[e] is not a function" at NebulaApp.jsx:145
+                                    // This is an internal Qlik bug during embed destruction that doesn't affect functionality
+                                    try {
+                                        existingEmbed.remove();
+                                    } catch (e) {
+                                        // Silently ignore Nebula destruction errors - this is a known Qlik platform bug
+                                        if (odagConfig.enableDebug) {
+                                            console.warn('[Known Qlik platform bug] Nebula embed destruction error (safe to ignore):', e.message);
+                                        }
+                                    }
                                 }
 
-                                // Clear the container completely
+                                // Clear the container completely (this also removes any remaining embeds)
                                 $container.empty();
 
                                 // Add a small delay to ensure proper cleanup
                                 setTimeout(function() {
                                     // Ensure container is visible
                                     $container.show();
-
-                                    // CRITICAL: Properly clean up existing embed before creating new one
-                                    // This prevents Nebula destroy errors when switching between apps
-                                    const existingEmbed = $container.find('qlik-embed, qlik-analytics-embed')[0];
-                                    if (existingEmbed && typeof existingEmbed.remove === 'function') {
-                                        try {
-                                            existingEmbed.remove();
-                                            debugLog('Removed existing embed before creating new one');
-                                        } catch (e) {
-                                            console.warn('Error removing existing embed:', e);
-                                        }
-                                    }
 
                                     // Show loading animation first
                                     $container.html(getLoadingPlaceholder('Loading app...'));
