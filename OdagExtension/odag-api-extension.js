@@ -267,17 +267,37 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 'response[0].curRowEstHighBound': response[0].curRowEstHighBound
                             });
 
-                            // Extract curRowEstHighBound from properties.rowEstRange[0].highBound
-                            let curRowEstHighBound = linkData.curRowEstHighBound;
-                            if (!curRowEstHighBound && linkData.properties && linkData.properties.rowEstRange &&
-                                linkData.properties.rowEstRange.length > 0) {
+                            // Extract curRowEstHighBound - check all possible locations
+                            let curRowEstHighBound = null;
+                            let rowEstExpr = null;
+
+                            // Try multiple locations for curRowEstHighBound
+                            if (linkData.curRowEstHighBound !== undefined && linkData.curRowEstHighBound !== null) {
+                                curRowEstHighBound = linkData.curRowEstHighBound;
+                            } else if (linkData.properties && linkData.properties.rowEstRange &&
+                                       linkData.properties.rowEstRange.length > 0) {
                                 curRowEstHighBound = linkData.properties.rowEstRange[0].highBound;
+                            } else if (linkData.link && linkData.link.curRowEstHighBound !== undefined) {
+                                curRowEstHighBound = linkData.link.curRowEstHighBound;
+                            } else if (response[0].curRowEstHighBound !== undefined) {
+                                curRowEstHighBound = response[0].curRowEstHighBound;
+                            } else if (linkData.rowEstRange && linkData.rowEstRange.length > 0) {
+                                curRowEstHighBound = linkData.rowEstRange[0].highBound;
                             }
 
+                            // Try multiple locations for rowEstExpr
+                            rowEstExpr = linkData.rowEstExpr || linkData.link?.rowEstExpr || response[0].rowEstExpr;
+
                             window[rowEstCacheKey] = {
-                                rowEstExpr: linkData.rowEstExpr || response[0].rowEstExpr,
+                                rowEstExpr: rowEstExpr,
                                 curRowEstHighBound: curRowEstHighBound
                             };
+
+                            debugLog('🔍 [PAINT] Extracted row estimation config:', {
+                                rowEstExpr: rowEstExpr,
+                                curRowEstHighBound: curRowEstHighBound,
+                                source: curRowEstHighBound ? 'found' : 'NOT FOUND - check ODAG Link configuration'
+                            });
 
                             debugLog('✅ [PAINT] Cloud bindings cached:', bindings.length, 'bindings');
                             debugLog('✅ [PAINT] Cloud bindings array:', JSON.stringify(bindings, null, 2));
@@ -362,17 +382,24 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 const objectDef = linkDetails.objectDef;
 
                                 // Extract rowEstExpr and curRowEstHighBound from On-Premise structure
-                                // On-Premise: rowEstExpr is in objectDef.rowEstExpr
-                                // On-Premise: highBound is in objectDef.properties.rowEstRange[0].highBound
-                                let rowEstExpr = objectDef.rowEstExpr;
+                                let rowEstExpr = null;
                                 let curRowEstHighBound = null;
 
-                                // Check for row estimation range in properties.rowEstRange (On-Premise structure)
-                                if (objectDef.properties &&
-                                    objectDef.properties.rowEstRange &&
-                                    Array.isArray(objectDef.properties.rowEstRange) &&
-                                    objectDef.properties.rowEstRange.length > 0) {
+                                debugLog('🔍 [PAINT] On-Premise objectDef structure:', JSON.stringify(objectDef, null, 2));
+
+                                // Try multiple locations for rowEstExpr
+                                rowEstExpr = objectDef.rowEstExpr || objectDef.properties?.rowEstExpr;
+
+                                // Try multiple locations for curRowEstHighBound
+                                if (objectDef.curRowEstHighBound !== undefined && objectDef.curRowEstHighBound !== null) {
+                                    curRowEstHighBound = objectDef.curRowEstHighBound;
+                                } else if (objectDef.properties &&
+                                           objectDef.properties.rowEstRange &&
+                                           Array.isArray(objectDef.properties.rowEstRange) &&
+                                           objectDef.properties.rowEstRange.length > 0) {
                                     curRowEstHighBound = objectDef.properties.rowEstRange[0].highBound;
+                                } else if (objectDef.rowEstRange && Array.isArray(objectDef.rowEstRange) && objectDef.rowEstRange.length > 0) {
+                                    curRowEstHighBound = objectDef.rowEstRange[0].highBound;
                                 }
 
                                 window[rowEstCacheKey] = {
@@ -381,6 +408,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 };
 
                                 debugLog('✅ [PAINT] On-Premise row estimation config:', window[rowEstCacheKey]);
+                                debugLog('🔍 [PAINT] Extracted values:', {
+                                    rowEstExpr: rowEstExpr,
+                                    curRowEstHighBound: curRowEstHighBound,
+                                    source: curRowEstHighBound ? 'found' : 'NOT FOUND - check ODAG Link configuration in QMC'
+                                });
                             }
 
                             // Extract field names and store in layout for properties panel display
