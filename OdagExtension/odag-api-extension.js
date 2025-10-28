@@ -567,52 +567,25 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 return qlik.Promise.resolve();
             }
 
-            // Show standard message in edit mode with validation info
+            // Show standard message in edit mode
             if (isEditMode) {
                 debugLog('ODAG Extension: In edit mode, showing edit message');
                 // Clear init key so it rebuilds when exiting edit mode
                 const initKey = 'odagInit_' + layout.qInfo.qId;
                 delete window[initKey];
 
+                // Clear cached row estimation config to force re-fetch after exiting edit mode
+                const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+                delete window[rowEstCacheKey];
+                debugLog('🔄 Cleared row estimation cache - will re-fetch after exiting edit mode');
+
                 html += '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center;">';
                 html += '<div style="font-size: 48px; margin-bottom: 16px;">✏️ 📝</div>';
                 html += '<div style="font-size: 18px; font-weight: bold; color: #666; margin-bottom: 8px;">Edit Mode</div>';
-                html += '<div style="font-size: 14px; color: #999; margin-bottom: 16px;">Configure ODAG settings in the properties panel →</div>';
-
-                // Show validation status in edit mode
-                html += '<div id="edit-mode-validation-' + layout.qInfo.qId + '" style="margin-top: 20px; padding: 12px 16px; border-radius: 4px; font-size: 13px; background: #f5f5f5; border: 1px solid #ddd; max-width: 500px;">';
-                html += '<div style="font-weight: 500; margin-bottom: 4px;">Row Estimation Validation</div>';
-                html += '<div id="edit-mode-validation-content-' + layout.qInfo.qId + '" style="color: #666;">Loading...</div>';
-                html += '</div>';
-
+                html += '<div style="font-size: 14px; color: #999;">Configure ODAG settings in the properties panel →</div>';
                 html += '</div>';
                 html += '</div>'; // Close odag-container
                 $element.html(html);
-
-                // Fetch and display validation info in edit mode
-                setTimeout(function() {
-                    const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
-                    const rowEstConfig = window[rowEstCacheKey];
-
-                    if (rowEstConfig && rowEstConfig.curRowEstHighBound !== null && rowEstConfig.curRowEstHighBound !== undefined) {
-                        const $validationContent = $('#edit-mode-validation-content-' + layout.qInfo.qId);
-                        $validationContent.html('✓ Row limit configured: <strong>' + rowEstConfig.curRowEstHighBound.toLocaleString() + '</strong> rows maximum');
-                        $validationContent.parent().css({
-                            'background': '#e8f5e9',
-                            'border-color': '#4caf50',
-                            'color': '#2e7d32'
-                        });
-                    } else {
-                        const $validationContent = $('#edit-mode-validation-content-' + layout.qInfo.qId);
-                        $validationContent.html('⚠ No row estimation limit configured in ODAG Link');
-                        $validationContent.parent().css({
-                            'background': '#fff3cd',
-                            'border-color': '#ffc107',
-                            'color': '#856404'
-                        });
-                    }
-                }, 1000);
-
                 return qlik.Promise.resolve();
             }
 
