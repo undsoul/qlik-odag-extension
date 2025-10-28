@@ -8,10 +8,10 @@
 define([
     "qlik",
     "jquery",
-    "./odag-api-service",
-    "./odag-ui-builder",
-    "./odag-error-handler",
-    "./odag-state-manager",
+    "../foundation/odag-api-service",
+    "../foundation/odag-ui-builder",
+    "../foundation/odag-error-handler",
+    "../foundation/odag-state-manager",
     "./odag-toolbar-manager"
 ], function(qlik, $, ApiService, UIBuilder, ErrorHandler, StateManager, ToolbarManager) {
     'use strict';

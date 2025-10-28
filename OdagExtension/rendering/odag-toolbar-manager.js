@@ -7,8 +7,8 @@
 
 define([
     "jquery",
-    "./odag-ui-builder",
-    "./odag-state-manager"
+    "../foundation/odag-ui-builder",
+    "../foundation/odag-state-manager"
 ], function($, UIBuilder, StateManager) {
     'use strict';
 

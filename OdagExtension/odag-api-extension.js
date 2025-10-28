@@ -1,13 +1,13 @@
 define([
     "qlik",
     "jquery",
-    "./odag-api-properties",
-    "./odag-api-service",
-    "./odag-state-manager",
-    "./odag-constants",
-    "./odag-validators",
-    "./odag-error-handler",
-    "css!./odag-api-extension.css"
+    "./properties/odag-api-properties",
+    "./foundation/odag-api-service",
+    "./foundation/odag-state-manager",
+    "./foundation/odag-constants",
+    "./foundation/odag-validators",
+    "./foundation/odag-error-handler",
+    "css!./styles/odag-api-extension.css"
 ],
 function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler) {
     'use strict';
