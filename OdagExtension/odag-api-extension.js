@@ -12,6 +12,32 @@ define([
 function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler) {
     'use strict';
 
+    // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
+    // This MUST run before properties panel is rendered, so we detect it at module level
+    if (!window.qlikEnvironment) {
+        const hostname = window.location.hostname;
+        const currentUrl = window.location.origin;
+
+        // Immediate synchronous detection based on hostname
+        const isQlikCloud = hostname.includes('qlikcloud.com') || hostname.includes('qlik-stage.com');
+        window.qlikEnvironment = isQlikCloud ? 'cloud' : 'onpremise';
+
+        console.log('🌍 ODAG Extension - Environment detected:', window.qlikEnvironment.toUpperCase(), '| Hostname:', hostname);
+
+        // Async verification via API (will update if needed, but sync detection is primary)
+        ApiService.fetchSystemInfo()
+            .then(function(response) {
+                if (response && response.buildVersion) {
+                    window.qlikEnvironment = 'onpremise';
+                    console.log('✅ Environment verified: ONPREMISE via /qrs/about | Build:', response.buildVersion);
+                }
+            })
+            .catch(function() {
+                window.qlikEnvironment = 'cloud';
+                console.log('✅ Environment verified: CLOUD (no /qrs/about endpoint)');
+            });
+    }
+
     return {
         definition: properties,
         initialProperties: {
@@ -224,28 +250,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // Store tenant URL globally for API calls
             window.qlikTenantUrl = currentUrl;
 
-            // Detect environment if not already detected
-            if (!window.qlikEnvironment) {
-                // Try to detect via /qrs/about endpoint (On-Premise only)
-                ApiService.fetchSystemInfo()
-                    .then(function(response) {
-                        // If /qrs/about responds, it's On-Premise
-                        if (response && response.buildVersion) {
-                            window.qlikEnvironment = 'onpremise';
-                            debugLog('🌍 ODAG Extension - Environment: ONPREMISE (detected via /qrs/about) | Build:', response.buildVersion);
-                        }
-                    })
-                    .catch(function() {
-                        // If /qrs/about fails, it's Cloud
-                        window.qlikEnvironment = 'cloud';
-                        debugLog('🌍 ODAG Extension - Environment: CLOUD (no /qrs/about endpoint) | Hostname:', hostname);
-                    });
-
-                // Fallback: Use hostname-based detection while waiting for async call
-                const isQlikCloud = hostname.includes('qlikcloud.com') || hostname.includes('qlik-stage.com');
-                window.qlikEnvironment = isQlikCloud ? 'cloud' : 'onpremise';
-            }
-
+            // Environment is already detected at module level (lines 17-39)
             debugLog('Using environment:', window.qlikEnvironment, '- URL:', currentUrl);
 
             // Fetch available ODAG links for On-Premise only (Cloud uses manual input)
@@ -268,6 +273,22 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                             debugLog('✅ Found ' + links.length + ' ODAG Link(s) for this app.');
                             debugLog('ODAG Links loaded:', links);
+
+                            // Force properties panel refresh to show the loaded links in dropdown
+                            if (isEditMode) {
+                                app.getObject(layout.qInfo.qId).then(function(model) {
+                                    model.getProperties().then(function(props) {
+                                        if (props.odagConfig) {
+                                            props.odagConfig._linksLoadedTimestamp = Date.now();
+                                        }
+                                        model.setProperties(props).then(function() {
+                                            debugLog('✅ Properties panel refreshed - ODAG links dropdown should now be populated');
+                                        });
+                                    });
+                                }).catch(function(err) {
+                                    debugLog('Could not refresh properties panel:', err);
+                                });
+                            }
                         } else {
                             debugLog('ℹ️ No ODAG links found for this app.');
                             window.odagAllLinks = [];
@@ -1255,74 +1276,77 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Store deletedApps in StateManager so restoreDynamicView can access it
                 StateManager.set(extensionId, 'deletedApps', deletedApps);
 
-                // Function to delete all existing ODAG apps
-                const deleteAllODAGApps = function(callback) {
+                // Function to delete old ODAG apps (keeping the latest one)
+                const deleteOldODAGApps = function(keepRequestId) {
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
                     const isCloud = window.qlikEnvironment === 'cloud';
-                const xrfkey = CONSTANTS.API.XRF_KEY;
-                const apiUrl = isCloud
-                    ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
-                    : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
+                    const xrfkey = CONSTANTS.API.XRF_KEY;
+                    const apiUrl = isCloud
+                        ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
+                        : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
-                    debugLog('Deleting all existing ODAG apps for Dynamic View...');
+                    debugLog('Deleting old ODAG apps (keeping latest:', keepRequestId, ')...');
+
+                    const headers = {
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    };
+
+                    // Add environment-specific headers
+                    if (isCloud) {
+                        headers['qlik-csrf-token'] = getCookie('_csrfToken') || '';
+                    } else {
+                        headers['X-Qlik-XrfKey'] = xrfkey;
+                    }
 
                     $.ajax({
                         url: apiUrl,
                         type: 'GET',
-                        headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
-                        },
+                        headers: headers,
                         xhrFields: {
                             withCredentials: true
                         },
                         success: function(result) {
                             if (result && Array.isArray(result) && result.length > 0) {
-                                let deleteCount = result.length;
-                                let deletedCount = 0;
+                                // Filter out the app we want to keep
+                                const appsToDelete = result.filter(function(request) {
+                                    return request.id !== keepRequestId;
+                                });
 
-                                result.forEach(function(request) {
+                                if (appsToDelete.length === 0) {
+                                    debugLog('No old apps to delete (only latest exists)');
+                                    return;
+                                }
+
+                                debugLog('Found', appsToDelete.length, 'old app(s) to delete');
+
+                                appsToDelete.forEach(function(request) {
                                     // Mark as deleted to prevent duplicate deletion attempts
                                     deletedApps.add(request.id);
 
-                                    // Delete the generated app itself, not the request
-                                    // Use the /app endpoint to delete the actual app
-                                    const isCloud = window.qlikEnvironment === 'cloud';
-                                    const xrfkey = CONSTANTS.API.XRF_KEY;
-                                    const deleteHeaders = isCloud
-                                        ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
-                                        : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
-
+                                    // Delete the generated app
                                     ApiService.deleteApp(request.id)
                                         .then(function() {
-                                            deletedCount++;
-                                            debugLog('Deleted app:', request.generatedAppName || request.id);
-                                            if (deletedCount === deleteCount && callback) {
-                                                callback();
-                                            }
+                                            debugLog('Deleted old app:', request.generatedAppName || request.id);
                                         })
                                         .catch(function(error) {
-                                            deletedCount++;
                                             if (error.status === 404) {
-                                                debugLog('App already deleted:', request.id);
+                                                debugLog('Old app already deleted:', request.id);
+                                            } else if (error.status === 403) {
+                                                debugLog('No permission to delete app:', request.id, '(this is OK, will be cleaned up by Qlik retention policy)');
                                             } else {
-                                                console.error('Failed to delete app:', request.id, error.status, error.responseText);
+                                                console.error('Failed to delete old app:', request.id, error.status);
                                             }
-                                            // Continue even if delete fails
-                                            if (deletedCount === deleteCount && callback) {
-                                                callback();
-                                            }
+                                            // Continue even if delete fails - not critical
                                         });
                                 });
                             } else {
-                                // No apps to delete
-                                debugLog('No existing apps to delete');
-                                if (callback) callback();
+                                debugLog('No old apps to delete');
                             }
                         },
                         error: function(xhr) {
-                            console.error('Failed to get existing apps:', xhr.responseText);
-                            if (callback) callback();
+                            console.error('Failed to get ODAG apps list for cleanup:', xhr.responseText);
+                            // Not critical - just log and continue
                         }
                     });
                 };
@@ -1893,17 +1917,27 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const hasInitializedThisSession = sessionStorage.getItem(sessionKey);
 
                 if (!hasInitializedThisSession) {
-                    // First session load - delete all existing apps and generate fresh
-                    debugLog('ODAG Extension: First Dynamic View load - deleting all existing apps...');
+                    // First session load - load latest app immediately, then delete old ones in background
+                    debugLog('ODAG Extension: First Dynamic View load - loading latest app...');
                     sessionStorage.setItem(sessionKey, 'true');
 
-                    deleteAllODAGApps(function() {
-                        debugLog('ODAG Extension: All existing apps deleted, generating new app...');
-                        // After deletion completes, generate a new app
-                        setTimeout(async function() {
+                    // Load latest app first for fast initialization
+                    loadLatestODAGApp();
+
+                    // After a delay, check if we have an app or need to generate one
+                    setTimeout(async function() {
+                        if (!latestAppId) {
+                            debugLog('No existing apps found, generating initial app...');
                             generateNewODAGApp();
-                        }, 500);
-                    });
+                        } else {
+                            debugLog('Found existing app:', latestAppId, '- will delete old ones in background');
+
+                            // Delete old apps in background (after latest is already loaded)
+                            setTimeout(function() {
+                                deleteOldODAGApps(latestAppId);
+                            }, 2000);
+                        }
+                    }, 1000);
                 } else {
                     // Subsequent loads in same session - check for existing app or generate
                     debugLog('ODAG Extension: Subsequent Dynamic View load - checking for existing app...');
@@ -1950,7 +1984,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             if (topBarManuallyClosed) {
                                 debugLog('🔔 Selections changed - showing top bar with refresh warning');
                                 topBarManuallyClosed = false; // Reset flag
-                                showTopBar(false); // Show without auto-hide (keep visible for warning)
+                                showTopBar(false, true); // Show without auto-hide, force show for warning
                             }
                         } else {
                             // Selections same - remove highlight
@@ -2092,7 +2126,13 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     isTopBarVisible = false;
                 };
 
-                const showTopBar = function(autoHide) {
+                const showTopBar = function(autoHide, forceShow) {
+                    // If user manually closed the bar, don't show it unless forced (e.g., for refresh warning)
+                    if (topBarManuallyClosed && !forceShow) {
+                        debugLog('⛔ Top bar manually closed - not showing');
+                        return;
+                    }
+
                     $topBar.css({
                         'transform': 'translateY(0)',
                         'opacity': '1'
@@ -2282,6 +2322,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     state: request.state,
                                     name: appName
                                 });
+
+                                // Debug: Log full request object to understand Cloud response structure
+                                if (odagConfig.enableDebug) {
+                                    debugLog('📋 Full request object from API:', JSON.stringify(request, null, 2));
+                                }
 
                                 const currentStatus = request.state || 'pending';
                                 const previousStatus = previousStatuses[request.id];
@@ -2672,7 +2717,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         // qState: 'O' = Optional/Possible, 'S' = Selected, 'X' = Excluded
                                         if (cell && (cell.qState === 'O' || cell.qState === 'S')) {
                                             possibleValues.push({
-                                                selStatus: 'O',
+                                                selStatus: 'S',  // Mark as Selected, not Optional!
                                                 strValue: cell.qText,
                                                 numValue: isNaN(cell.qNum) ? 'NaN' : cell.qNum.toString()
                                             });
@@ -2686,12 +2731,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 await enigmaApp.destroySessionObject(listObj.id);
 
                                 if (possibleValues.length > 0) {
-                                    bindSelectionState.push({
+                                    const bindingField = {
                                         selectionAppParamType: 'Field',
                                         selectionAppParamName: fieldName,
                                         values: possibleValues,
-                                        selectedSize: 0
-                                    });
+                                        selectedSize: possibleValues.length  // Use actual count, not 0!
+                                    };
+
+                                    bindSelectionState.push(bindingField);
+
+                                    // Also add to selectionState since binding fields must be treated as selected
+                                    selectionState.push(bindingField);
                                 } else {
                                     debugLog('  → WARNING: No possible values found for binding field:', fieldName);
                                 }
@@ -3329,15 +3379,18 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
                         const isCloud = window.qlikEnvironment === 'cloud';
 
-                        // Cloud uses PUT to update state to 'cancelled'
+                        // Cloud uses PUT with query parameters to cancel
                         // On-Premise uses DELETE
                         if (isCloud) {
-                            const cancelUrl = tenantUrl + '/api/v1/odagrequests/' + requestId;
+                            const cancelUrl = tenantUrl + '/api/v1/odagrequests/' + requestId +
+                                '?requestId=' + requestId +
+                                '&action=cancel' +
+                                '&ignoreSucceeded=true' +
+                                '&delGenApp=false' +
+                                '&autoAck=false';
                             $.ajax({
                                 url: cancelUrl,
                                 type: 'PUT',
-                                data: JSON.stringify({ state: 'cancelled' }),
-                                contentType: 'application/json',
                                 headers: {
                                     'qlik-csrf-token': getCookie('_csrfToken') || ''
                                 },

@@ -43,6 +43,21 @@ define(["jquery"], function($) {
          */
         _call: function(method, url, data, options) {
             options = options || {};
+            const isCloud = this.isCloud();
+
+            // Build base headers
+            const baseHeaders = {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            };
+
+            // Only add XRF key header for On-Premise
+            if (!isCloud) {
+                baseHeaders['X-Qlik-XrfKey'] = this.config.xrfKey;
+            }
+
+            // Merge with any custom headers from options
+            const headers = Object.assign(baseHeaders, options.headers || {});
 
             return new Promise((resolve, reject) => {
                 $.ajax({
@@ -50,11 +65,7 @@ define(["jquery"], function($) {
                     type: method,
                     data: data ? JSON.stringify(data) : undefined,
                     contentType: 'application/json',
-                    headers: Object.assign({
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/json',
-                        'X-Qlik-XrfKey': this.config.xrfKey
-                    }, options.headers || {}),
+                    headers: headers,
                     xhrFields: { withCredentials: true },
                     timeout: options.timeout || this.config.timeout
                 })
@@ -83,10 +94,22 @@ define(["jquery"], function($) {
          */
         _buildUrl: function(endpoint, params) {
             const baseUrl = window.location.origin;
-            const xrfParam = 'xrfkey=' + this.config.xrfKey;
-            const separator = endpoint.indexOf('?') > -1 ? '&' : '?';
+            const isCloud = this.isCloud();
 
-            return baseUrl + endpoint + separator + xrfParam + (params ? '&' + params : '');
+            // Only add XRF key for On-Premise, NOT for Cloud
+            if (isCloud) {
+                // Cloud: No XRF key needed
+                if (params) {
+                    const separator = endpoint.indexOf('?') > -1 ? '&' : '?';
+                    return baseUrl + endpoint + separator + params;
+                }
+                return baseUrl + endpoint;
+            } else {
+                // On-Premise: Add XRF key
+                const xrfParam = 'xrfkey=' + this.config.xrfKey;
+                const separator = endpoint.indexOf('?') > -1 ? '&' : '?';
+                return baseUrl + endpoint + separator + xrfParam + (params ? '&' + params : '');
+            }
         },
 
         /**
