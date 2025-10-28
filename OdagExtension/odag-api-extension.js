@@ -677,6 +677,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += 'gap: ' + (isMobile ? '8px' : '0') + '; pointer-events: none; ';
                 html += 'transition: transform 0.3s ease, opacity 0.3s ease; box-shadow: 0 2px 6px rgba(0,0,0,0.06);">';
 
+                // Close button positioned absolutely at top-right corner (outside flex layout)
+                html += '<button class="odag-close-topbar-btn" id="close-topbar-btn-' + layout.qInfo.qId + '" ';
+                html += 'style="position: absolute; top: ' + (isMobile ? '8px' : '12px') + '; right: ' + (isMobile ? '12px' : '16px') + '; ';
+                html += 'background: transparent; border: none; color: #666; cursor: pointer; ';
+                html += 'font-size: 20px; padding: 0; width: 24px; height: 24px; pointer-events: auto; ';
+                html += 'display: flex; align-items: center; justify-content: center; border-radius: 3px; z-index: 1;" ';
+                html += 'title="Hide top bar">';
+                html += '×';
+                html += '</button>';
+
                 // Status indicator on the left
                 html += '<div id="dynamic-status-' + layout.qInfo.qId + '" style="display: flex; align-items: center; gap: 8px; ';
                 html += 'font-size: 13px; color: #374151; font-weight: 500;">';
@@ -687,7 +697,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += '</div>';
 
                 // Button container on the right
-                html += '<div style="display: flex; gap: 8px; align-items: center; pointer-events: auto;">';
+                html += '<div style="display: flex; gap: 8px; align-items: center; pointer-events: auto; margin-right: 32px;">'; // Added margin-right to prevent overlap with close button
 
                 // Cancel button (hidden by default)
                 html += '<button class="odag-cancel-btn" id="cancel-btn-' + layout.qInfo.qId + '" ';
@@ -703,15 +713,6 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px;">';
                 html += '<span style="font-size: 16px;">↻</span> Refresh';
-                html += '</button>';
-
-                // Close button to hide top bar
-                html += '<button class="odag-close-topbar-btn" id="close-topbar-btn-' + layout.qInfo.qId + '" ';
-                html += 'style="background: transparent; border: none; color: #666; cursor: pointer; ';
-                html += 'font-size: 20px; padding: 0; width: 24px; height: 24px; pointer-events: auto; ';
-                html += 'display: flex; align-items: center; justify-content: center; border-radius: 3px;" ';
-                html += 'title="Hide top bar">';
-                html += '×';
                 html += '</button>';
 
                 html += '</div>'; // Close button container
