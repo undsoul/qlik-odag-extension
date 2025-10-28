@@ -167,17 +167,20 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         stack = error.stack || '';
                     }
 
-                    // Check if error is from NebulaApp.jsx with "is not a function" TypeError
+                    // Check if error is from NebulaApp.jsx or qmfe-embed with "is not a function" TypeError
                     // This catches: "TypeError: u[e] is not a function at NebulaApp.jsx:145"
-                    const isNebulaError = (
-                        (stack.includes('NebulaApp.jsx') || stack.includes('NebulaApp')) &&
-                        (errorMessage.includes('is not a function') || error instanceof TypeError)
-                    );
+                    const hasNebulaInStack = stack.includes('NebulaApp') ||
+                                            stack.includes('qmfe-embed') ||
+                                            stack.includes('index.js') && stack.includes('destroy');
+
+                    const hasTypeError = errorMessage.includes('is not a function') ||
+                                        error instanceof TypeError;
+
+                    const isNebulaError = hasNebulaInStack && hasTypeError;
 
                     if (isNebulaError) {
-                        if (odagConfig.enableDebug) {
-                            console.warn('[Suppressed] Known Qlik Nebula embed destruction error (does not affect functionality)');
-                        }
+                        // Always suppress - this is a known Qlik platform bug
+                        console.debug('[ODAG Extension] Suppressed Qlik Nebula embed destruction error (known platform bug, does not affect functionality)');
                         event.preventDefault(); // Prevent error from showing in console
                         return;
                     }
@@ -187,10 +190,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const originalErrorHandler = window.onerror;
                 window.onerror = function(message, source, lineno, colno, error) {
                     // Suppress only the specific Nebula embed destruction error
-                    if (source && source.includes('NebulaApp.jsx') && message.includes('is not a function')) {
-                        if (odagConfig.enableDebug) {
-                            console.warn('[Suppressed] Known Qlik Nebula embed destruction error (does not affect functionality)');
-                        }
+                    const isNebulaError = source &&
+                                         (source.includes('NebulaApp') || source.includes('qmfe-embed')) &&
+                                         message.includes('is not a function');
+
+                    if (isNebulaError) {
+                        console.debug('[ODAG Extension] Suppressed Qlik Nebula embed destruction error (known platform bug)');
                         return true; // Prevent error from showing in console
                     }
 
