@@ -1569,7 +1569,20 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                                         // Update to show the latest app
                                         latestAppId = appId;
-                                        latestAppName = latestApp.generatedAppName || 'Latest ODAG App';
+
+                                        // Extract app name - check multiple locations
+                                        // On-Premise: generatedApp can be object with name property
+                                        // Cloud: generatedAppName property
+                                        let appName = 'Latest ODAG App';
+                                        if (latestApp.generatedAppName) {
+                                            appName = latestApp.generatedAppName;
+                                        } else if (typeof latestApp.generatedApp === 'object' && latestApp.generatedApp.name) {
+                                            appName = latestApp.generatedApp.name;
+                                        } else if (latestApp.name) {
+                                            appName = latestApp.name;
+                                        }
+
+                                        latestAppName = appName;
 
                                         // Store the request ID for deletion later
                                         if (!previousRequestId || previousRequestId !== latestApp.id) {
@@ -2057,6 +2070,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Auto-hide top bar logic
                 let hideTimer = null;
                 let lastSelectionState = null;
+                let isTopBarVisible = true; // Track visibility state
                 const $topBar = $('#dynamic-top-bar-' + layout.qInfo.qId);
 
                 const hideTopBar = function() {
@@ -2064,6 +2078,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         'transform': 'translateY(-100%)',
                         'opacity': '0'
                     });
+                    isTopBarVisible = false;
                 };
 
                 const showTopBar = function(autoHide) {
@@ -2071,6 +2086,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         'transform': 'translateY(0)',
                         'opacity': '1'
                     });
+                    isTopBarVisible = true;
 
                     // Clear existing timer
                     if (hideTimer) {
@@ -2090,13 +2106,22 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Show initially with auto-hide
                 showTopBar(true);
 
-                // Show on mouse hover over top area
+                // Show on mouse hover over top area - with debouncing to prevent instability
+                let mouseNearTop = false;
                 $element.on('mousemove', function(e) {
                     const elementRect = $element[0].getBoundingClientRect();
                     const relativeY = e.clientY - elementRect.top;
+                    const isNearTop = relativeY < CONSTANTS.UI.HOVER_ACTIVATION_DISTANCE_PX;
 
-                    if (relativeY < CONSTANTS.UI.HOVER_ACTIVATION_DISTANCE_PX) { // Mouse very close to top of extension
-                        showTopBar();
+                    // Only trigger showTopBar once when mouse enters top area (not on every move)
+                    if (isNearTop && !mouseNearTop) {
+                        mouseNearTop = true;
+                        // Only show if currently hidden
+                        if (!isTopBarVisible) {
+                            showTopBar(true); // Show with auto-hide enabled
+                        }
+                    } else if (!isNearTop && mouseNearTop) {
+                        mouseNearTop = false;
                     }
                 });
 
