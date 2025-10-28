@@ -606,10 +606,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const initKey = 'odagInit_' + layout.qInfo.qId;
                 delete window[initKey];
 
-                // Clear cached row estimation config to force re-fetch after exiting edit mode
+                // Clear cached row estimation config AND bindings to force complete re-fetch after exiting edit mode
                 const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+                const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
                 delete window[rowEstCacheKey];
-                debugLog('🔄 Cleared row estimation cache - will re-fetch after exiting edit mode');
+                delete window[bindingsCacheKey];
+                debugLog('🔄 Cleared row estimation and bindings cache - will re-fetch after exiting edit mode');
 
                 html += '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center;">';
                 html += '<div style="font-size: 48px; margin-bottom: 16px;">✏️ 📝</div>';
