@@ -2,7 +2,7 @@
     "name": "ODAG Extension w/Variable Support",
     "description": "Generate On-Demand Apps with variable support and dynamic field mapping",
     "type": "visualization",
-    "version": "3.3.1",
+    "version": "3.4.0-beta",
     "icon": "extension",
     "author": "MuchachoAI",
     "homepage": "",
