@@ -1807,12 +1807,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             checkStatusInterval = null;
                         }
 
-                        // Cancel via API - Use PUT to update state to 'cancelled'
-                        const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                        const isCloud = window.qlikEnvironment === 'cloud';
-                        const cancelUrl = (isCloud
-                            ? tenantUrl + '/api/v1/odagrequests/'
-                            : tenantUrl + '/api/odag/v1/requests/') + currentRequestId;
+                        // Cancel via API
                         ApiService.cancelRequest(currentRequestId)
                             .then(function() {
                                 debugLog('Generation cancelled');
@@ -1836,7 +1831,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 isGenerating = false;
                             });
                     }
-                };
+                });
 
                 // Handle refresh button click - Generate a NEW app
                 $('#refresh-btn-' + layout.qInfo.qId).on('click', function() {
