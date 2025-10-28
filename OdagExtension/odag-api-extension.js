@@ -70,8 +70,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             const paintKey = 'lastPaint_' + layout.qInfo.qId;
             const now = Date.now();
 
-            if (window[paintKey] && (now - window[paintKey]) < 100) {
-                debugLog('Paint debounced - called too frequently (< 100ms)');
+            if (window[paintKey] && (now - window[paintKey]) < CONSTANTS.TIMING.PAINT_DEBOUNCE_MS) {
+                debugLog('Paint debounced - called too frequently (< ' + CONSTANTS.TIMING.PAINT_DEBOUNCE_MS + 'ms)');
                 return qlik.Promise.resolve();
             }
             window[paintKey] = now;
@@ -146,12 +146,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             if (!window.qlikEnvironment) {
                 // Try to detect via /qrs/about endpoint (On-Premise only)
                 $.ajax({
-                    url: currentUrl + '/qrs/about?xrfkey=abcdefghijklmnop',
+                    url: currentUrl + '/qrs/about?xrfkey=' + CONSTANTS.API.XRF_KEY,
                     type: 'GET',
                     headers: {
-                        'X-Qlik-XrfKey': 'abcdefghijklmnop'
+                        'X-Qlik-XrfKey': CONSTANTS.API.XRF_KEY
                     },
-                    timeout: 2000,
+                    timeout: CONSTANTS.TIMING.STATUS_CHECK_INTERVAL_MS,
                     success: function(response) {
                         // If /qrs/about responds, it's On-Premise
                         if (response && response.buildVersion) {
@@ -180,7 +180,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Mark as fetched to avoid repeated calls
                 window.odagLinksListFetched = true;
 
-                const xrfkey = 'abcdefghijklmnop';
+                const xrfkey = CONSTANTS.API.XRF_KEY;
                 const linksUrl = currentUrl + '/api/odag/v1/links?xrfkey=' + xrfkey;
 
                 debugLog('📋 Fetching available ODAG links from On-Premise...');
@@ -194,7 +194,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         'X-Qlik-XrfKey': xrfkey
                     },
                     xhrFields: {withCredentials: true},
-                    timeout: 5000,
+                    timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS,
                     success: function(links) {
                         if (Array.isArray(links) && links.length > 0) {
                             // Store links globally for property panel dropdown
@@ -326,7 +326,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // On-Premise: Fetch bindings from ODAG link details
                 debugLog('Fetching ODAG bindings for On-Premise link:', odagConfig.odagLinkId);
 
-                const xrfkey = 'abcdefghijklmnop';
+                const xrfkey = CONSTANTS.API.XRF_KEY;
                 const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey;
 
                 $.ajax({
@@ -338,7 +338,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         'X-Qlik-XrfKey': xrfkey
                     },
                     xhrFields: {withCredentials: true},
-                    timeout: 5000,
+                    timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS,
                     success: function(linkDetails) {
                         debugLog('🔍 [PAINT] FULL On-Premise link details response:', linkDetails);
 
@@ -427,7 +427,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // Check if extension is large enough for iframe view
             const isLargeView = elementHeight > 400 && elementWidth > 600;
             // Detect mobile viewport early (width < 768px) for use in initialization logic
-            const isMobile = elementWidth < 768;
+            const isMobile = elementWidth < CONSTANTS.UI.MOBILE_BREAKPOINT_PX;
             // On mobile, force list view (not dynamic view) and classic/app embed mode
             const isDynamicView = isMobile ? false : odagConfig.viewMode === 'dynamicView';
             const effectiveEmbedMode = isMobile ? 'classic/app' : (odagConfig.embedMode || 'classic/app');
@@ -477,7 +477,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
                 const isCloud = window.qlikEnvironment === 'cloud';
-                const xrfkey = 'abcdefghijklmnop';
+                const xrfkey = CONSTANTS.API.XRF_KEY;
                 const apiUrl = isCloud
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
                     : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
@@ -508,7 +508,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                             appsToDelete.forEach(function(app) {
                                 const isCloud = window.qlikEnvironment === 'cloud';
-                                const xrfkey = 'abcdefghijklmnop';
+                                const xrfkey = CONSTANTS.API.XRF_KEY;
                                 const deleteHeaders = isCloud
                                     ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                     : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
@@ -672,7 +672,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Top bar container (auto-hides after 5s, shows on hover/selection change)
                 // Mobile: Make it stack vertically if needed
-                html += '<div id="dynamic-top-bar-' + layout.qInfo.qId + '" class="dynamic-top-bar" style="position: absolute; top: 0; left: 0; right: 0; z-index: 100; ';
+                html += '<div id="dynamic-top-bar-' + layout.qInfo.qId + '" class="dynamic-top-bar" style="position: absolute; top: 0; left: 0; right: 0; z-index: ' + CONSTANTS.UI.TOP_BAR_Z_INDEX + '; ';
                 html += 'background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid #e5e7eb; ';
                 html += 'padding: ' + (isMobile ? '8px 12px' : '12px 16px') + '; display: flex; ';
                 html += 'flex-direction: ' + (isMobile ? 'column' : 'row') + '; ';
@@ -1062,7 +1062,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('🔄 Selection changed - triggering validation');
                             window['checkODAGValidation_' + layout.qInfo.qId]();
                         }
-                    }, 300);
+                    }, CONSTANTS.TIMING.SELECTION_CHANGE_DEBOUNCE_MS);
                 });
                 window['odagSelectionListener_' + layout.qInfo.qId] = true;
             }
@@ -1095,7 +1095,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const deleteAllODAGApps = function(callback) {
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
                     const isCloud = window.qlikEnvironment === 'cloud';
-                const xrfkey = 'abcdefghijklmnop';
+                const xrfkey = CONSTANTS.API.XRF_KEY;
                 const apiUrl = isCloud
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
                     : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
@@ -1124,7 +1124,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     // Delete the generated app itself, not the request
                                     // Use the /app endpoint to delete the actual app
                                     const isCloud = window.qlikEnvironment === 'cloud';
-                                    const xrfkey = 'abcdefghijklmnop';
+                                    const xrfkey = CONSTANTS.API.XRF_KEY;
                                     const deleteHeaders = isCloud
                                         ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                         : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
@@ -1257,7 +1257,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                     deletedApps.add(oldRequestId);
 
                                                     const isCloud = window.qlikEnvironment === 'cloud';
-                                                    const xrfkey = 'abcdefghijklmnop';
+                                                    const xrfkey = CONSTANTS.API.XRF_KEY;
                                                     const deleteHeaders = isCloud
                                                         ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                                         : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
@@ -1322,7 +1322,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const loadLatestODAGApp = function() {
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
                     const isCloud = window.qlikEnvironment === 'cloud';
-                const xrfkey = 'abcdefghijklmnop';
+                const xrfkey = CONSTANTS.API.XRF_KEY;
                 const apiUrl = isCloud
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
                     : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
@@ -1432,7 +1432,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                 if (window['showDynamicTopBar_' + layout.qInfo.qId]) {
                                                     window['showDynamicTopBar_' + layout.qInfo.qId](true);
                                                 }
-                                            }, 10000);
+                                            }, CONSTANTS.TIMING.TOP_BAR_HIDE_AFTER_COMPLETE_MS);
                                         }
 
                                         // Store the selection state from this app as baseline (if not already set)
@@ -1671,7 +1671,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     setTimeout(function() {
                         delete window[initInProgressKey];
                         debugLog('Cleared initInProgressKey after qlik-embed element initialization');
-                    }, 100); // Small delay to ensure custom element is registered in DOM
+                    }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS); // Small delay to ensure custom element is registered in DOM
 
                     debugLog('Dynamic view refreshed with new ODAG app:', {
                         appId: appId,
@@ -1933,7 +1933,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                     // Only set auto-hide timer if autoHide is true (default: true)
                     if (autoHide !== false) {
-                        hideTimer = CleanupManager.addTimeout(setTimeout(hideTopBar, 5000));
+                        hideTimer = CleanupManager.addTimeout(setTimeout(hideTopBar, CONSTANTS.TIMING.TOP_BAR_AUTO_HIDE_MS));
                     }
                 };
 
@@ -1948,7 +1948,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     const elementRect = $element[0].getBoundingClientRect();
                     const relativeY = e.clientY - elementRect.top;
 
-                    if (relativeY < 30) { // Mouse very close to top of extension
+                    if (relativeY < CONSTANTS.UI.HOVER_ACTIVATION_DISTANCE_PX) { // Mouse very close to top of extension
                         showTopBar();
                     }
                 });
@@ -2018,7 +2018,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Use the dynamic tenant URL
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
-                const xrfkey = 'abcdefghijklmnop';
+                const xrfkey = CONSTANTS.API.XRF_KEY;
 
                 const apiUrl = isCloud
                     ? tenantUrl + '/api/v1/odaglinks/' + odagLinkId + '/requests?pending=true'
@@ -2146,7 +2146,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     } else {
                                         debugLog('Could not find app item to auto-click');
                                     }
-                                }, 300);
+                                }, CONSTANTS.TIMING.VALIDATION_DEBOUNCE_MS);
                             }
                         }
                     },
@@ -2236,7 +2236,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         debugLog('Found pending apps on init, starting status monitoring...');
                         startStatusMonitoring();
                     }
-                }, 100); // Small delay to ensure apps are loaded
+                }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS); // Small delay to ensure apps are loaded
             }
             
             // Helper functions
@@ -2584,7 +2584,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Use dynamic tenant URL
                 const tenantUrl = window.qlikTenantUrl || window.location.origin;
                 const isCloud = window.qlikEnvironment === 'cloud';
-                const xrfkey = 'abcdefghijklmnop'; // 16 character key for On-Premise
+                const xrfkey = CONSTANTS.API.XRF_KEY; // 16 character key for On-Premise
 
                 // Different API paths for Cloud vs On-Premise
                 const url = isCloud
@@ -3059,7 +3059,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         // Trigger a custom event to force refresh if needed
                                         newEmbed.dispatchEvent(new CustomEvent('refresh'));
                                     }
-                                }, 100);
+                                }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
                             }
                             
                             // Load qlik-embed script if not already loaded
@@ -3241,7 +3241,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         // Delete ODAG app via API
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
                         const isCloud = window.qlikEnvironment === 'cloud';
-                        const xrfkey = 'abcdefghijklmnop';
+                        const xrfkey = CONSTANTS.API.XRF_KEY;
 
                         // Build headers for Cloud vs On-Premise
                         const deleteHeaders = isCloud
@@ -3333,7 +3333,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     'qlik-csrf-token': csrfToken || ''
                                 },
                                 xhrFields: {withCredentials: true},
-                                timeout: 10000,
+                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2, // Longer timeout for bindings
                                 success: function(response) {
                                     debugLog('🔍 Cloud bindings response:', response);
 
@@ -3378,7 +3378,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         debugLog('⏳ On-Premise bindings not cached yet, fetching before generation...');
 
                         // Fetch On-Premise bindings synchronously before generating
-                        const xrfkey = 'abcdefghijklmnop';
+                        const xrfkey = CONSTANTS.API.XRF_KEY;
                         const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey;
 
                         await new Promise(function(resolve, reject) {
@@ -3391,7 +3391,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     'X-Qlik-XrfKey': xrfkey
                                 },
                                 xhrFields: {withCredentials: true},
-                                timeout: 10000,
+                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2, // Longer timeout for link details
                                 success: function(linkDetails) {
                                     debugLog('🔍 FULL On-Premise link details response:', linkDetails);
 
@@ -3706,7 +3706,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
                         const isCloud = window.qlikEnvironment === 'cloud';
-                        const xrfkey = 'abcdefghijklmnop';
+                        const xrfkey = CONSTANTS.API.XRF_KEY;
                         let deleteCount = 0;
                         let errorCount = 0;
                         let skippedCount = 0;
@@ -3864,7 +3864,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                         debugLog('Mobile: Setting embed HTML');
                         $iframeContainer.html(embedHtml);
-                    }, 100);
+                    }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
                 });
             }
 
@@ -3882,7 +3882,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Delay validation to ensure Qlik engine has processed selection changes
                 window['validationCheckTimeout_' + layout.qInfo.qId] = setTimeout(function() {
                     window['checkODAGValidation_' + layout.qInfo.qId]();
-                }, 300);
+                }, CONSTANTS.TIMING.VALIDATION_DEBOUNCE_MS);
             }
 
             return qlik.Promise.resolve();
