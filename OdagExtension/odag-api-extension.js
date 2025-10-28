@@ -1116,33 +1116,26 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                         : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
 
-                                    $.ajax({
-                                        url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + request.id + '/app?xrfkey=' + xrfkey,
-                                        type: 'DELETE',
-                                        headers: deleteHeaders,
-                                        xhrFields: {
-                                            withCredentials: true
-                                        },
-                                        success: function() {
+                                    ApiService.deleteApp(request.id)
+                                        .then(function() {
                                             deletedCount++;
                                             debugLog('Deleted app:', request.generatedAppName || request.id);
                                             if (deletedCount === deleteCount && callback) {
                                                 callback();
                                             }
-                                        },
-                                        error: function(xhr) {
+                                        })
+                                        .catch(function(error) {
                                             deletedCount++;
-                                            if (xhr.status === 404) {
+                                            if (error.status === 404) {
                                                 debugLog('App already deleted:', request.id);
                                             } else {
-                                                console.error('Failed to delete app:', request.id, xhr.status, xhr.responseText);
+                                                console.error('Failed to delete app:', request.id, error.status, error.responseText);
                                             }
                                             // Continue even if delete fails
                                             if (deletedCount === deleteCount && callback) {
                                                 callback();
                                             }
-                                        }
-                                    });
+                                        });
                                 });
                             } else {
                                 // No apps to delete
@@ -1807,20 +1800,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const cancelUrl = (isCloud
                             ? tenantUrl + '/api/v1/odagrequests/'
                             : tenantUrl + '/api/odag/v1/requests/') + currentRequestId;
-                        $.ajax({
-                            url: cancelUrl,
-                            type: 'PUT',
-                            headers: {
-                                'qlik-csrf-token': getCookie('_csrfToken') || '',
-                                'Content-Type': 'application/json'
-                            },
-                            data: JSON.stringify({
-                                state: 'cancelled'
-                            }),
-                            xhrFields: {
-                                withCredentials: true
-                            },
-                            success: function() {
+                        ApiService.cancelRequest(currentRequestId)
+                            .then(function() {
                                 debugLog('Generation cancelled');
                                 $('#dynamic-status-' + layout.qInfo.qId).html(
                                     getStatusHTML('none', 'Generation cancelled', false)
@@ -1831,17 +1812,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                                 // Reload to get the latest completed app
                                 setTimeout(loadLatestODAGApp, 1000);
-                            },
-                            error: function(xhr) {
-                                console.error('Failed to cancel:', xhr.responseText);
+                            })
+                            .catch(function(error) {
+                                console.error('Failed to cancel:', error.responseText || error.message);
                                 // Even if cancel fails, reset the UI
                                 $('#dynamic-status-' + layout.qInfo.qId).html(
                                     getStatusHTML('error', 'Cancel failed', false)
                                 );
                                 $('#cancel-btn-' + layout.qInfo.qId).hide();
                                 isGenerating = false;
-                            }
-                        });
+                            });
                     }
                 };
 
