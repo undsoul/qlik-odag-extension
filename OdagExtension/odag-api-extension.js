@@ -215,35 +215,47 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
             const bindingsFetchingKey = 'odagBindingsFetching_' + odagConfig.odagLinkId;
             const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+            const wasInEditModeKey = 'wasInEditMode_' + odagConfig.odagLinkId;
 
-            // CRITICAL: If we're in edit mode, clear the cache BEFORE the bindings check
-            // This ensures that when you change ODAG settings in QMC while in edit mode,
-            // the FIRST time you exit edit mode will fetch fresh data
+            // Track edit mode state transitions
+            const wasInEditMode = window[wasInEditModeKey] === true;
+            const justExitedEditMode = wasInEditMode && !isEditMode;
+
+            // Update edit mode tracking
             if (isEditMode) {
+                window[wasInEditModeKey] = true;
+            } else {
+                delete window[wasInEditModeKey];
+            }
+
+            // CRITICAL: If we just exited edit mode, clear cache to force fresh fetch
+            // This gives QMC time to propagate changes before we fetch
+            if (justExitedEditMode) {
                 delete window[rowEstCacheKey];
                 delete window[bindingsCacheKey];
                 delete window[bindingsFetchingKey];
-                debugLog('🔄 [EDIT MODE] Cleared cache at start of paint() - will force fresh fetch');
+                debugLog('🔄 [EXITED EDIT MODE] Cleared cache - will fetch fresh data from server');
             }
 
             debugLog('🔍 Bindings check:', {
                 isCloud: isCloud,
                 isEditMode: isEditMode,
+                justExitedEditMode: justExitedEditMode,
                 odagLinkId: odagConfig.odagLinkId,
                 bindingsCacheKey: bindingsCacheKey,
                 cached: window[bindingsCacheKey],
                 fetching: window[bindingsFetchingKey],
-                shouldFetch: isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]
+                shouldFetch: odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey] && !isEditMode
             });
 
             // Log when we're about to fetch fresh data after edit mode
-            if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
-                debugLog('🔄 EDIT MODE OFF → FETCHING FRESH API DATA (cache was cleared in edit mode)');
+            if (justExitedEditMode && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
+                debugLog('🔄 JUST EXITED EDIT MODE → FETCHING FRESH API DATA FROM SERVER');
             } else if (window[bindingsCacheKey]) {
                 debugLog('📦 Using cached bindings (already fetched)');
             }
 
-            if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
+            if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey] && !isEditMode) {
                 // Set fetching flag to prevent duplicate requests
                 window[bindingsFetchingKey] = true;
                 debugLog('📋 [PAINT] Fetching ODAG bindings for Cloud link:', odagConfig.odagLinkId);
@@ -362,7 +374,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         delete window[bindingsFetchingKey];
                     }
                 });
-            } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
+            } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey] && !isEditMode) {
                 // Set fetching flag to prevent duplicate requests
                 window[bindingsFetchingKey] = true;
                 // On-Premise: Fetch bindings from ODAG link details
