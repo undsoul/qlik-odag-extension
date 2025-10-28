@@ -2071,6 +2071,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 let hideTimer = null;
                 let lastSelectionState = null;
                 let isTopBarVisible = true; // Track visibility state
+                let isTopBarPermanentlyClosed = false; // Track if user explicitly closed it
                 const $topBar = $('#dynamic-top-bar-' + layout.qInfo.qId);
 
                 const hideTopBar = function() {
@@ -2082,6 +2083,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 };
 
                 const showTopBar = function(autoHide) {
+                    // Don't show if user explicitly closed it
+                    if (isTopBarPermanentlyClosed) {
+                        return;
+                    }
+
                     $topBar.css({
                         'transform': 'translateY(0)',
                         'opacity': '1'
@@ -2136,11 +2142,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     lastSelectionState = newState;
                 });
 
-                // Close button handler - hide top bar when clicked
+                // Close button handler - permanently hide top bar when clicked
                 $('#close-topbar-btn-' + layout.qInfo.qId).on('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    debugLog('❌ Close button clicked - hiding top bar');
+                    debugLog('❌ Close button clicked - permanently hiding top bar until page refresh');
+                    isTopBarPermanentlyClosed = true; // Set permanent flag
                     hideTopBar();
                 });
             }
