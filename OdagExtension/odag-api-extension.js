@@ -219,6 +219,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             // Track edit mode state transitions
             const wasInEditMode = window[wasInEditModeKey] === true;
+            const justEnteredEditMode = !wasInEditMode && isEditMode;
             const justExitedEditMode = wasInEditMode && !isEditMode;
 
             // Update edit mode tracking
@@ -228,13 +229,21 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 delete window[wasInEditModeKey];
             }
 
-            // CRITICAL: If we just exited edit mode, clear cache to force fresh fetch
-            // This gives QMC time to propagate changes before we fetch
-            if (justExitedEditMode) {
+            // OPTIMIZATION: Only clear cache ONCE when ENTERING edit mode (not on every paint)
+            // This prevents redundant cache operations during edit mode
+            if (justEnteredEditMode) {
+                const initKey = 'odagInit_' + layout.qInfo.qId;
+                delete window[initKey];
                 delete window[rowEstCacheKey];
                 delete window[bindingsCacheKey];
                 delete window[bindingsFetchingKey];
-                debugLog('🔄 [EXITED EDIT MODE] Cleared cache - will fetch fresh data from server');
+                debugLog('🔄 [ENTERED EDIT MODE] Cleared cache once - will fetch fresh after exit');
+            }
+
+            // CRITICAL: If we just exited edit mode, cache is already cleared from entry
+            // Just log for debugging
+            if (justExitedEditMode) {
+                debugLog('🔄 [EXITED EDIT MODE] Cache already cleared - will fetch fresh data from server');
             }
 
             debugLog('🔍 Bindings check:', {
@@ -645,18 +654,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // Show standard message in edit mode
             if (isEditMode) {
                 debugLog('ODAG Extension: In edit mode, showing edit message');
-                // Clear init key so it rebuilds when exiting edit mode
-                const initKey = 'odagInit_' + layout.qInfo.qId;
-                delete window[initKey];
-
-                // Clear cached row estimation config AND bindings to force complete re-fetch after exiting edit mode
-                const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
-                const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
-                const bindingsFetchingKey = 'odagBindingsFetching_' + odagConfig.odagLinkId;
-                delete window[rowEstCacheKey];
-                delete window[bindingsCacheKey];
-                delete window[bindingsFetchingKey]; // Clear fetching flag to allow re-fetch
-                debugLog('🔄 Cleared row estimation and bindings cache + fetching flag - will force fresh API call after exiting edit mode');
+                // Note: Cache clearing is now done ONCE when entering edit mode (line 234-240)
+                // This prevents redundant operations on every paint() call during edit mode
 
                 html += '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center;">';
                 html += '<div style="font-size: 48px; margin-bottom: 16px;">✏️ 📝</div>';
