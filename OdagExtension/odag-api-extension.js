@@ -224,6 +224,13 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 shouldFetch: isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]
             });
 
+            // Log when we're about to fetch fresh data after edit mode
+            if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
+                debugLog('🔄 EDIT MODE OFF → FETCHING FRESH API DATA (cache was cleared in edit mode)');
+            } else if (window[bindingsCacheKey]) {
+                debugLog('📦 Using cached bindings (already fetched)');
+            }
+
             if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
                 // Set fetching flag to prevent duplicate requests
                 window[bindingsFetchingKey] = true;
@@ -347,18 +354,24 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Set fetching flag to prevent duplicate requests
                 window[bindingsFetchingKey] = true;
                 // On-Premise: Fetch bindings from ODAG link details
-                debugLog('Fetching ODAG bindings for On-Premise link:', odagConfig.odagLinkId);
+                debugLog('📋 [PAINT] Fetching ODAG bindings for On-Premise link:', odagConfig.odagLinkId);
 
                 const xrfkey = CONSTANTS.API.XRF_KEY;
-                const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey;
+                // Add cache-busting timestamp to force fresh data
+                const cacheBuster = '_=' + Date.now();
+                const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey + '&' + cacheBuster;
 
                 $.ajax({
                     url: linkDetailsUrl,
                     type: 'GET',
+                    cache: false, // Disable jQuery caching
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
-                        'X-Qlik-XrfKey': xrfkey
+                        'X-Qlik-XrfKey': xrfkey,
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
                     },
                     xhrFields: {withCredentials: true},
                     timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS,
@@ -3433,16 +3446,22 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                         // Fetch On-Premise bindings synchronously before generating
                         const xrfkey = CONSTANTS.API.XRF_KEY;
-                        const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey;
+                        // Add cache-busting timestamp to force fresh data
+                        const cacheBuster = '_=' + Date.now();
+                        const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey + '&' + cacheBuster;
 
                         await new Promise(function(resolve, reject) {
                             $.ajax({
                                 url: linkDetailsUrl,
                                 type: 'GET',
+                                cache: false, // Disable jQuery caching
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'Accept': 'application/json',
-                                    'X-Qlik-XrfKey': xrfkey
+                                    'X-Qlik-XrfKey': xrfkey,
+                                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                                    'Pragma': 'no-cache',
+                                    'Expires': '0'
                                 },
                                 xhrFields: {withCredentials: true},
                                 timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2, // Longer timeout for link details
