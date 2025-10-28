@@ -56,6 +56,19 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             debugLog('ODAG Extension: paint() called');
             debugLog('ODAG Extension: odagConfig =', odagConfig);
 
+            // Validate ODAG Link ID early to prevent issues
+            if (odagConfig.odagLinkId) {
+                const isCloud = window.qlikEnvironment === 'cloud';
+                const validation = Validators.odagLinkId(odagConfig.odagLinkId, isCloud);
+                if (!validation.valid) {
+                    $element.html('<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 1px solid #d32f2f; border-radius: 4px;">' +
+                        '<strong>⚠️ Invalid ODAG Link ID</strong><br>' +
+                        Validators.sanitizeHtml(validation.error) +
+                        '</div>');
+                    return qlik.Promise.resolve();
+                }
+            }
+
             // Helper function to get cookie value
             const getCookie = function(name) {
                 const value = '; ' + document.cookie;
@@ -734,7 +747,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += 'background-color:' + (odagConfig.buttonColor || '#009845') + ';';
                     html += 'color:' + (odagConfig.buttonTextColor || '#ffffff') + '; width: 100%; margin-bottom: 10px;">';
                     html += '<span class="btn-icon">⚡</span>';
-                    html += '<span class="btn-text">' + (odagConfig.buttonText || 'Generate ODAG App') + '</span>';
+                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || CONSTANTS.DEFAULTS.BUTTON_TEXT) + '</span>';
                     html += '</button>';
 
                     // Controls row: dropdown + buttons
@@ -798,7 +811,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += 'background-color:' + (odagConfig.buttonColor || '#009845') + ';';
                     html += 'color:' + (odagConfig.buttonTextColor || '#ffffff') + ';">';
                     html += '<span class="btn-icon">⚡</span>';
-                    html += '<span class="btn-text">' + (odagConfig.buttonText || 'Generate ODAG App') + '</span>';
+                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || CONSTANTS.DEFAULTS.BUTTON_TEXT) + '</span>';
                     html += '</button>';
                     html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin-top: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; text-align: center; font-weight: 500;"></div>';
                     html += '</div>';
@@ -855,7 +868,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += 'background-color:' + (odagConfig.buttonColor || '#009845') + ';';
                 html += 'color:' + (odagConfig.buttonTextColor || '#ffffff') + '; width: 100%;">';
                 html += '<span class="btn-icon">⚡</span>';
-                html += '<span class="btn-text">' + (odagConfig.buttonText || 'Generate ODAG App') + '</span>';
+                html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || CONSTANTS.DEFAULTS.BUTTON_TEXT) + '</span>';
                 html += '</button>';
                 html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin-top: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; text-align: center; font-weight: 500;"></div>';
                 html += '</div>';
