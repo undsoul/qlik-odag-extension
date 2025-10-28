@@ -1620,13 +1620,6 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         // Load the app in embed - only if it's a new app
                                         if (isNewApp) {
                                             debugLog('New ODAG app detected, refreshing embed:', appId);
-
-                                            // Reset top bar close flag so it can show for new content
-                                            const resetFunc = StateManager.get(extensionId, 'resetTopBarCloseFlag');
-                                            if (resetFunc) {
-                                                resetFunc();
-                                            }
-
                                             loadDynamicEmbed(appId, latestAppName);
                                         } else {
                                             debugLog('Same app already loaded, skipping refresh:', appId);
@@ -1952,6 +1945,13 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         if (currentSelStr !== lastSelStr) {
                             // Selections changed - highlight refresh button
                             $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
+
+                            // If top bar was manually closed, show it now with the warning
+                            if (topBarManuallyClosed) {
+                                debugLog('🔔 Selections changed - showing top bar with refresh warning');
+                                topBarManuallyClosed = false; // Reset flag
+                                showTopBar(false); // Show without auto-hide (keep visible for warning)
+                            }
                         } else {
                             // Selections same - remove highlight
                             $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
@@ -2021,6 +2021,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 $('#refresh-btn-' + layout.qInfo.qId).on('click', function() {
                     debugLog('Refresh clicked - generating new ODAG app...');
 
+                    // Reset the manually closed flag - normal behavior resumes after refresh
+                    topBarManuallyClosed = false;
+
                     // Add blur overlay to the embed
                     const $embedContainer = $('#dynamic-embed-' + layout.qInfo.qId);
                     $embedContainer.css('filter', 'blur(3px)');
@@ -2078,7 +2081,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 let hideTimer = null;
                 let lastSelectionState = null;
                 let isTopBarVisible = true; // Track visibility state
-                let isTopBarPermanentlyClosed = false; // Track if user explicitly closed it
+                let topBarManuallyClosed = false; // Track if user explicitly closed the top bar
                 const $topBar = $('#dynamic-top-bar-' + layout.qInfo.qId);
 
                 const hideTopBar = function() {
@@ -2090,11 +2093,6 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 };
 
                 const showTopBar = function(autoHide) {
-                    // Don't show if user explicitly closed it
-                    if (isTopBarPermanentlyClosed) {
-                        return;
-                    }
-
                     $topBar.css({
                         'transform': 'translateY(0)',
                         'opacity': '1'
@@ -2113,15 +2111,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
                 };
 
-                // Function to reset the permanent close flag (for new generations)
-                const resetTopBarCloseFlag = function() {
-                    isTopBarPermanentlyClosed = false;
-                    debugLog('🔓 Top bar close flag reset - can show again for new content');
-                };
-
-                // Make functions accessible via StateManager
+                // Make showTopBar accessible via StateManager for status updates
                 StateManager.set(extensionId, 'showDynamicTopBar', showTopBar);
-                StateManager.set(extensionId, 'resetTopBarCloseFlag', resetTopBarCloseFlag);
 
                 // Show initially with auto-hide
                 showTopBar(true);
@@ -2156,12 +2147,22 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     lastSelectionState = newState;
                 });
 
-                // Close button handler - permanently hide top bar when clicked
+                // Close button handler - hide top bar when clicked
                 $('#close-topbar-btn-' + layout.qInfo.qId).on('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
-                    debugLog('❌ Close button clicked - permanently hiding top bar until page refresh');
-                    isTopBarPermanentlyClosed = true; // Set permanent flag
+                    debugLog('❌ Close button clicked - hiding top bar until refresh needed');
+
+                    // Set flag to keep bar hidden until selections change
+                    topBarManuallyClosed = true;
+
+                    // Clear any pending auto-hide timer
+                    if (hideTimer) {
+                        clearTimeout(hideTimer);
+                        hideTimer = null;
+                    }
+
+                    // Hide the top bar immediately
                     hideTopBar();
                 });
             }
