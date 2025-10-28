@@ -690,15 +690,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Status indicator on the left
                 html += '<div id="dynamic-status-' + layout.qInfo.qId + '" style="display: flex; align-items: center; gap: 8px; ';
-                html += 'font-size: 13px; color: #374151; font-weight: 500;">';
+                html += 'font-size: 13px; color: #374151; font-weight: 500; flex: 1;">';
                 html += '<span class="status-spinner" style="display: inline-block; width: 14px; height: 14px; ';
                 html += 'border: 2px solid #e5e7eb; border-top-color: #3b82f6; border-left-color: #3b82f6; ';
                 html += 'border-radius: 50%; animation: spin 0.8s linear infinite;"></span>';
                 html += '<span>Loading latest app...</span>';
                 html += '</div>';
 
-                // Button container on the right
-                html += '<div style="display: flex; gap: 8px; align-items: center; pointer-events: auto; margin-right: 32px;">'; // Added margin-right to prevent overlap with close button
+                // Button container on the right - center-aligned
+                html += '<div style="display: flex; gap: 8px; align-items: center; pointer-events: auto; margin-right: 48px;">'; // Added margin-right to prevent overlap with close button
 
                 // Cancel button (hidden by default)
                 html += '<button class="odag-cancel-btn" id="cancel-btn-' + layout.qInfo.qId + '" ';
