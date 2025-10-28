@@ -1,5 +1,15 @@
-define(["qlik", "jquery", "./odag-api-properties", "css!./odag-api-extension.css"],
-function(qlik, $, properties) {
+define([
+    "qlik",
+    "jquery",
+    "./odag-api-properties",
+    "./odag-api-service",
+    "./odag-state-manager",
+    "./odag-constants",
+    "./odag-validators",
+    "./odag-error-handler",
+    "css!./odag-api-extension.css"
+],
+function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler) {
     'use strict';
 
     return {
@@ -3881,6 +3891,62 @@ function(qlik, $, properties) {
                 console.error('ODAG Extension ERROR:', error);
                 $element.html('<div style="padding: 20px; color: red;">Error: ' + error.message + '</div>');
                 return qlik.Promise.reject(error);
+            }
+        },
+
+        /**
+         * Destroy lifecycle method
+         * Clean up all resources when extension is removed or destroyed
+         */
+        destroy: function($element, layout) {
+            const extensionId = layout.qInfo.qId;
+
+            // Clean up all state for this extension instance
+            StateManager.cleanup(extensionId);
+
+            // Remove any document-level event listeners
+            const clickHandlerKey = 'clickHandler_' + extensionId;
+            if (window[clickHandlerKey]) {
+                $(document).off('click', window[clickHandlerKey]);
+                delete window[clickHandlerKey];
+            }
+
+            // Clear any global variables that might still exist
+            const keysToClean = [
+                'lastPaint_',
+                'configHash_',
+                'odagBindings_',
+                'bindingsFetching_',
+                'odagRowEstConfig_',
+                'checkODAGValidation_',
+                'odagSelectionListener_',
+                'selectionChangeTimeout_',
+                'validationCheckTimeout_',
+                'showDynamicTopBar_',
+                'hideTimer_',
+                'initInProgressKey_',
+                'dynamicViewInitialized_',
+                'lastOdagAppId_',
+                'lastSelectionPayload_'
+            ];
+
+            keysToClean.forEach(function(keyPrefix) {
+                const fullKey = keyPrefix + extensionId;
+                if (window[fullKey] !== undefined) {
+                    delete window[fullKey];
+                }
+            });
+
+            // Clean up CleanupManager for this extension
+            const cleanupKey = 'cleanup_' + extensionId;
+            if (window.ODAGCleanupManager && window.ODAGCleanupManager[cleanupKey]) {
+                window.ODAGCleanupManager[cleanupKey].cleanup();
+                delete window.ODAGCleanupManager[cleanupKey];
+            }
+
+            // Remove DOM element content
+            if ($element) {
+                $element.empty();
             }
         }
     };
