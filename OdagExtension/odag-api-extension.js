@@ -141,13 +141,30 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             // ========== SUPPRESS QLIK NEBULA EMBED DESTRUCTION ERRORS ==========
             // Install one-time global error handler to suppress known Qlik platform bug
-            // Error: "u[e] is not a function" at NebulaApp.jsx:145 during embed destruction
+            // Error: "Uncaught (in promise) TypeError: u[e] is not a function" at NebulaApp.jsx:145
+            // This is an async promise rejection that occurs during embed destruction
             if (!window.odagNebulaErrorHandlerInstalled) {
                 window.odagNebulaErrorHandlerInstalled = true;
 
-                // Store the original error handler
-                const originalErrorHandler = window.onerror;
+                // Handle unhandled promise rejections (async errors from Nebula)
+                window.addEventListener('unhandledrejection', function(event) {
+                    // Check if this is the Nebula embed destruction error
+                    const error = event.reason;
+                    const errorMessage = error && error.message ? error.message : String(error);
+                    const stack = error && error.stack ? error.stack : '';
 
+                    // Check if error is from NebulaApp.jsx and is "is not a function"
+                    if (stack.includes('NebulaApp.jsx') && errorMessage.includes('is not a function')) {
+                        if (odagConfig.enableDebug) {
+                            console.warn('[Suppressed] Known Qlik Nebula embed destruction error (does not affect functionality)');
+                        }
+                        event.preventDefault(); // Prevent error from showing in console
+                        return;
+                    }
+                });
+
+                // Also handle regular synchronous errors (just in case)
+                const originalErrorHandler = window.onerror;
                 window.onerror = function(message, source, lineno, colno, error) {
                     // Suppress only the specific Nebula embed destruction error
                     if (source && source.includes('NebulaApp.jsx') && message.includes('is not a function')) {
