@@ -230,17 +230,23 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 debugLog('📋 [PAINT] Fetching ODAG bindings for Cloud link:', odagConfig.odagLinkId);
 
                 const csrfToken = getCookie('_csrfToken');
-                const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id;
+                // Add cache-busting timestamp to force fresh data
+                const cacheBuster = '_=' + Date.now();
+                const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id + '&' + cacheBuster;
 
                 $.ajax({
                     url: bindingsUrl,
                     type: 'POST',
                     data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
                     contentType: 'application/json',
+                    cache: false, // Disable jQuery caching
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': '*/*',
-                        'qlik-csrf-token': csrfToken || ''
+                        'qlik-csrf-token': csrfToken || '',
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache',
+                        'Expires': '0'
                     },
                     xhrFields: {withCredentials: true},
                     success: function(response) {
@@ -609,9 +615,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Clear cached row estimation config AND bindings to force complete re-fetch after exiting edit mode
                 const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
                 const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
+                const bindingsFetchingKey = 'odagBindingsFetching_' + odagConfig.odagLinkId;
                 delete window[rowEstCacheKey];
                 delete window[bindingsCacheKey];
-                debugLog('🔄 Cleared row estimation and bindings cache - will re-fetch after exiting edit mode');
+                delete window[bindingsFetchingKey]; // Clear fetching flag to allow re-fetch
+                debugLog('🔄 Cleared row estimation and bindings cache + fetching flag - will force fresh API call after exiting edit mode');
 
                 html += '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px; text-align: center;">';
                 html += '<div style="font-size: 48px; margin-bottom: 16px;">✏️ 📝</div>';
@@ -3359,7 +3367,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                         // Fetch Cloud bindings synchronously before generating
                         const csrfToken = getCookie('_csrfToken');
-                        const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id;
+                        // Add cache-busting timestamp to force fresh data
+                        const cacheBuster = '_=' + Date.now();
+                        const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id + '&' + cacheBuster;
 
                         await new Promise(function(resolve, reject) {
                             $.ajax({
@@ -3367,10 +3377,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 type: 'POST',
                                 data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
                                 contentType: 'application/json',
+                                cache: false, // Disable jQuery caching
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'Accept': '*/*',
-                                    'qlik-csrf-token': csrfToken || ''
+                                    'qlik-csrf-token': csrfToken || '',
+                                    'Cache-Control': 'no-cache, no-store, must-revalidate',
+                                    'Pragma': 'no-cache',
+                                    'Expires': '0'
                                 },
                                 xhrFields: {withCredentials: true},
                                 timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2, // Longer timeout for bindings
