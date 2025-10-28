@@ -3325,32 +3325,59 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     const appName = window.odagGeneratedApps[appIndex].name;
 
                     if (confirm('Are you sure you want to cancel generation of "' + appName + '"?')) {
-                        // Cancel ODAG app generation via DELETE
+                        // Cancel ODAG app generation
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
                         const isCloud = window.qlikEnvironment === 'cloud';
-                        const cancelUrl = (isCloud
-                            ? tenantUrl + '/api/v1/odagrequests/'
-                            : tenantUrl + '/api/odag/v1/requests/') + requestId;
-                        $.ajax({
-                            url: cancelUrl,
-                            type: 'DELETE',
-                            headers: {
-                                'qlik-csrf-token': getCookie('_csrfToken') || ''
-                            },
-                            xhrFields: {
-                                withCredentials: true
-                            },
-                            success: function(result) {
-                                debugLog('Generation cancelled successfully');
-                                // Remove from list
-                                window.odagGeneratedApps.splice(appIndex, 1);
-                                updateAppsList(qId);
-                            },
-                            error: function(xhr) {
-                                console.error('Failed to cancel generation:', xhr.responseText);
-                                showNotification('Failed to cancel generation', 'error');
-                            }
-                        });
+
+                        // Cloud uses PUT to update state to 'cancelled'
+                        // On-Premise uses DELETE
+                        if (isCloud) {
+                            const cancelUrl = tenantUrl + '/api/v1/odagrequests/' + requestId;
+                            $.ajax({
+                                url: cancelUrl,
+                                type: 'PUT',
+                                data: JSON.stringify({ state: 'cancelled' }),
+                                contentType: 'application/json',
+                                headers: {
+                                    'qlik-csrf-token': getCookie('_csrfToken') || ''
+                                },
+                                xhrFields: {
+                                    withCredentials: true
+                                },
+                                success: function(result) {
+                                    debugLog('Generation cancelled successfully (Cloud)');
+                                    // Remove from list
+                                    window.odagGeneratedApps.splice(appIndex, 1);
+                                    updateAppsList(qId);
+                                },
+                                error: function(xhr) {
+                                    console.error('Failed to cancel generation:', xhr.responseText);
+                                    showNotification('Failed to cancel generation', 'error');
+                                }
+                            });
+                        } else {
+                            const cancelUrl = tenantUrl + '/api/odag/v1/requests/' + requestId;
+                            $.ajax({
+                                url: cancelUrl,
+                                type: 'DELETE',
+                                headers: {
+                                    'X-Qlik-XrfKey': CONSTANTS.API.XRF_KEY
+                                },
+                                xhrFields: {
+                                    withCredentials: true
+                                },
+                                success: function(result) {
+                                    debugLog('Generation cancelled successfully (On-Premise)');
+                                    // Remove from list
+                                    window.odagGeneratedApps.splice(appIndex, 1);
+                                    updateAppsList(qId);
+                                },
+                                error: function(xhr) {
+                                    console.error('Failed to cancel generation:', xhr.responseText);
+                                    showNotification('Failed to cancel generation', 'error');
+                                }
+                            });
+                        }
                     }
 
                     $(this).closest('.app-menu-dropdown').hide();
