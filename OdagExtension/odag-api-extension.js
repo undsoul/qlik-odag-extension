@@ -3396,12 +3396,21 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             
             // Main generate function
             const generateODAGApp = async function() {
+                console.log('⚡ generateODAGApp() called', {
+                    odagLinkId: odagConfig.odagLinkId,
+                    bindingsCacheKey: 'odagBindings_' + odagConfig.odagLinkId,
+                    bindingsCached: !!window['odagBindings_' + odagConfig.odagLinkId],
+                    isCloud: window.qlikEnvironment === 'cloud'
+                });
+
                 if (!odagConfig.odagLinkId) {
+                    console.error('❌ No ODAG Link ID configured');
                     showNotification('Please configure ODAG Link ID in properties panel', 'error');
                     return;
                 }
 
                 const $button = $('.odag-generate-btn-compact');
+                console.log('🔘 Found', $button.length, 'generate button(s) to disable');
                 $button.addClass('loading').prop('disabled', true);
 
                 try {
@@ -3739,7 +3748,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             // Button click handler (not in dynamic view)
             if (!isDynamicView) {
-                $element.find('.odag-generate-btn-compact').on('click', function() {
+                const $generateButtons = $element.find('.odag-generate-btn-compact');
+                debugLog('🔘 Attaching click handlers to', $generateButtons.length, 'generate button(s)');
+
+                $generateButtons.on('click', function(e) {
+                    console.log('🔘 Generate button clicked!', {
+                        odagLinkId: odagConfig.odagLinkId,
+                        bindingsCached: !!window['odagBindings_' + odagConfig.odagLinkId],
+                        buttonElement: this
+                    });
+                    e.preventDefault();
+                    e.stopPropagation();
                     generateODAGApp();
                 });
 
