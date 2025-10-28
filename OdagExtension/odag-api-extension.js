@@ -150,11 +150,31 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 window.addEventListener('unhandledrejection', function(event) {
                     // Check if this is the Nebula embed destruction error
                     const error = event.reason;
-                    const errorMessage = error && error.message ? error.message : String(error);
-                    const stack = error && error.stack ? error.stack : '';
 
-                    // Check if error is from NebulaApp.jsx and is "is not a function"
-                    if (stack.includes('NebulaApp.jsx') && errorMessage.includes('is not a function')) {
+                    // Handle different error formats
+                    let errorMessage = '';
+                    let stack = '';
+
+                    if (error) {
+                        if (error.message) {
+                            errorMessage = error.message;
+                        } else if (typeof error === 'string') {
+                            errorMessage = error;
+                        } else {
+                            errorMessage = String(error);
+                        }
+
+                        stack = error.stack || '';
+                    }
+
+                    // Check if error is from NebulaApp.jsx with "is not a function" TypeError
+                    // This catches: "TypeError: u[e] is not a function at NebulaApp.jsx:145"
+                    const isNebulaError = (
+                        (stack.includes('NebulaApp.jsx') || stack.includes('NebulaApp')) &&
+                        (errorMessage.includes('is not a function') || error instanceof TypeError)
+                    );
+
+                    if (isNebulaError) {
                         if (odagConfig.enableDebug) {
                             console.warn('[Suppressed] Known Qlik Nebula embed destruction error (does not affect functionality)');
                         }
