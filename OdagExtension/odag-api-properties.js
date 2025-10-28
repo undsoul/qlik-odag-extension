@@ -9,7 +9,7 @@ define([], function() {
                 type: "items",
                 label: "ODAG Configuration",
                 items: {
-                    // On-Premise: Dropdown with all links
+                    // On-Premise: Combobox with search for all links
                     odagLinkIdOnPremise: {
                         type: "string",
                         component: "dropdown",
@@ -30,37 +30,94 @@ define([], function() {
                             }];
                         },
                         defaultValue: "",
+                        searchEnabled: true,
                         change: function(layout) {
-                            // Clear cached bindings when ODAG Link ID changes
+                            // Fetch bindings immediately when ODAG Link ID changes
                             var odagLinkId = layout.odagConfig && layout.odagConfig.odagLinkId;
-                            if (odagLinkId && window.odagLastLinkId && odagLinkId !== window.odagLastLinkId) {
-                                var oldCacheKey = 'odagBindings_' + window.odagLastLinkId;
 
-                                // Clear old cache
-                                if (window[oldCacheKey]) {
-                                    delete window[oldCacheKey];
-                                }
-
-                                // Clear stored bindings from layout since we're switching to a different ODAG link
-                                var app = window.qlik ? window.qlik.currApp() : null;
-                                if (app) {
-                                    app.getObject(layout.qInfo.qId).then(function(model) {
-                                        model.getProperties().then(function(props) {
-                                            // Preserve all existing properties
-                                            if (props.odagConfig) {
-                                                props.odagConfig._cachedBindingFields = '';
-                                                props.odagConfig.odagLinkId = odagLinkId;
-                                            }
-                                            model.setProperties(props);
-                                        });
-                                    });
-                                }
-
-                                console.log('🔄 ODAG Link ID changed from', window.odagLastLinkId, 'to', odagLinkId, '- cleared old bindings, will fetch new bindings on next paint');
+                            if (!odagLinkId || !odagLinkId.trim()) {
+                                // Clear if empty
+                                window.odagLastLinkId = '';
+                                return;
                             }
+
+                            // If it's the same as before, no need to fetch again
+                            if (odagLinkId === window.odagLastLinkId) {
+                                return;
+                            }
+
+                            var oldCacheKey = 'odagBindings_' + window.odagLastLinkId;
+                            var newCacheKey = 'odagBindings_' + odagLinkId;
+
+                            // Clear old cache
+                            if (window[oldCacheKey]) {
+                                delete window[oldCacheKey];
+                            }
+
+                            console.log('🔄 ODAG Link ID changed to:', odagLinkId, '- fetching bindings immediately...');
 
                             // Store current link ID
                             window.odagLastLinkId = odagLinkId;
+
+                            // Fetch bindings immediately for On-Premise
+                            var app = window.qlik ? window.qlik.currApp() : null;
+                            if (!app) return;
+
+                            var currentUrl = window.location.protocol + '//' + window.location.hostname + (window.location.port ? ':' + window.location.port : '');
+                            var xrfkey = 'abcdefghijklmnop';
+                            var linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagLinkId + '?xrfkey=' + xrfkey;
+
+                            window.jQuery.ajax({
+                                url: linkDetailsUrl,
+                                type: 'GET',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-Qlik-XrfKey': xrfkey
+                                },
+                                xhrFields: {withCredentials: true},
+                                timeout: 5000,
+                                success: function(linkDetails) {
+                                    console.log('✅ Fetched ODAG link details:', linkDetails);
+
+                                    // Extract bindings
+                                    var bindings = null;
+                                    if (linkDetails && linkDetails.objectDef && linkDetails.objectDef.bindings) {
+                                        bindings = linkDetails.objectDef.bindings;
+                                    } else if (linkDetails && linkDetails.bindings) {
+                                        bindings = linkDetails.bindings;
+                                    }
+
+                                    if (bindings && Array.isArray(bindings) && bindings.length > 0) {
+                                        // Cache the bindings
+                                        window[newCacheKey] = bindings;
+
+                                        // Create readable binding fields string
+                                        var bindingFieldsStr = bindings.map(function(b) {
+                                            return b.fieldName || b.name || 'Unknown';
+                                        }).join(', ');
+
+                                        console.log('✅ Bindings cached:', bindings.length, 'bindings -', bindingFieldsStr);
+
+                                        // Update the layout with cached bindings
+                                        app.getObject(layout.qInfo.qId).then(function(model) {
+                                            model.getProperties().then(function(props) {
+                                                if (props.odagConfig) {
+                                                    props.odagConfig._cachedBindingFields = bindingFieldsStr;
+                                                    props.odagConfig.odagLinkId = odagLinkId;
+                                                }
+                                                model.setProperties(props);
+                                            });
+                                        });
+                                    } else {
+                                        console.warn('⚠️ No bindings found in ODAG link');
+                                    }
+                                },
+                                error: function(xhr, status, error) {
+                                    console.error('❌ Failed to fetch ODAG link bindings:', error);
+                                    console.error('Response:', xhr.responseText);
+                                }
+                            });
                         },
                         show: function() {
                             return window.qlikEnvironment !== 'cloud';
