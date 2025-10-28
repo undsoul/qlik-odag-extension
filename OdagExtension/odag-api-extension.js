@@ -67,14 +67,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // ========== PERFORMANCE OPTIMIZATIONS ==========
 
             // 1. Paint Debouncing - Prevent excessive re-renders
-            const paintKey = 'lastPaint_' + layout.qInfo.qId;
+            const extensionId = layout.qInfo.qId;
             const now = Date.now();
+            const lastPaint = StateManager.get(extensionId, CONSTANTS.STATE_KEYS.LAST_PAINT, 0);
 
-            if (window[paintKey] && (now - window[paintKey]) < CONSTANTS.TIMING.PAINT_DEBOUNCE_MS) {
+            if (lastPaint && (now - lastPaint) < CONSTANTS.TIMING.PAINT_DEBOUNCE_MS) {
                 debugLog('Paint debounced - called too frequently (< ' + CONSTANTS.TIMING.PAINT_DEBOUNCE_MS + 'ms)');
                 return qlik.Promise.resolve();
             }
-            window[paintKey] = now;
+            StateManager.set(extensionId, CONSTANTS.STATE_KEYS.LAST_PAINT, now);
 
             // 2. Interval Cleanup Manager - Prevent memory leaks
             if (!window.ODAGCleanupManager) {
@@ -1047,24 +1048,27 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 }
             };
 
-            // Store validation function globally so it can be called on every paint
-            window['checkODAGValidation_' + layout.qInfo.qId] = checkODAGValidation;
+            // Store validation function in StateManager so it can be called on every paint
+            StateManager.set(extensionId, 'checkODAGValidation', checkODAGValidation);
 
             // Subscribe to selection state changes to trigger validation
-            if (!window['odagSelectionListener_' + layout.qInfo.qId]) {
+            if (!StateManager.get(extensionId, CONSTANTS.STATE_KEYS.SELECTION_LISTENER)) {
                 app.model.enigmaModel.on('changed', function() {
                     // Debounce validation check on selection changes
-                    if (window['selectionChangeTimeout_' + layout.qInfo.qId]) {
-                        clearTimeout(window['selectionChangeTimeout_' + layout.qInfo.qId]);
+                    const existingTimeout = StateManager.get(extensionId, 'selectionChangeTimeout');
+                    if (existingTimeout) {
+                        clearTimeout(existingTimeout);
                     }
-                    window['selectionChangeTimeout_' + layout.qInfo.qId] = setTimeout(function() {
-                        if (window['checkODAGValidation_' + layout.qInfo.qId]) {
+                    const timeoutId = setTimeout(function() {
+                        const validationFunc = StateManager.get(extensionId, 'checkODAGValidation');
+                        if (validationFunc) {
                             debugLog('🔄 Selection changed - triggering validation');
-                            window['checkODAGValidation_' + layout.qInfo.qId]();
+                            validationFunc();
                         }
                     }, CONSTANTS.TIMING.SELECTION_CHANGE_DEBOUNCE_MS);
+                    StateManager.set(extensionId, 'selectionChangeTimeout', timeoutId);
                 });
-                window['odagSelectionListener_' + layout.qInfo.qId] = true;
+                StateManager.set(extensionId, CONSTANTS.STATE_KEYS.SELECTION_LISTENER, true);
             }
 
             // Run validation check immediately after HTML is rendered
@@ -1088,8 +1092,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 let deletedApps = new Set(); // Track deleted apps to avoid duplicate deletions
                 let lastGeneratedPayload = null; // Track last payload to detect selection changes
 
-                // Store deletedApps globally so restoreDynamicView can access it
-                window['deletedApps_' + layout.qInfo.qId] = deletedApps;
+                // Store deletedApps in StateManager so restoreDynamicView can access it
+                StateManager.set(extensionId, 'deletedApps', deletedApps);
 
                 // Function to delete all existing ODAG apps
                 const deleteAllODAGApps = function(callback) {
@@ -1185,8 +1189,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     );
 
                     // Show top bar and keep it visible (no auto-hide during generation)
-                    if (window['showDynamicTopBar_' + layout.qInfo.qId]) {
-                        window['showDynamicTopBar_' + layout.qInfo.qId](false);
+                    const showTopBarFunc = StateManager.get(extensionId, 'showDynamicTopBar');
+                    if (showTopBarFunc) {
+                        showTopBarFunc(false);
                     }
 
                     // Show cancel button
@@ -1425,12 +1430,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                                         // Keep top bar visible for 10 seconds after successful generation
                                         // so user can see the completion status
-                                        if (window['showDynamicTopBar_' + layout.qInfo.qId]) {
-                                            window['showDynamicTopBar_' + layout.qInfo.qId](false); // Keep visible
+                                        const showTopBarFunc = StateManager.get(extensionId, 'showDynamicTopBar');
+                                        if (showTopBarFunc) {
+                                            showTopBarFunc(false); // Keep visible
                                             // Then enable auto-hide after 10 seconds
                                             setTimeout(function() {
-                                                if (window['showDynamicTopBar_' + layout.qInfo.qId]) {
-                                                    window['showDynamicTopBar_' + layout.qInfo.qId](true);
+                                                const showTopBarFunc2 = StateManager.get(extensionId, 'showDynamicTopBar');
+                                                if (showTopBarFunc2) {
+                                                    showTopBarFunc2(true);
                                                 }
                                             }, CONSTANTS.TIMING.TOP_BAR_HIDE_AFTER_COMPLETE_MS);
                                         }
@@ -1710,8 +1717,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 );
 
                 // Keep top bar visible during initialization
-                if (window['showDynamicTopBar_' + layout.qInfo.qId]) {
-                    window['showDynamicTopBar_' + layout.qInfo.qId](false);
+                const showTopBarFunc = StateManager.get(extensionId, 'showDynamicTopBar');
+                if (showTopBarFunc) {
+                    showTopBarFunc(false);
                 }
 
                 // Use sessionStorage to track if we've initialized in this browser session
@@ -1780,8 +1788,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
                 };
 
-                // Store check function globally so paint can call it
-                window['checkSelectionsChanged_' + layout.qInfo.qId] = checkSelectionsChanged;
+                // Store check function in StateManager so paint can call it
+                StateManager.set(extensionId, 'checkSelectionsChanged', checkSelectionsChanged);
 
                 // Listen for selection changes using selection state subscription
                 app.selectionState().OnData.bind(function() {
@@ -1789,18 +1797,18 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     checkSelectionsChanged();
                 });
 
-                // Store generateNewODAGApp function globally for restoreDynamicView to access
-                window['generateNewODAGApp_' + layout.qInfo.qId] = function() {
+                // Store generateNewODAGApp function in StateManager for restoreDynamicView to access
+                StateManager.set(extensionId, 'generateNewODAGApp', function() {
                     // Prevent multiple simultaneous clicks
                     if (isGenerating) {
                         debugLog('Generation already in progress, ignoring click');
                         return;
                     }
                     generateNewODAGApp();
-                };
+                });
 
-                // Store cancel function globally
-                window['cancelGeneration_' + layout.qInfo.qId] = function() {
+                // Store cancel function in StateManager
+                StateManager.set(extensionId, 'cancelGeneration', function() {
                     if (currentRequestId && confirm('Are you sure you want to cancel the current generation?')) {
                         debugLog('Cancelling generation...');
 
@@ -1864,11 +1872,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     $embedContainer.css('pointer-events', 'none');
                     $embedContainer.css('opacity', '0.6');
 
-                    window['generateNewODAGApp_' + layout.qInfo.qId]();
+                    const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
+                    if (generateFunc) generateFunc();
                 });
 
                 // Handle cancel button click
-                $('#cancel-btn-' + layout.qInfo.qId).on('click', window['cancelGeneration_' + layout.qInfo.qId]);
+                const cancelFunc = StateManager.get(extensionId, 'cancelGeneration');
+                if (cancelFunc) {
+                    $('#cancel-btn-' + layout.qInfo.qId).on('click', cancelFunc);
+                }
 
                 // Load the latest ODAG app on initialization
                 loadLatestODAGApp();
@@ -1883,8 +1895,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     debugLog('Restoring Dynamic View (event handlers only, no API calls)');
 
                     // Re-attach button click handlers (they get lost when HTML is recreated)
-                    const generateFunc = window['generateNewODAGApp_' + layout.qInfo.qId];
-                    const cancelFunc = window['cancelGeneration_' + layout.qInfo.qId];
+                    const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
+                    const cancelFunc = StateManager.get(extensionId, 'cancelGeneration');
 
                     if (generateFunc) {
                         $('#refresh-btn-' + layout.qInfo.qId).off('click').on('click', function() {
@@ -1937,8 +1949,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
                 };
 
-                // Make showTopBar globally accessible for status updates
-                window['showDynamicTopBar_' + layout.qInfo.qId] = showTopBar;
+                // Make showTopBar accessible via StateManager for status updates
+                StateManager.set(extensionId, 'showDynamicTopBar', showTopBar);
 
                 // Show initially with auto-hide
                 showTopBar(true);
@@ -3869,20 +3881,29 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             }
 
             // Check for selection changes on every paint (for Dynamic View)
-            if (isDynamicView && window['checkSelectionsChanged_' + layout.qInfo.qId]) {
-                window['checkSelectionsChanged_' + layout.qInfo.qId]();
+            if (isDynamicView) {
+                const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                if (checkSelectionsFunc) {
+                    checkSelectionsFunc();
+                }
             }
 
             // Run validation check on EVERY paint to update button state when selections change
-            if (window['checkODAGValidation_' + layout.qInfo.qId]) {
+            const validationFunc = StateManager.get(extensionId, 'checkODAGValidation');
+            if (validationFunc) {
                 // Clear any pending validation check to avoid running multiple times
-                if (window['validationCheckTimeout_' + layout.qInfo.qId]) {
-                    clearTimeout(window['validationCheckTimeout_' + layout.qInfo.qId]);
+                const existingTimeout = StateManager.get(extensionId, CONSTANTS.STATE_KEYS.VALIDATION_TIMEOUT);
+                if (existingTimeout) {
+                    clearTimeout(existingTimeout);
                 }
                 // Delay validation to ensure Qlik engine has processed selection changes
-                window['validationCheckTimeout_' + layout.qInfo.qId] = setTimeout(function() {
-                    window['checkODAGValidation_' + layout.qInfo.qId]();
+                const timeoutId = setTimeout(function() {
+                    const validationFunc2 = StateManager.get(extensionId, 'checkODAGValidation');
+                    if (validationFunc2) {
+                        validationFunc2();
+                    }
                 }, CONSTANTS.TIMING.VALIDATION_DEBOUNCE_MS);
+                StateManager.set(extensionId, CONSTANTS.STATE_KEYS.VALIDATION_TIMEOUT, timeoutId);
             }
 
             return qlik.Promise.resolve();
