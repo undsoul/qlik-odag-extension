@@ -643,6 +643,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // isMobile already defined earlier (line 364) for use in initialization logic
             debugLog('ODAG Extension: isMobile =', isMobile, 'elementWidth =', elementWidth);
 
+            // Helper function to generate loading placeholder with spinner
+            const getLoadingPlaceholder = function(message) {
+                let html = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 16px;">';
+                html += '<span class="status-spinner" style="display: inline-block; width: 40px; height: 40px; ';
+                html += 'border: 3px solid #e5e7eb; border-top-color: #3b82f6; border-left-color: #3b82f6; ';
+                html += 'border-radius: 50%; animation: spin 0.8s linear infinite;"></span>';
+                html += '<div style="color: #6b7280; font-size: 14px; font-weight: 500;">' + message + '</div>';
+                html += '</div>';
+                return html;
+            };
+
             // Helper function to generate status HTML with spinner (used by Dynamic View)
             const getStatusHTML = function(state, message, showSpinner) {
                 let color = '#6b7280'; // default gray
@@ -732,9 +743,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Embed container takes full space
                 html += '<div class="odag-dynamic-embed" id="dynamic-embed-' + layout.qInfo.qId + '" style="height: 100%; width: 100%;">';
-                html += '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">';
-                html += 'Waiting for ODAG app...';
-                html += '</div>';
+                html += getLoadingPlaceholder('Loading ODAG app...');
                 html += '</div>';
 
                 html += '</div>';
@@ -3029,28 +3038,33 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     // Ensure container is visible
                                     $container.show();
 
+                                    // Show loading animation first
+                                    $container.html(getLoadingPlaceholder('Loading app...'));
+
                                     // Create a wrapper div to contain the qlik-embed properly with relative positioning
-                                    let embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">';
-                                    embedHtml += embedElement;
-                                    embedHtml += '</div>';
+                                    setTimeout(function() {
+                                        let embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">';
+                                        embedHtml += embedElement;
+                                        embedHtml += '</div>';
 
-                                    debugLog('LIST VIEW - Setting container HTML');
-                                    $container.html(embedHtml);
+                                        debugLog('LIST VIEW - Setting container HTML');
+                                        $container.html(embedHtml);
 
-                                    debugLog('Created new qlik-embed element:', {
-                                        appId: embedAppId,
-                                        viewMode: viewMode,
-                                        sheetId: odagConfig.templateSheetId || 'N/A',
-                                        container: $container.attr('id'),
-                                        embedKey: embedKey
-                                    });
+                                        debugLog('Created new qlik-embed element:', {
+                                            appId: embedAppId,
+                                            viewMode: viewMode,
+                                            sheetId: odagConfig.templateSheetId || 'N/A',
+                                            container: $container.attr('id'),
+                                            embedKey: embedKey
+                                        });
 
-                                    // Force a re-render of the web component
-                                    const newEmbed = $container.find('qlik-embed')[0];
-                                    if (newEmbed) {
-                                        // Trigger a custom event to force refresh if needed
-                                        newEmbed.dispatchEvent(new CustomEvent('refresh'));
-                                    }
+                                        // Force a re-render of the web component
+                                        const newEmbed = $container.find('qlik-embed')[0];
+                                        if (newEmbed) {
+                                            // Trigger a custom event to force refresh if needed
+                                            newEmbed.dispatchEvent(new CustomEvent('refresh'));
+                                        }
+                                    }, 300); // Short delay to show loading animation
                                 }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
                             }
                             
