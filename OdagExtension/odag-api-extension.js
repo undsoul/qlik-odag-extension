@@ -4016,6 +4016,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
          * Clean up all resources when extension is removed or destroyed
          */
         destroy: function($element, layout) {
+            // Handle case where layout might be undefined
+            if (!layout || !layout.qInfo || !layout.qInfo.qId) {
+                console.warn('[ODAG Extension] destroy() called without valid layout, skipping cleanup');
+                return;
+            }
+
             const extensionId = layout.qInfo.qId;
 
             // Clean up all state for this extension instance
