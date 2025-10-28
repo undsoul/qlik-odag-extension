@@ -2,7 +2,7 @@
  * ODAG State Manager
  * Manages extension state without polluting global window namespace
  *
- * @version 3.4.0
+ * @version 5.0.0-beta
  */
 
 define([], function() {
@@ -11,6 +11,7 @@ define([], function() {
     /**
      * State Manager
      * Replaces window[dynamicKey] pattern with proper state management
+     * v5: Enhanced with timers, observers, and better cleanup
      */
     const ODAGStateManager = {
 
@@ -19,6 +20,24 @@ define([], function() {
          * Map<extensionId, Map<key, value>>
          */
         _states: new Map(),
+
+        /**
+         * Timer storage for cleanup
+         * Map<extensionId, Array<timerId>>
+         */
+        _timers: new Map(),
+
+        /**
+         * Interval storage for cleanup
+         * Map<extensionId, Array<intervalId>>
+         */
+        _intervals: new Map(),
+
+        /**
+         * State change observers
+         * Map<extensionId, Map<key, Array<callback>>>
+         */
+        _observers: new Map(),
 
         /**
          * Get state value for extension instance
@@ -41,13 +60,20 @@ define([], function() {
          * @param {string} extensionId - Extension instance ID
          * @param {string} key - State key
          * @param {any} value - State value
+         * @param {boolean} silent - Don't notify observers if true
          */
-        set: function(extensionId, key, value) {
+        set: function(extensionId, key, value, silent) {
             if (!this._states.has(extensionId)) {
                 this._states.set(extensionId, new Map());
             }
 
+            const oldValue = this._states.get(extensionId).get(key);
             this._states.get(extensionId).set(key, value);
+
+            // Notify observers if not silent
+            if (!silent) {
+                this._notifyObservers(extensionId, key, value, oldValue);
+            }
         },
 
         /**
@@ -107,9 +133,141 @@ define([], function() {
          * @param {string} extensionId - Extension instance ID
          */
         cleanup: function(extensionId) {
+            // Clear all timers
+            this.clearTimers(extensionId);
+
+            // Clear all intervals
+            this.clearIntervals(extensionId);
+
+            // Remove observers
+            if (this._observers.has(extensionId)) {
+                this._observers.delete(extensionId);
+            }
+
+            // Remove state
             if (this._states.has(extensionId)) {
                 this._states.delete(extensionId);
             }
+        },
+
+        /**
+         * Track a timer for cleanup
+         * @param {string} extensionId - Extension instance ID
+         * @param {number} timerId - Timer ID from setTimeout
+         */
+        trackTimer: function(extensionId, timerId) {
+            if (!this._timers.has(extensionId)) {
+                this._timers.set(extensionId, []);
+            }
+            this._timers.get(extensionId).push(timerId);
+        },
+
+        /**
+         * Track an interval for cleanup
+         * @param {string} extensionId - Extension instance ID
+         * @param {number} intervalId - Interval ID from setInterval
+         */
+        trackInterval: function(extensionId, intervalId) {
+            if (!this._intervals.has(extensionId)) {
+                this._intervals.set(extensionId, []);
+            }
+            this._intervals.get(extensionId).push(intervalId);
+        },
+
+        /**
+         * Clear all timers for extension instance
+         * @param {string} extensionId - Extension instance ID
+         */
+        clearTimers: function(extensionId) {
+            if (this._timers.has(extensionId)) {
+                this._timers.get(extensionId).forEach(function(timerId) {
+                    clearTimeout(timerId);
+                });
+                this._timers.delete(extensionId);
+            }
+        },
+
+        /**
+         * Clear all intervals for extension instance
+         * @param {string} extensionId - Extension instance ID
+         */
+        clearIntervals: function(extensionId) {
+            if (this._intervals.has(extensionId)) {
+                this._intervals.get(extensionId).forEach(function(intervalId) {
+                    clearInterval(intervalId);
+                });
+                this._intervals.delete(extensionId);
+            }
+        },
+
+        /**
+         * Observe state changes for a specific key
+         * @param {string} extensionId - Extension instance ID
+         * @param {string} key - State key to observe
+         * @param {Function} callback - Callback(newValue, oldValue)
+         */
+        observe: function(extensionId, key, callback) {
+            if (!this._observers.has(extensionId)) {
+                this._observers.set(extensionId, new Map());
+            }
+
+            const instanceObservers = this._observers.get(extensionId);
+            if (!instanceObservers.has(key)) {
+                instanceObservers.set(key, []);
+            }
+
+            instanceObservers.get(key).push(callback);
+        },
+
+        /**
+         * Remove observer for a specific key
+         * @param {string} extensionId - Extension instance ID
+         * @param {string} key - State key
+         * @param {Function} callback - Callback to remove
+         */
+        unobserve: function(extensionId, key, callback) {
+            if (!this._observers.has(extensionId)) {
+                return;
+            }
+
+            const instanceObservers = this._observers.get(extensionId);
+            if (!instanceObservers.has(key)) {
+                return;
+            }
+
+            const callbacks = instanceObservers.get(key);
+            const index = callbacks.indexOf(callback);
+            if (index > -1) {
+                callbacks.splice(index, 1);
+            }
+        },
+
+        /**
+         * Notify observers of state change
+         * @param {string} extensionId - Extension instance ID
+         * @param {string} key - State key that changed
+         * @param {any} newValue - New value
+         * @param {any} oldValue - Old value
+         * @private
+         */
+        _notifyObservers: function(extensionId, key, newValue, oldValue) {
+            if (!this._observers.has(extensionId)) {
+                return;
+            }
+
+            const instanceObservers = this._observers.get(extensionId);
+            if (!instanceObservers.has(key)) {
+                return;
+            }
+
+            const callbacks = instanceObservers.get(key);
+            callbacks.forEach(function(callback) {
+                try {
+                    callback(newValue, oldValue);
+                } catch (e) {
+                    console.error('[ODAG StateManager] Observer error:', e);
+                }
+            });
         },
 
         /**
