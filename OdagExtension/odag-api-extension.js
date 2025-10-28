@@ -3117,6 +3117,18 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     // Ensure container is visible
                                     $container.show();
 
+                                    // CRITICAL: Properly clean up existing embed before creating new one
+                                    // This prevents Nebula destroy errors when switching between apps
+                                    const existingEmbed = $container.find('qlik-embed, qlik-analytics-embed')[0];
+                                    if (existingEmbed && typeof existingEmbed.remove === 'function') {
+                                        try {
+                                            existingEmbed.remove();
+                                            debugLog('Removed existing embed before creating new one');
+                                        } catch (e) {
+                                            console.warn('Error removing existing embed:', e);
+                                        }
+                                    }
+
                                     // Show loading animation first
                                     $container.html(getLoadingPlaceholder('Loading app...'));
 
