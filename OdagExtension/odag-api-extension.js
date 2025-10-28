@@ -4024,6 +4024,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 'odagBindings_',
                 'bindingsFetching_',
                 'odagRowEstConfig_',
+                'wasInEditMode_',
                 'checkODAGValidation_',
                 'odagSelectionListener_',
                 'selectionChangeTimeout_',
