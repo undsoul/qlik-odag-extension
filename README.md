@@ -293,7 +293,49 @@ Both view modes support showing a specific sheet instead of the full app:
 
 ## 🆕 Recent Improvements
 
-### Version 3.3.1 Updates (Latest)
+### Version 4.0 Updates (Latest)
+
+**Cloud Bindings & Properties Panel Enhancements**
+- ✅ Fixed Cloud bindings refresh to use correct API response structure (`response[0].link.bindings`)
+- ✅ Enhanced binding field name extraction with full property chain support
+- ✅ Added comprehensive field name fallback: `selectAppParamName` → `selectionAppParamName` → `fieldName` → `name`
+- ✅ Cloud bindings now correctly extract from `selAppLinkUsages` endpoint
+
+**Properties Panel UX Improvements**
+- ✅ Dynamic Sheet ID label changes based on embed mode (Required vs Optional)
+- ✅ Sheet ID validation warning for Analytics Sheet mode when empty
+- ✅ Visual warning box appears when Sheet ID is missing for analytics/sheet embed
+- ✅ Automatic ODAG links dropdown population on extension load
+- ✅ Properties panel auto-refresh when ODAG links are fetched
+
+**Binding Fields Auto-Fetch**
+- ✅ Bindings automatically fetch when ODAG link is selected from dropdown
+- ✅ "Refresh Binding Fields" button now uses correct Cloud API endpoint
+- ✅ Binding field display updates after one edit mode cycle (Qlik Sense limitation)
+- ✅ Improved retry logic and error handling for binding updates
+- ✅ Hidden timestamp properties trigger proper panel refresh
+
+**On-Premise Enhancements**
+- ✅ ODAG links dropdown now searchable with improved UX
+- ✅ Links automatically load when extension is added to sheet
+- ✅ Properties panel refreshes automatically when links are available
+- ✅ Binding fields cache to window for persistence across paint cycles
+
+**Code Quality & Architecture**
+- ✅ Simplified change handler logic - removed complex property update patterns
+- ✅ Better separation of concerns between properties panel and paint() method
+- ✅ Comprehensive logging for debugging binding fetch and display issues
+- ✅ Improved error handling with detailed console output
+
+**User Experience**
+- ✅ Clear visual feedback for missing Sheet ID in analytics mode
+- ✅ Better error messages for binding fetch failures
+- ✅ Consistent behavior between Cloud and On-Premise environments
+- ✅ Reduced need for manual properties panel refresh
+
+---
+
+### Version 3.3.1 Updates
 
 **ODAG Row Estimation Validation**
 - ✅ Client-side validation based on `rowEstExpr` and `curRowEstHighBound` from ODAG configuration
