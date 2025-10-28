@@ -214,9 +214,21 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // Fetch and cache ODAG bindings (for both Cloud and On-Premise)
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
             const bindingsFetchingKey = 'odagBindingsFetching_' + odagConfig.odagLinkId;
+            const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+
+            // CRITICAL: If we're in edit mode, clear the cache BEFORE the bindings check
+            // This ensures that when you change ODAG settings in QMC while in edit mode,
+            // the FIRST time you exit edit mode will fetch fresh data
+            if (isEditMode) {
+                delete window[rowEstCacheKey];
+                delete window[bindingsCacheKey];
+                delete window[bindingsFetchingKey];
+                debugLog('🔄 [EDIT MODE] Cleared cache at start of paint() - will force fresh fetch');
+            }
 
             debugLog('🔍 Bindings check:', {
                 isCloud: isCloud,
+                isEditMode: isEditMode,
                 odagLinkId: odagConfig.odagLinkId,
                 bindingsCacheKey: bindingsCacheKey,
                 cached: window[bindingsCacheKey],
