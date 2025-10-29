@@ -1267,15 +1267,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             // In Dynamic View: SHOW Refresh button when validation passes
                             $generateBtn.show();
 
-                            // Reset refresh button to normal state (remove any warning styling)
-                            $generateBtn.removeClass('needs-refresh').css({
-                                'background': 'white',
-                                'border': '1px solid #ccc',
-                                'color': '#333',
-                                'opacity': '1',
-                                'cursor': 'pointer',
-                                'pointer-events': 'auto'
-                            });
+                            // Add "needs-refresh" warning state to indicate selections changed
+                            // This highlights the button in orange/yellow to prompt user to refresh
+                            if (!$generateBtn.hasClass('needs-refresh')) {
+                                $generateBtn.addClass('needs-refresh');
+                                debugLog('🟡 Added needs-refresh warning state to refresh button');
+                            }
                         } else {
                             // In List View: Enable Generate button
                             $generateBtn.prop('disabled', false).css({
