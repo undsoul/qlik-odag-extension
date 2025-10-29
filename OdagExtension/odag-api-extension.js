@@ -2585,11 +2585,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                             debugLog('Getting selected values for field:', fieldName, 'Count:', selectedCount);
 
-                            // Get the actual selected values using getField API
+                            // Get the actual selected values using multiple methods for reliability
                             try {
-                                const field = await app.field(fieldName);
-                                const fieldData = await field.getData();
-
                                 const fieldSelection = {
                                     selectionAppParamType: "Field",
                                     selectionAppParamName: fieldName,
@@ -2597,8 +2594,34 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     selectedSize: selectedCount
                                 };
 
+                                // Method 1: Try using field.getData() with proper parameters
+                                // Add small delay to ensure field API is ready (fixes timing issue after 1133 error)
+                                await new Promise(resolve => setTimeout(resolve, 50));
+
+                                const field = app.field(fieldName);
+
+                                // First, try to get the field data with a proper request
+                                // Qlik field API may need initialization after errors
+                                let fieldData = null;
+
+                                try {
+                                    // Method 1a: Try simple getData() first
+                                    fieldData = await field.getData();
+
+                                    // If rows are empty, try with parameters
+                                    if (!fieldData.rows || fieldData.rows.length === 0) {
+                                        debugLog('Method 1a returned empty, trying with parameters...');
+                                        fieldData = await field.getData({
+                                            rows: 10000,
+                                            frequencyMode: 'V'
+                                        });
+                                    }
+                                } catch (e) {
+                                    debugLog('Field getData error, will use fallback:', e.message);
+                                }
+
                                 // Extract selected values from field data
-                                if (fieldData && fieldData.rows) {
+                                if (fieldData && fieldData.rows && fieldData.rows.length > 0) {
                                     fieldData.rows.forEach(function(row) {
                                         if (row.qState === 'S') { // S = Selected
                                             fieldSelection.values.push({
@@ -2608,14 +2631,67 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                             });
                                         }
                                     });
+                                    debugLog('Method 1: Found', fieldSelection.values.length, 'selected values for', fieldName);
+                                }
+
+                                // Method 2: If no values yet, try using qSelected text
+                                if (fieldSelection.values.length === 0 && selection.qSelected) {
+                                    debugLog('Method 2: Using qSelected text for', fieldName, ':', selection.qSelected);
+                                    const values = selection.qSelected.split(', ');
+                                    values.forEach(function(value) {
+                                        // Skip if it's a complex expression like "x of y"
+                                        if (!value.includes(' of ')) {
+                                            fieldSelection.values.push({
+                                                selStatus: "S",
+                                                strValue: value.trim(),
+                                                numValue: isNaN(value) ? "NaN" : String(value)
+                                            });
+                                        }
+                                    });
+                                    debugLog('Method 2: Extracted', fieldSelection.values.length, 'values from qSelected');
+                                }
+
+                                // Method 3: If still no values but we know there are selections, use session object
+                                if (fieldSelection.values.length === 0 && selectedCount > 0) {
+                                    debugLog('Method 3: Creating session object for', fieldName);
+                                    const enigmaApp = app.model.enigmaModel;
+                                    const sessionObj = await enigmaApp.createSessionObject({
+                                        qInfo: { qType: 'CurrentSelections' },
+                                        qListObjectDef: {
+                                            qDef: { qFieldDefs: [fieldName] },
+                                            qInitialDataFetch: [{
+                                                qTop: 0,
+                                                qLeft: 0,
+                                                qWidth: 1,
+                                                qHeight: Math.min(selectedCount * 2, 10000)
+                                            }]
+                                        }
+                                    });
+
+                                    const layout = await sessionObj.getLayout();
+                                    if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
+                                        const dataPage = layout.qListObject.qDataPages[0];
+                                        dataPage.qMatrix.forEach(function(row) {
+                                            const cell = row[0];
+                                            if (cell && cell.qState === 'S') {
+                                                fieldSelection.values.push({
+                                                    selStatus: "S",
+                                                    strValue: cell.qText,
+                                                    numValue: isNaN(cell.qNum) ? "NaN" : cell.qNum.toString()
+                                                });
+                                            }
+                                        });
+                                        debugLog('Method 3: Found', fieldSelection.values.length, 'selected values via session object');
+                                    }
+                                    await enigmaApp.destroySessionObject(sessionObj.id);
                                 }
 
                                 // If we got selected values, add to selections
                                 if (fieldSelection.values.length > 0) {
-                                    debugLog('Found', fieldSelection.values.length, 'selected values for', fieldName);
+                                    debugLog('Total found:', fieldSelection.values.length, 'selected values for', fieldName);
                                     selections.push(fieldSelection);
                                 } else {
-                                    debugLog('Warning: No selected values found for', fieldName, '- field data:', fieldData);
+                                    debugLog('Warning: Could not retrieve selected values for', fieldName, 'despite selectedCount:', selectedCount);
                                 }
                             } catch (fieldError) {
                                 console.error('Error getting field data for', fieldName, ':', fieldError);
