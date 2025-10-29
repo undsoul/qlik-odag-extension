@@ -3886,8 +3886,6 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const isCloud = window.qlikEnvironment === 'cloud';
                         const xrfkey = CONSTANTS.API.XRF_KEY;
 
-                        debugLog('Delete app - Environment:', window.qlikEnvironment, '| isCloud:', isCloud, '| isCancelled:', isCancelled, '| status:', appStatus);
-
                         // Build headers for Cloud vs On-Premise
                         const deleteHeaders = isCloud
                             ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
@@ -3912,10 +3910,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     '&autoAck=true';
                                 debugLog('Delete cancelled app (Cloud):', deleteUrl);
                             } else {
-                                // On-Premise: use cancel with delGenApp=true
+                                // On-Premise: use ackcancel with delGenApp=true
                                 deleteUrl = tenantUrl + '/api/odag/v1/requests/' + requestId +
                                     '?requestId=' + requestId +
-                                    '&action=cancel' +
+                                    '&action=ackcancel' +
                                     '&ignoreSucceeded=true' +
                                     '&delGenApp=true' +
                                     '&autoAck=true' +
@@ -4556,7 +4554,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         } else {
                                             deleteUrl = tenantUrl + '/api/odag/v1/requests/' + app.requestId +
                                                 '?requestId=' + app.requestId +
-                                                '&action=cancel' +
+                                                '&action=ackcancel' +
                                                 '&ignoreSucceeded=true' +
                                                 '&delGenApp=true' +
                                                 '&autoAck=true' +
