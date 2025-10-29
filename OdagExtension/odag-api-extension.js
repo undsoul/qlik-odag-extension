@@ -1266,6 +1266,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         if (isDynamicView) {
                             // In Dynamic View: SHOW Refresh button when validation passes
                             $generateBtn.show();
+
+                            // Reset refresh button to normal state (remove any warning styling)
+                            $generateBtn.removeClass('needs-refresh').css({
+                                'background': 'white',
+                                'border': '1px solid #ccc',
+                                'color': '#333',
+                                'opacity': '1',
+                                'cursor': 'pointer',
+                                'pointer-events': 'auto'
+                            });
                         } else {
                             // In List View: Enable Generate button
                             $generateBtn.prop('disabled', false).css({
