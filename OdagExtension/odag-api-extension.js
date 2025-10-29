@@ -8,9 +8,10 @@ define([
     "./foundation/odag-validators",
     "./foundation/odag-error-handler",
     "./handlers/odag-event-handlers",
+    "./core/odag-payload-builder",
     "css!./styles/odag-api-extension.css"
 ],
-function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, EventHandlers) {
+function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, EventHandlers, PayloadBuilder) {
     'use strict';
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
@@ -96,13 +97,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 }
             }
 
-            // Helper function to get cookie value
-            const getCookie = function(name) {
-                const value = '; ' + document.cookie;
-                const parts = value.split('; ' + name + '=');
-                if (parts.length === 2) return parts.pop().split(';').shift();
-                return null;
-            };
+            // Helper function to get cookie value (use PayloadBuilder module)
+            const getCookie = PayloadBuilder.getCookie;
 
             // ========== PERFORMANCE OPTIMIZATIONS ==========
 
@@ -1067,102 +1063,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             $element.html(html);
 
             // Calculate row estimation for ODAG validation
-            const calculateRowEstimation = async function(app, odagLinkId) {
-                const rowEstCacheKey = 'odagRowEstConfig_' + odagLinkId;
-                const rowEstConfig = window[rowEstCacheKey];
-
-                // If no row estimation config, allow generation (no restrictions)
-                if (!rowEstConfig || !rowEstConfig.rowEstExpr) {
-                    debugLog('📊 No row estimation config found - allowing generation');
-                    return {
-                        actualRowEst: 1,
-                        curRowEstHighBound: null,
-                        canGenerate: true,
-                        message: null
-                    };
-                }
-
-                const rowEstExpr = rowEstConfig.rowEstExpr;
-                const curRowEstHighBound = rowEstConfig.curRowEstHighBound;
-
-                debugLog('📊 Calculating row estimation:', {
-                    rowEstExpr: rowEstExpr,
-                    curRowEstHighBound: curRowEstHighBound
-                });
-
-                try {
-                    // Create a temporary session object to evaluate expression in CURRENT selection state
-                    const enigmaApp = app.model.enigmaModel;
-
-                    // Create a hypercube session object to get live evaluation
-                    const tempObj = await enigmaApp.createSessionObject({
-                        qInfo: { qType: 'RowEstValidator' },
-                        qHyperCubeDef: {
-                            qDimensions: [],
-                            qMeasures: [{
-                                qDef: {
-                                    qDef: rowEstExpr
-                                }
-                            }],
-                            qInitialDataFetch: [{
-                                qTop: 0,
-                                qLeft: 0,
-                                qWidth: 1,
-                                qHeight: 1
-                            }]
-                        }
-                    });
-
-                    // Get the layout to evaluate the expression in current selection context
-                    const objLayout = await tempObj.getLayout();
-
-                    // Extract value from hypercube data matrix
-                    let actualRowEst = 0;
-                    if (objLayout.qHyperCube &&
-                        objLayout.qHyperCube.qDataPages &&
-                        objLayout.qHyperCube.qDataPages[0] &&
-                        objLayout.qHyperCube.qDataPages[0].qMatrix &&
-                        objLayout.qHyperCube.qDataPages[0].qMatrix[0] &&
-                        objLayout.qHyperCube.qDataPages[0].qMatrix[0][0]) {
-                        actualRowEst = Math.round(objLayout.qHyperCube.qDataPages[0].qMatrix[0][0].qNum);
-                    }
-
-                    // Destroy the temporary object
-                    await enigmaApp.destroySessionObject(tempObj.id);
-
-                    // Handle undefined curRowEstHighBound (no limit configured)
-                    const hasLimit = curRowEstHighBound !== undefined && curRowEstHighBound !== null;
-                    const canGenerate = !hasLimit || actualRowEst <= curRowEstHighBound;
-
-                    debugLog('📊 Row estimation calculated:', {
-                        actualRowEst: actualRowEst,
-                        curRowEstHighBound: curRowEstHighBound,
-                        hasLimit: hasLimit,
-                        canGenerate: canGenerate
-                    });
-
-                    const message = canGenerate ? null :
-                        'Cannot generate ODAG app: The current selections would result in ' +
-                        actualRowEst.toLocaleString() + ' rows, which exceeds the maximum allowed ' +
-                        curRowEstHighBound.toLocaleString() + ' rows. Please refine your selections to reduce the data volume.';
-
-                    return {
-                        actualRowEst: actualRowEst,
-                        curRowEstHighBound: curRowEstHighBound,
-                        canGenerate: canGenerate,
-                        message: message
-                    };
-
-                } catch (error) {
-                    console.error('❌ Failed to calculate row estimation:', error);
-                    // On error, allow generation (fail open)
-                    return {
-                        actualRowEst: 1,
-                        curRowEstHighBound: null,
-                        canGenerate: true,
-                        message: null
-                    };
-                }
+            // Use PayloadBuilder module for row estimation
+            const calculateRowEstimation = function(app, odagLinkId) {
+                return PayloadBuilder.calculateRowEstimation(app, odagLinkId, debugLog);
             };
 
             // Real-time validation check function - runs on every paint/selection change
@@ -2647,102 +2550,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 return; // Don't show visual notifications
             };
             
-            const generateContextHandle = function() {
-                const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-                let handle = '';
-                for (let i = 0; i < 6; i++) {
-                    handle += chars.charAt(Math.floor(Math.random() * chars.length));
-                }
-                return handle;
-            };
+            // Use PayloadBuilder module for generating context handle
+            const generateContextHandle = PayloadBuilder.generateContextHandle;
 
-            // Helper function to get only optional (white) values from a field
-            const getFieldOptionalValues = async function(enigmaApp, fieldName, hasUserSelection) {
-                const values = [];
-                try {
-                    const listObj = await enigmaApp.createSessionObject({
-                        qInfo: { qType: 'ListObject' },
-                        qListObjectDef: {
-                            qDef: { qFieldDefs: [fieldName] },
-                            qInitialDataFetch: [{
-                                qTop: 0,
-                                qLeft: 0,
-                                qWidth: 1,
-                                qHeight: 10000
-                            }]
-                        }
-                    });
+            // Use PayloadBuilder module for getting optional values
+            const getFieldOptionalValues = PayloadBuilder.getFieldOptionalValues;
 
-                    const layout = await listObj.getLayout();
-
-                    if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
-                        const dataPage = layout.qListObject.qDataPages[0];
-
-                        for (const row of dataPage.qMatrix) {
-                            const cell = row[0];
-                            // Only include Optional values (qState === 'O')
-                            // If user has selection, 'O' are the unselected values
-                            // If no selection, all values are 'O'
-                            if (cell && cell.qState === 'O') {
-                                values.push({
-                                    selStatus: 'S',  // Still mark as 'S' for ODAG
-                                    strValue: cell.qText,
-                                    numValue: isNaN(cell.qNum) ? 'NaN' : cell.qNum.toString()
-                                });
-                            }
-                        }
-                    }
-
-                    await enigmaApp.destroySessionObject(listObj.id);
-                } catch (error) {
-                    console.error('Error getting optional values for field', fieldName, ':', error);
-                }
-
-                return values;
-            };
-
-            // Helper function to get all possible values (Selected + Optional) from a field
-            const getFieldAllPossibleValues = async function(enigmaApp, fieldName) {
-                const values = [];
-                try {
-                    const listObj = await enigmaApp.createSessionObject({
-                        qInfo: { qType: 'ListObject' },
-                        qListObjectDef: {
-                            qDef: { qFieldDefs: [fieldName] },
-                            qInitialDataFetch: [{
-                                qTop: 0,
-                                qLeft: 0,
-                                qWidth: 1,
-                                qHeight: 10000
-                            }]
-                        }
-                    });
-
-                    const layout = await listObj.getLayout();
-
-                    if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
-                        const dataPage = layout.qListObject.qDataPages[0];
-
-                        for (const row of dataPage.qMatrix) {
-                            const cell = row[0];
-                            // Include both Selected and Optional values (not Excluded)
-                            if (cell && (cell.qState === 'S' || cell.qState === 'O')) {
-                                values.push({
-                                    selStatus: 'S',  // Mark as 'S' for ODAG
-                                    strValue: cell.qText,
-                                    numValue: isNaN(cell.qNum) ? 'NaN' : cell.qNum.toString()
-                                });
-                            }
-                        }
-                    }
-
-                    await enigmaApp.destroySessionObject(listObj.id);
-                } catch (error) {
-                    console.error('Error getting all possible values for field', fieldName, ':', error);
-                }
-
-                return values;
-            };
+            // Use PayloadBuilder module for getting all possible values
+            const getFieldAllPossibleValues = PayloadBuilder.getFieldAllPossibleValues;
 
             // getCookie function moved to top of paint() function for early access
             
