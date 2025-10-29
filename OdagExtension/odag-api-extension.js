@@ -1383,9 +1383,92 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const payload = buildResult.payload;
                         const rowEstResult = buildResult.rowEstResult;
 
+                        // CRITICAL VALIDATION: Check binding fields BEFORE sending to API (same as compact view)
+                        const cachedBindings = window['odagBindings_' + odagConfig.odagLinkId];
+
+                        if (cachedBindings && cachedBindings.length > 0) {
+                            debugLog('🔍 [Dynamic View] Validating binding fields before API call...');
+
+                            // Create a map of binding field values for quick lookup
+                            const bindingValueMap = new Map();
+                            for (const bindingField of payload.bindSelectionState) {
+                                bindingValueMap.set(
+                                    bindingField.selectionAppParamName,
+                                    bindingField.values || []
+                                );
+                            }
+
+                            // Check each binding individually based on its selectionStates
+                            const missingRequiredFields = [];
+                            const missingFieldDetails = [];
+
+                            for (const binding of cachedBindings) {
+                                const fieldName = binding.selectAppParamName || binding.selectionAppParamName;
+                                const selectionStates = binding.selectionStates || "SO";
+                                const fieldValues = bindingValueMap.get(fieldName) || [];
+
+                                // If mode is "S" (Selected only), values are REQUIRED
+                                if (selectionStates === "S") {
+                                    if (fieldValues.length === 0) {
+                                        debugLog('    ❌ [Dynamic View] Mode "S": No values found - REQUIRED!');
+                                        missingRequiredFields.push(fieldName);
+                                        missingFieldDetails.push({ field: fieldName, mode: selectionStates });
+                                    }
+                                }
+                            }
+
+                            // If there are missing required fields, alert user and stop
+                            if (missingRequiredFields.length > 0) {
+                                debugLog('❌ [Dynamic View] Missing required selections in fields:', missingRequiredFields);
+                                isGenerating = false;
+                                $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                $('#dynamic-status-' + layout.qInfo.qId).html(
+                                    getStatusHTML('error', 'Selection required - see alert for details')
+                                );
+
+                                // Build warning message (same logic as compact view)
+                                const fieldListBullets = missingFieldDetails.map(detail => {
+                                    let prefix = '';
+                                    if (detail.mode === 'S') {
+                                        prefix = '$(odags_' + detail.field + ')';
+                                    } else if (detail.mode === 'O') {
+                                        prefix = '$(odago_' + detail.field + ')';
+                                    } else {
+                                        prefix = '$(odag_' + detail.field + ')';
+                                    }
+                                    return '  • ' + detail.field + ' → ' + prefix + ' (mode: ' + detail.mode + ')';
+                                }).join('\n');
+
+                                const uniqueModes = [...new Set(missingFieldDetails.map(d => d.mode))];
+                                let explanationText = '';
+
+                                if (uniqueModes.length === 1 && uniqueModes[0] === 'S') {
+                                    explanationText = 'These fields are configured with "selected values only" mode (selectionStates: "S").\n' +
+                                                      'The template app uses variables like $(odags_FieldName) which expect selected values.';
+                                } else {
+                                    explanationText = 'These fields require selections based on their selectionStates configuration:\n' +
+                                                      '  • Mode "S"  = $(odags_Field) - Selected values only\n' +
+                                                      '  • Mode "O"  = $(odago_Field) - Optional values only\n' +
+                                                      '  • Mode "SO" = $(odag_Field)  - Selected + Optional values';
+                                }
+
+                                const warningMessage =
+                                    '⚠️ Selection Required\n\n' +
+                                    'The following fields require selections to generate the app:\n' +
+                                    fieldListBullets + '\n\n' +
+                                    explanationText + '\n\n' +
+                                    'Please make your selections and try again.';
+
+                                alert(warningMessage);
+                                return;
+                            }
+
+                            debugLog('✅ [Dynamic View] Binding validation passed: All required fields have values');
+                        }
+
                         // Check if generation is allowed based on row estimation
                         if (!rowEstResult.canGenerate) {
-                            $button.removeClass('loading').prop('disabled', false);
+                            isGenerating = false;
                             $('#cancel-btn-' + layout.qInfo.qId).hide();
                             alert(rowEstResult.message);
                             return;
