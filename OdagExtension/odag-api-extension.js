@@ -3928,35 +3928,67 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                     // CRITICAL VALIDATION: Check binding fields BEFORE sending to API
                     const cachedBindings = window['odagBindings_' + odagConfig.odagLinkId];
-                    let hasBindingValues = false;
 
                     if (cachedBindings && cachedBindings.length > 0) {
                         debugLog('🔍 Validating binding fields before API call...');
 
-                        // Check if any binding field has values
+                        // Create a map of binding field values for quick lookup
+                        const bindingValueMap = new Map();
                         for (const bindingField of payload.bindSelectionState) {
-                            if (bindingField.values && bindingField.values.length > 0) {
-                                hasBindingValues = true;
-                                debugLog('✅ Binding field', bindingField.selectionAppParamName, 'has', bindingField.values.length, 'values');
-                                break;
+                            bindingValueMap.set(
+                                bindingField.selectionAppParamName,
+                                bindingField.values || []
+                            );
+                        }
+
+                        // Check each binding individually based on its selectionStates
+                        const missingRequiredFields = [];
+
+                        for (const binding of cachedBindings) {
+                            const fieldName = binding.selectAppParamName || binding.selectionAppParamName;
+                            const selectionStates = binding.selectionStates || "SO";
+                            const fieldValues = bindingValueMap.get(fieldName) || [];
+
+                            debugLog('  🔍 Checking binding:', {
+                                field: fieldName,
+                                mode: selectionStates,
+                                valueCount: fieldValues.length
+                            });
+
+                            // If mode is "S" (Selected only), values are REQUIRED
+                            if (selectionStates === "S") {
+                                if (fieldValues.length === 0) {
+                                    debugLog('    ❌ Mode "S": No values found - REQUIRED!');
+                                    missingRequiredFields.push(fieldName);
+                                } else {
+                                    debugLog('    ✅ Mode "S": Has', fieldValues.length, 'values');
+                                }
+                            }
+                            // If mode is "O" (Optional only), values can be empty or filled
+                            else if (selectionStates === "O") {
+                                debugLog('    ℹ️ Mode "O": Optional values -', fieldValues.length, 'values found');
+                            }
+                            // If mode is "SO" or "OS" (Selected + Optional), values can be empty
+                            else if (selectionStates === "SO" || selectionStates === "OS") {
+                                debugLog('    ℹ️ Mode "SO/OS": Flexible -', fieldValues.length, 'values found');
+                            }
+                            // Unknown mode - treat as flexible
+                            else {
+                                debugLog('    ⚠️ Unknown mode "' + selectionStates + '" - treating as flexible');
                             }
                         }
 
-                        // If selectionStates is "S" (Selected only) and no selections, warn user
-                        if (!hasBindingValues) {
-                            const allBindingsAreS = cachedBindings.every(b => b.selectionStates === 'S');
+                        // If there are missing required fields, alert user
+                        if (missingRequiredFields.length > 0) {
+                            debugLog('❌ Missing required selections in fields:', missingRequiredFields);
+                            $button.removeClass('loading').prop('disabled', false);
 
-                            if (allBindingsAreS) {
-                                debugLog('❌ All bindings require selections (mode "S") but no selections found');
-                                $button.removeClass('loading').prop('disabled', false);
-
-                                const fieldNames = cachedBindings.map(b => b.selectAppParamName || b.selectionAppParamName).join(', ');
-                                alert('Please make selections in the following fields before generating:\n\n' + fieldNames);
-                                return;
-                            }
+                            const fieldList = missingRequiredFields.join(', ');
+                            alert('Please make selections in the following required fields before generating:\n\n' + fieldList + '\n\n(These fields require selections because they are configured with selectionStates: "S")');
+                            return;
                         }
 
-                        debugLog('✅ Binding validation passed:', hasBindingValues ? 'Has values' : 'No values but allowed');
+                        debugLog('✅ Binding validation passed: All required fields have values');
                     }
 
                     // Check if generation is allowed based on row estimation
