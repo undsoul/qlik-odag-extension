@@ -1517,8 +1517,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 debugLog('❌ [Dynamic View] Missing required selections in fields:', missingRequiredFields);
                                 isGenerating = false;
                                 $('#cancel-btn-' + layout.qInfo.qId).hide();
+
+                                // Short message for dynamic view status bar
+                                const fieldNames = missingRequiredFields.join(', ');
                                 $('#dynamic-status-' + layout.qInfo.qId).html(
-                                    getStatusHTML('error', 'Selection required - see alert for details')
+                                    getStatusHTML('error', 'Select: ' + fieldNames)
                                 );
 
                                 // Build warning message (same logic as compact view)
