@@ -3772,12 +3772,20 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 }
                             });
                         } else {
-                            const cancelUrl = tenantUrl + '/api/odag/v1/requests/' + requestId;
+                            // On-Premise uses PUT with query parameters (same as Cloud structure)
+                            const xrfkey = CONSTANTS.API.XRF_KEY;
+                            const cancelUrl = tenantUrl + '/api/odag/v1/requests/' + requestId +
+                                '?requestId=' + requestId +
+                                '&action=cancel' +
+                                '&ignoreSucceeded=true' +
+                                '&delGenApp=false' +
+                                '&autoAck=false' +
+                                '&xrfkey=' + xrfkey;
                             $.ajax({
                                 url: cancelUrl,
-                                type: 'DELETE',
+                                type: 'PUT',
                                 headers: {
-                                    'X-Qlik-XrfKey': CONSTANTS.API.XRF_KEY
+                                    'X-Qlik-XrfKey': xrfkey
                                 },
                                 xhrFields: {
                                     withCredentials: true
