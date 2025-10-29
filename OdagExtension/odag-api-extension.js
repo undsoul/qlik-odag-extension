@@ -3910,10 +3910,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     '&autoAck=true';
                                 debugLog('Delete cancelled app (Cloud):', deleteUrl);
                             } else {
-                                // On-Premise: use ackcancel with delGenApp=true
+                                // On-Premise: use cancel with delGenApp=true
                                 deleteUrl = tenantUrl + '/api/odag/v1/requests/' + requestId +
                                     '?requestId=' + requestId +
-                                    '&action=ackcancel' +
+                                    '&action=cancel' +
                                     '&ignoreSucceeded=true' +
                                     '&delGenApp=true' +
                                     '&autoAck=true' +
@@ -4554,7 +4554,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         } else {
                                             deleteUrl = tenantUrl + '/api/odag/v1/requests/' + app.requestId +
                                                 '?requestId=' + app.requestId +
-                                                '&action=ackcancel' +
+                                                '&action=cancel' +
                                                 '&ignoreSucceeded=true' +
                                                 '&delGenApp=true' +
                                                 '&autoAck=true' +
