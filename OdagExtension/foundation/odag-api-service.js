@@ -34,16 +34,6 @@ define(["jquery"], function($) {
         },
 
         /**
-         * Get cookie value by name
-         * @param {string} name - Cookie name
-         * @returns {string} Cookie value or empty string
-         */
-        _getCookie: function(name) {
-            const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
-            return match ? match[2] : '';
-        },
-
-        /**
          * Generic AJAX call wrapper with error handling
          * @param {string} method - HTTP method (GET, POST, DELETE, etc.)
          * @param {string} url - Full URL
@@ -61,15 +51,8 @@ define(["jquery"], function($) {
                 'Accept': 'application/json'
             };
 
-            // Add appropriate auth headers based on environment
-            if (isCloud) {
-                // Cloud: Add CSRF token from cookie
-                const csrfToken = this._getCookie('_csrfToken');
-                if (csrfToken) {
-                    baseHeaders['qlik-csrf-token'] = csrfToken;
-                }
-            } else {
-                // On-Premise: Add XRF key header
+            // Only add XRF key header for On-Premise
+            if (!isCloud) {
                 baseHeaders['X-Qlik-XrfKey'] = this.config.xrfKey;
             }
 
@@ -150,59 +133,6 @@ define(["jquery"], function($) {
         fetchAllLinks: function() {
             const endpoint = '/api/odag/v1/links';
             return this._call('GET', this._buildUrl(endpoint, 'pending=true'));
-        },
-
-        /**
-         * Fetch ODAG bindings (field mappings) for a link
-         * @param {string} odagLinkId - ODAG link identifier
-         * @param {string} appId - Current app ID (optional, will try to get from qlik.currApp())
-         * @returns {Promise} Array of bindings
-         */
-        fetchBindings: function(odagLinkId, appId) {
-            const self = this;
-            const isCloud = this.isCloud();
-
-            // Get app ID if not provided
-            if (!appId) {
-                try {
-                    const app = require('qlik').currApp();
-                    appId = app.id;
-                } catch (e) {
-                    console.warn('Could not get app ID for bindings fetch');
-                }
-            }
-
-            if (isCloud) {
-                // Cloud: POST to /api/v1/odaglinks/selAppLinkUsages with linkList
-                const endpoint = '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + (appId || '');
-                const payload = { linkList: [odagLinkId] };
-
-                return this._call('POST', this._buildUrl(endpoint), payload)
-                    .then(function(response) {
-                        // Cloud response: [{link: {bindings: [...], rowEstExpr, curRowEstHighBound}}]
-                        if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                            return response[0].link.bindings;
-                        }
-                        return [];
-                    })
-                    .catch(function(error) {
-                        console.error('Failed to fetch ODAG bindings (Cloud):', error);
-                        return [];
-                    });
-            } else {
-                // On-Premise: GET to /api/odag/v1/links/{id}
-                const endpoint = '/api/odag/v1/links/' + odagLinkId;
-
-                return this._call('GET', this._buildUrl(endpoint))
-                    .then(function(response) {
-                        // On-Premise response has bindings at root level
-                        return response.bindings || [];
-                    })
-                    .catch(function(error) {
-                        console.error('Failed to fetch ODAG bindings (On-Premise):', error);
-                        return [];
-                    });
-            }
         },
 
         /**
