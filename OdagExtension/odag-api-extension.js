@@ -3896,20 +3896,33 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 'Content-Type': 'application/json'
                               };
 
-                        // For cancelled apps in Cloud, use PUT with ackcancel action
+                        // For cancelled apps, use PUT with action parameter
                         // For other apps, use DELETE /app endpoint
                         let deleteUrl, deleteMethod;
 
-                        if (isCancelled && isCloud) {
-                            // Cancelled apps need ackcancel action
-                            deleteUrl = tenantUrl + '/api/v1/odagrequests/' + requestId +
-                                '?requestId=' + requestId +
-                                '&action=ackcancel' +
-                                '&ignoreSucceeded=true' +
-                                '&delGenApp=true' +
-                                '&autoAck=true';
+                        if (isCancelled) {
+                            // Cancelled apps need special action parameter
+                            if (isCloud) {
+                                // Cloud: use ackcancel
+                                deleteUrl = tenantUrl + '/api/v1/odagrequests/' + requestId +
+                                    '?requestId=' + requestId +
+                                    '&action=ackcancel' +
+                                    '&ignoreSucceeded=true' +
+                                    '&delGenApp=true' +
+                                    '&autoAck=true';
+                                debugLog('Delete cancelled app (Cloud):', deleteUrl);
+                            } else {
+                                // On-Premise: use cancel with delGenApp=true
+                                deleteUrl = tenantUrl + '/api/odag/v1/requests/' + requestId +
+                                    '?requestId=' + requestId +
+                                    '&action=cancel' +
+                                    '&ignoreSucceeded=true' +
+                                    '&delGenApp=true' +
+                                    '&autoAck=true' +
+                                    '&xrfkey=' + xrfkey;
+                                debugLog('Delete cancelled app (On-Premise):', deleteUrl);
+                            }
                             deleteMethod = 'PUT';
-                            debugLog('Delete cancelled app (Cloud):', deleteUrl);
                         } else {
                             // Normal delete for succeeded/failed apps
                             deleteUrl = (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + requestId + '/app?xrfkey=' + xrfkey;
