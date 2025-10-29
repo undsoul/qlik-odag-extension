@@ -136,6 +136,28 @@ define(["jquery"], function($) {
         },
 
         /**
+         * Fetch ODAG bindings (field mappings) for a link
+         * @param {string} odagLinkId - ODAG link identifier
+         * @returns {Promise} Array of bindings
+         */
+        fetchBindings: function(odagLinkId) {
+            const isCloud = this.isCloud();
+            const endpoint = isCloud
+                ? '/api/v1/odaglinks/' + odagLinkId + '/selAppLinkUsages'
+                : '/api/odag/v1/links/' + odagLinkId + '/selAppLinkUsages';
+
+            return this._call('GET', this._buildUrl(endpoint))
+                .then(function(response) {
+                    // Return the bindings array
+                    return response.bindings || response || [];
+                })
+                .catch(function(error) {
+                    console.error('Failed to fetch ODAG bindings:', error);
+                    return [];
+                });
+        },
+
+        /**
          * Fetch ODAG requests/apps for a link
          * @param {string} odagLinkId - ODAG link identifier
          * @param {boolean} pendingOnly - Only fetch pending requests
