@@ -2509,7 +2509,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     debugLog('📋 Full request object from API:', JSON.stringify(request, null, 2));
                                 }
 
-                                const currentStatus = request.state || 'pending';
+                                // Normalize API status (API returns "canceled" but we use "cancelled" internally)
+                                const rawStatus = request.state || 'pending';
+                                const currentStatus = rawStatus === 'canceled' ? 'cancelled' : rawStatus;
                                 const previousStatus = previousStatuses[request.id];
 
                                 // Detect if app just succeeded
