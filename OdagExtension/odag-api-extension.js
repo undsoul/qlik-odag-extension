@@ -3926,6 +3926,39 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     const payload = buildResult.payload;
                     const rowEstResult = buildResult.rowEstResult;
 
+                    // CRITICAL VALIDATION: Check binding fields BEFORE sending to API
+                    const cachedBindings = window['odagBindings_' + odagConfig.odagLinkId];
+                    let hasBindingValues = false;
+
+                    if (cachedBindings && cachedBindings.length > 0) {
+                        debugLog('🔍 Validating binding fields before API call...');
+
+                        // Check if any binding field has values
+                        for (const bindingField of payload.bindSelectionState) {
+                            if (bindingField.values && bindingField.values.length > 0) {
+                                hasBindingValues = true;
+                                debugLog('✅ Binding field', bindingField.selectionAppParamName, 'has', bindingField.values.length, 'values');
+                                break;
+                            }
+                        }
+
+                        // If selectionStates is "S" (Selected only) and no selections, warn user
+                        if (!hasBindingValues) {
+                            const allBindingsAreS = cachedBindings.every(b => b.selectionStates === 'S');
+
+                            if (allBindingsAreS) {
+                                debugLog('❌ All bindings require selections (mode "S") but no selections found');
+                                $button.removeClass('loading').prop('disabled', false);
+
+                                const fieldNames = cachedBindings.map(b => b.selectAppParamName || b.selectionAppParamName).join(', ');
+                                alert('Please make selections in the following fields before generating:\n\n' + fieldNames);
+                                return;
+                            }
+                        }
+
+                        debugLog('✅ Binding validation passed:', hasBindingValues ? 'Has values' : 'No values but allowed');
+                    }
+
                     // Check if generation is allowed based on row estimation
                     if (!rowEstResult.canGenerate) {
                         $button.removeClass('loading').prop('disabled', false);
