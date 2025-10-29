@@ -1518,10 +1518,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 isGenerating = false;
                                 $('#cancel-btn-' + layout.qInfo.qId).hide();
 
-                                // Very short message for dynamic view status bar
+                                // Short message for dynamic view status bar
                                 const fieldNames = missingRequiredFields.join(', ');
                                 $('#dynamic-status-' + layout.qInfo.qId).html(
-                                    getStatusHTML('error', fieldNames)
+                                    getStatusHTML('error', 'Select: ' + fieldNames)
                                 );
 
                                 // Build warning message (same logic as compact view)
@@ -3870,6 +3870,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         // Mark as being deleted
                         window.odagDeletingRequests.add(requestId);
 
+                        // Get app status to determine delete method
+                        const appStatus = window.odagGeneratedApps[appIndex].status;
+                        const isCancelled = appStatus === 'cancelled';
+
                         // Delete ODAG app via API
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
                         const isCloud = window.qlikEnvironment === 'cloud';
@@ -3883,12 +3887,30 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 'Content-Type': 'application/json'
                               };
 
-                        const deleteUrl = (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + requestId + '/app?xrfkey=' + xrfkey;
-                        debugLog('Delete API call:', {url: deleteUrl, headers: deleteHeaders, isCloud: isCloud});
+                        // For cancelled apps in Cloud, use PUT with ackcancel action
+                        // For other apps, use DELETE /app endpoint
+                        let deleteUrl, deleteMethod;
+
+                        if (isCancelled && isCloud) {
+                            // Cancelled apps need ackcancel action
+                            deleteUrl = tenantUrl + '/api/v1/odagrequests/' + requestId +
+                                '?requestId=' + requestId +
+                                '&action=ackcancel' +
+                                '&ignoreSucceeded=true' +
+                                '&delGenApp=true' +
+                                '&autoAck=true';
+                            deleteMethod = 'PUT';
+                            debugLog('Delete cancelled app (Cloud):', deleteUrl);
+                        } else {
+                            // Normal delete for succeeded/failed apps
+                            deleteUrl = (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + requestId + '/app?xrfkey=' + xrfkey;
+                            deleteMethod = 'DELETE';
+                            debugLog('Delete app (standard):', deleteUrl);
+                        }
 
                         $.ajax({
                             url: deleteUrl,
-                            type: 'DELETE',
+                            type: deleteMethod,
                             headers: deleteHeaders,
                             xhrFields: {
                                 withCredentials: true
