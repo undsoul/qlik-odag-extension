@@ -199,9 +199,9 @@ Map Qlik variables to ODAG template fields:
 
 **Finding Your ODAG Link ID:**
 
-📹 **Video Tutorial**: [How to find ODAG Link ID](https://github.com/undsoul/qlik-odag-extension/blob/main/How-to.mov)
+📹 **Video Tutorial**: 
 
-<img width="500" height="500" alt="Finding ODAG Link ID in Qlik Cloud" src="https://github.com/user-attachments/assets/264351a2-0282-4f5f-b00b-0683e95c64c6" />
+https://github.com/user-attachments/assets/4f45d056-6867-48f9-b034-4c41f87c5cd5
 
 **Steps:**
 1. Go to **Management Console** → **Data** → **ODAG Links**
@@ -783,8 +783,6 @@ This is a **community-developed extension** and is not officially supported by Q
 
 ## 📚 Additional Documentation
 
-- [V5_ENHANCEMENTS.md](V5_ENHANCEMENTS.md) - Complete V5 changelog with technical details
-- [V5_SUMMARY.md](V5_SUMMARY.md) - Architecture overview and design decisions
 - [LICENSE](LICENSE) - MIT License full text
 
 ---
