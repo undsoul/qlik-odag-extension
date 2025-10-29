@@ -1167,6 +1167,42 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // Real-time validation check function - runs on every paint/selection change
             const checkODAGValidation = async function() {
                 try {
+                    // First check binding validation
+                    const cachedBindings = window['odagBindings_' + odagConfig.odagLinkId];
+                    let bindingValidationPassed = true;
+                    let bindingErrorMessage = '';
+
+                    if (cachedBindings && cachedBindings.length > 0) {
+                        const buildResult = await buildPayload(app, odagConfig, layout);
+                        const payload = buildResult.payload;
+
+                        // Create a map of binding field values
+                        const bindingValueMap = new Map();
+                        for (const bindingField of payload.bindSelectionState) {
+                            bindingValueMap.set(
+                                bindingField.selectionAppParamName,
+                                bindingField.values || []
+                            );
+                        }
+
+                        // Check for missing required fields
+                        const missingFields = [];
+                        for (const binding of cachedBindings) {
+                            const fieldName = binding.selectAppParamName || binding.selectionAppParamName;
+                            const selectionStates = binding.selectionStates || "SO";
+                            const fieldValues = bindingValueMap.get(fieldName) || [];
+
+                            if (selectionStates === "S" && fieldValues.length === 0) {
+                                missingFields.push(fieldName);
+                            }
+                        }
+
+                        if (missingFields.length > 0) {
+                            bindingValidationPassed = false;
+                            bindingErrorMessage = 'Selection required in: ' + missingFields.join(', ');
+                        }
+                    }
+
                     const rowEstResult = await calculateRowEstimation(app, odagConfig.odagLinkId);
                     const $statusDiv = $('#validation-status-' + layout.qInfo.qId);
 
@@ -1178,10 +1214,31 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     debugLog('🔍 Validation check:', {
                         isDynamicView: isDynamicView,
                         buttonCount: $generateBtn.length,
+                        bindingValidationPassed: bindingValidationPassed,
                         rowEstResult: rowEstResult
                     });
 
-                    if (!rowEstResult.canGenerate) {
+                    // Check both validations
+                    if (!bindingValidationPassed) {
+                        // BLOCK: Binding validation failed
+                        if (isDynamicView) {
+                            $generateBtn.hide();
+                        } else {
+                            $generateBtn.prop('disabled', true).css({
+                                'opacity': '0.5',
+                                'cursor': 'not-allowed',
+                                'pointer-events': 'none'
+                            });
+                        }
+
+                        $statusDiv.show().css({
+                            'background': '#fff3cd',
+                            'border': '1px solid #ffc107',
+                            'color': '#856404'
+                        }).html('⚠️ <strong>' + bindingErrorMessage + '</strong> (Click Generate for details)');
+
+                        debugLog('🚫 ODAG binding validation FAILED:', bindingErrorMessage);
+                    } else if (!rowEstResult.canGenerate) {
                         // BLOCK: Hide/disable button and show error
                         if (isDynamicView) {
                             // In Dynamic View: HIDE Refresh button when validation fails
