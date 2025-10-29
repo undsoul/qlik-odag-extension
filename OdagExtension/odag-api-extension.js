@@ -3983,8 +3983,19 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('❌ Missing required selections in fields:', missingRequiredFields);
                             $button.removeClass('loading').prop('disabled', false);
 
-                            const fieldList = missingRequiredFields.join(', ');
-                            alert('Please make selections in the following required fields before generating:\n\n' + fieldList + '\n\n(These fields require selections because they are configured with selectionStates: "S")');
+                            // Build clear, informative warning message
+                            const fieldListBullets = missingRequiredFields.map(f => '  • ' + f).join('\n');
+                            const variableExamples = missingRequiredFields.map(f => '$(odags_' + f + ') or $(odag_' + f + ')').join(', ');
+
+                            const warningMessage =
+                                '⚠️ Selection Required\n\n' +
+                                'The following fields require selections to generate the app:\n' +
+                                fieldListBullets + '\n\n' +
+                                'These fields are configured with "selected values only" mode (selectionStates: "S").\n' +
+                                'The template app variable ' + variableExamples + ' expects selected values.\n\n' +
+                                'Please make your selections and try again.';
+
+                            alert(warningMessage);
                             return;
                         }
 
