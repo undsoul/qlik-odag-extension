@@ -12,9 +12,10 @@ define([
     "../foundation/odag-ui-builder",
     "../foundation/odag-error-handler",
     "../foundation/odag-state-manager",
+    "../foundation/odag-payload-builder",
     "./odag-form-view",
     "./odag-toolbar-manager"
-], function(qlik, $, ApiService, UIBuilder, ErrorHandler, StateManager, FormView, ToolbarManager) {
+], function(qlik, $, ApiService, UIBuilder, ErrorHandler, StateManager, PayloadBuilder, FormView, ToolbarManager) {
     'use strict';
 
     const AppListView = {

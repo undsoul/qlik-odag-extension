@@ -12,8 +12,9 @@ define([
     "../foundation/odag-ui-builder",
     "../foundation/odag-error-handler",
     "../foundation/odag-state-manager",
+    "../foundation/odag-payload-builder",
     "./odag-toolbar-manager"
-], function(qlik, $, ApiService, UIBuilder, ErrorHandler, StateManager, ToolbarManager) {
+], function(qlik, $, ApiService, UIBuilder, ErrorHandler, StateManager, PayloadBuilder, ToolbarManager) {
     'use strict';
 
     const DynamicView = {
@@ -109,36 +110,71 @@ define([
         },
 
         /**
-         * Generate new ODAG app
+         * Generate new ODAG app with validation
          * @param {Object} odagConfig - ODAG configuration
          * @param {Object} app - Qlik app instance
-         * @returns {Promise} Promise resolving to generated app
+         * @param {Object} layout - Extension layout
+         * @returns {Promise} Promise resolving to generated app or validation error
          */
-        generateApp: function(odagConfig, app) {
+        generateApp: async function(odagConfig, app, layout) {
             const self = this;
 
-            // Build payload (similar to FormView)
-            const payload = this.buildPayload(app, odagConfig);
+            try {
+                // Build payload with validation
+                const buildResult = await this.buildPayload(app, odagConfig, layout);
 
-            return ApiService.createRequest(odagConfig.odagLinkId, payload)
-                .then(function(response) {
-                    // Poll for completion
-                    return self.pollForCompletion(response.id || response.requestId, odagConfig);
-                });
+                // Check validation
+                if (!buildResult.validation.valid) {
+                    return Promise.reject({
+                        validation: buildResult.validation,
+                        message: buildResult.validation.shortMessage
+                    });
+                }
+
+                // Check row estimation
+                if (!buildResult.rowEstResult.canGenerate) {
+                    return Promise.reject({
+                        message: buildResult.rowEstResult.message
+                    });
+                }
+
+                // Call ODAG API
+                const response = await ApiService.createRequest(odagConfig.odagLinkId, buildResult.payload);
+
+                // Poll for completion
+                return await self.pollForCompletion(response.id || response.requestId, odagConfig);
+
+            } catch (error) {
+                console.error('Error generating app:', error);
+                throw error;
+            }
         },
 
         /**
-         * Build ODAG request payload
+         * Build ODAG request payload with selectionStates support
          * @param {Object} app - Qlik app instance
          * @param {Object} odagConfig - ODAG configuration
-         * @returns {Object} Request payload
+         * @param {Object} layout - Extension layout
+         * @returns {Promise<Object>} Request payload with validation
          */
-        buildPayload: function(app, odagConfig) {
-            // Simplified payload - in real implementation would get actual selections
-            return {
-                selectionState: '',
-                userSelections: []
-            };
+        buildPayload: async function(app, odagConfig, layout) {
+            const debugLog = odagConfig.enableDebug ? console.log.bind(console, '[ODAG DynamicView]') : function() {};
+
+            try {
+                const result = await PayloadBuilder.buildPayload(app, odagConfig, layout, debugLog);
+
+                // Validate bindings
+                const validation = PayloadBuilder.validateBindings(result.payload, odagConfig.odagLinkId, debugLog);
+
+                return {
+                    payload: result.payload,
+                    rowEstResult: result.rowEstResult,
+                    validation: validation
+                };
+            } catch (error) {
+                console.error('Error building payload:', error);
+                throw error;
+            }
         },
 
         /**

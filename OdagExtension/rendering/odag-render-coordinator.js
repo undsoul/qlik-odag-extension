@@ -12,8 +12,9 @@ define([
     "../foundation/odag-validators",
     "../foundation/odag-error-handler",
     "../foundation/odag-state-manager",
-    "../foundation/odag-ui-builder"
-], function(qlik, $, CONSTANTS, Validators, ErrorHandler, StateManager, UIBuilder) {
+    "../foundation/odag-ui-builder",
+    "../foundation/odag-payload-builder"
+], function(qlik, $, CONSTANTS, Validators, ErrorHandler, StateManager, UIBuilder, PayloadBuilder) {
     'use strict';
 
     /**

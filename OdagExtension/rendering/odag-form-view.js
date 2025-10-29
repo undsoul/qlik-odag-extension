@@ -12,8 +12,9 @@ define([
     "../foundation/odag-ui-builder",
     "../foundation/odag-error-handler",
     "../foundation/odag-validators",
-    "../foundation/odag-state-manager"
-], function(qlik, $, ApiService, UIBuilder, ErrorHandler, Validators, StateManager) {
+    "../foundation/odag-state-manager",
+    "../foundation/odag-payload-builder"
+], function(qlik, $, ApiService, UIBuilder, ErrorHandler, Validators, StateManager, PayloadBuilder) {
     'use strict';
 
     const FormView = {
