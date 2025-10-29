@@ -1518,10 +1518,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 isGenerating = false;
                                 $('#cancel-btn-' + layout.qInfo.qId).hide();
 
-                                // Short message for dynamic view status bar
+                                // Very short message for dynamic view status bar
                                 const fieldNames = missingRequiredFields.join(', ');
                                 $('#dynamic-status-' + layout.qInfo.qId).html(
-                                    getStatusHTML('error', 'Select: ' + fieldNames)
+                                    getStatusHTML('error', fieldNames)
                                 );
 
                                 // Build warning message (same logic as compact view)
