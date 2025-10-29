@@ -2,10 +2,10 @@
     "name": "ODAG Extension w/Variable Support",
     "description": "Generate On-Demand Apps with variable support and dynamic field mapping",
     "type": "visualization",
-    "version": "5.0.0-beta",
+    "version": "5.0.0",
     "icon": "extension",
-    "author": "MuchachoAI",
-    "homepage": "",
+    "author": "Önder Altınbilek",
+    "homepage": "https://github.com/undsoul/qlik-odag-extension",
     "keywords": [
         "qlik-sense",
         "odag",
@@ -19,7 +19,7 @@
         "qlik-sense": ">=3.2.x"
     },
     "support": {
-        "email": "support@yourcompany.com"
+        "email": "onderaltinbilek@bitechnology.com"
     },
     "preview": "preview.png",
     "supportsSnapshot": false,
