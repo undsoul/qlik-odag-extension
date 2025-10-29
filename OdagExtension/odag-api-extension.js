@@ -3943,6 +3943,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                         // Check each binding individually based on its selectionStates
                         const missingRequiredFields = [];
+                        const missingFieldDetails = []; // Store field name + selectionStates for better messaging
 
                         for (const binding of cachedBindings) {
                             const fieldName = binding.selectAppParamName || binding.selectionAppParamName;
@@ -3960,6 +3961,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 if (fieldValues.length === 0) {
                                     debugLog('    ❌ Mode "S": No values found - REQUIRED!');
                                     missingRequiredFields.push(fieldName);
+                                    missingFieldDetails.push({ field: fieldName, mode: selectionStates });
                                 } else {
                                     debugLog('    ✅ Mode "S": Has', fieldValues.length, 'values');
                                 }
@@ -3983,16 +3985,48 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('❌ Missing required selections in fields:', missingRequiredFields);
                             $button.removeClass('loading').prop('disabled', false);
 
-                            // Build clear, informative warning message
-                            const fieldListBullets = missingRequiredFields.map(f => '  • ' + f).join('\n');
-                            const variableExamples = missingRequiredFields.map(f => '$(odags_' + f + ') or $(odag_' + f + ')').join(', ');
+                            // Build clear, informative warning message with dynamic prefixes
+                            const fieldListBullets = missingFieldDetails.map(detail => {
+                                // Determine the correct variable prefix based on selectionStates
+                                let prefix = '';
+                                let modeDescription = '';
+
+                                if (detail.mode === 'S') {
+                                    prefix = '$(odags_' + detail.field + ')';
+                                    modeDescription = '"selected values only"';
+                                } else if (detail.mode === 'O') {
+                                    prefix = '$(odago_' + detail.field + ')';
+                                    modeDescription = '"optional values only"';
+                                } else if (detail.mode === 'SO' || detail.mode === 'OS') {
+                                    prefix = '$(odag_' + detail.field + ')';
+                                    modeDescription = '"selected + optional values"';
+                                } else {
+                                    prefix = '$(odag_' + detail.field + ')';
+                                    modeDescription = 'mode "' + detail.mode + '"';
+                                }
+
+                                return '  • ' + detail.field + ' → ' + prefix + ' (mode: ' + detail.mode + ')';
+                            }).join('\n');
+
+                            // Build explanation text based on modes
+                            let explanationText = '';
+                            const uniqueModes = [...new Set(missingFieldDetails.map(d => d.mode))];
+
+                            if (uniqueModes.length === 1 && uniqueModes[0] === 'S') {
+                                explanationText = 'These fields are configured with "selected values only" mode (selectionStates: "S").\n' +
+                                                  'The template app uses variables like $(odags_FieldName) which expect selected values.';
+                            } else {
+                                explanationText = 'These fields require selections based on their selectionStates configuration:\n' +
+                                                  '  • Mode "S"  = $(odags_Field) - Selected values only\n' +
+                                                  '  • Mode "O"  = $(odago_Field) - Optional values only\n' +
+                                                  '  • Mode "SO" = $(odag_Field)  - Selected + Optional values';
+                            }
 
                             const warningMessage =
                                 '⚠️ Selection Required\n\n' +
                                 'The following fields require selections to generate the app:\n' +
                                 fieldListBullets + '\n\n' +
-                                'These fields are configured with "selected values only" mode (selectionStates: "S").\n' +
-                                'The template app variable ' + variableExamples + ' expects selected values.\n\n' +
+                                explanationText + '\n\n' +
                                 'Please make your selections and try again.';
 
                             alert(warningMessage);
