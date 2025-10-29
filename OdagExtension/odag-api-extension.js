@@ -148,7 +148,7 @@ function(
                     if (!window[bindingsCacheKey]) {
                         debugLog('📡 Fetching ODAG bindings for:', odagConfig.odagLinkId);
 
-                        ApiService.fetchBindings(odagConfig.odagLinkId)
+                        ApiService.fetchBindings(odagConfig.odagLinkId, app.id)
                             .then(function(bindings) {
                                 window[bindingsCacheKey] = bindings;
                                 debugLog('✅ Cached ODAG bindings:', bindings.length, 'fields');

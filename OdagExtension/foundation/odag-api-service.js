@@ -138,23 +138,54 @@ define(["jquery"], function($) {
         /**
          * Fetch ODAG bindings (field mappings) for a link
          * @param {string} odagLinkId - ODAG link identifier
+         * @param {string} appId - Current app ID (optional, will try to get from qlik.currApp())
          * @returns {Promise} Array of bindings
          */
-        fetchBindings: function(odagLinkId) {
+        fetchBindings: function(odagLinkId, appId) {
+            const self = this;
             const isCloud = this.isCloud();
-            const endpoint = isCloud
-                ? '/api/v1/odaglinks/' + odagLinkId + '/selAppLinkUsages'
-                : '/api/odag/v1/links/' + odagLinkId + '/selAppLinkUsages';
 
-            return this._call('GET', this._buildUrl(endpoint))
-                .then(function(response) {
-                    // Return the bindings array
-                    return response.bindings || response || [];
-                })
-                .catch(function(error) {
-                    console.error('Failed to fetch ODAG bindings:', error);
-                    return [];
-                });
+            // Get app ID if not provided
+            if (!appId) {
+                try {
+                    const app = require('qlik').currApp();
+                    appId = app.id;
+                } catch (e) {
+                    console.warn('Could not get app ID for bindings fetch');
+                }
+            }
+
+            if (isCloud) {
+                // Cloud: POST to /api/v1/odaglinks/selAppLinkUsages with linkList
+                const endpoint = '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + (appId || '');
+                const payload = { linkList: [odagLinkId] };
+
+                return this._call('POST', this._buildUrl(endpoint), payload)
+                    .then(function(response) {
+                        // Cloud response: [{link: {bindings: [...], rowEstExpr, curRowEstHighBound}}]
+                        if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                            return response[0].link.bindings;
+                        }
+                        return [];
+                    })
+                    .catch(function(error) {
+                        console.error('Failed to fetch ODAG bindings (Cloud):', error);
+                        return [];
+                    });
+            } else {
+                // On-Premise: GET to /api/odag/v1/links/{id}
+                const endpoint = '/api/odag/v1/links/' + odagLinkId;
+
+                return this._call('GET', this._buildUrl(endpoint))
+                    .then(function(response) {
+                        // On-Premise response has bindings at root level
+                        return response.bindings || [];
+                    })
+                    .catch(function(error) {
+                        console.error('Failed to fetch ODAG bindings (On-Premise):', error);
+                        return [];
+                    });
+            }
         },
 
         /**
