@@ -113,8 +113,8 @@ Import extension from the QMC
 ---
 
 ## ⚙️ Configuration
-https://github.com/undsoul/qlik-odag-extension/blob/main/How-to.mov
 
+https://github.com/undsoul/qlik-odag-extension/blob/main/How-to.mov
 <img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/264351a2-0282-4f5f-b00b-0683e95c64c6" />
 
 ### 1. ODAG Link Setup
