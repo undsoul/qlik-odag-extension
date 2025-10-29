@@ -34,6 +34,16 @@ define(["jquery"], function($) {
         },
 
         /**
+         * Get cookie value by name
+         * @param {string} name - Cookie name
+         * @returns {string} Cookie value or empty string
+         */
+        _getCookie: function(name) {
+            const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+            return match ? match[2] : '';
+        },
+
+        /**
          * Generic AJAX call wrapper with error handling
          * @param {string} method - HTTP method (GET, POST, DELETE, etc.)
          * @param {string} url - Full URL
@@ -51,8 +61,15 @@ define(["jquery"], function($) {
                 'Accept': 'application/json'
             };
 
-            // Only add XRF key header for On-Premise
-            if (!isCloud) {
+            // Add appropriate auth headers based on environment
+            if (isCloud) {
+                // Cloud: Add CSRF token from cookie
+                const csrfToken = this._getCookie('_csrfToken');
+                if (csrfToken) {
+                    baseHeaders['qlik-csrf-token'] = csrfToken;
+                }
+            } else {
+                // On-Premise: Add XRF key header
                 baseHeaders['X-Qlik-XrfKey'] = this.config.xrfKey;
             }
 
