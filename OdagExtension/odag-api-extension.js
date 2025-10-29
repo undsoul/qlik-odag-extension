@@ -2569,15 +2569,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 window.odagRefreshInterval = CleanupManager.addInterval(setInterval(function() {
                     if (odagConfig.odagLinkId && !isDynamicView) {
                         // Check if there are any non-final status apps
+                        // Final statuses: succeeded, failed, cancelled
                         const hasPending = window.odagGeneratedApps &&
                             window.odagGeneratedApps.some(app => {
-                                const isPending = app.status === 'pending' ||
-                                    app.status === 'queued' ||
-                                    app.status === 'loading' ||
-                                    app.status === 'generating' ||
-                                    app.status === 'validating' ||
-                                    !app.status ||
-                                    (app.status !== 'succeeded' && app.status !== 'failed');
+                                const finalStatuses = ['succeeded', 'failed', 'cancelled'];
+                                const isPending = !app.status || !finalStatuses.includes(app.status);
                                 return isPending;
                             });
 
