@@ -3362,8 +3362,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             listHtml += '</span>';
                         } else {
                             const statusIcon = app.status === 'succeeded' ? '✓' :
-                                             app.status === 'failed' ? '❌' : '⚠';
-                            const statusText = app.status === 'succeeded' ? 'Ready' : app.status;
+                                             app.status === 'failed' ? '❌' :
+                                             app.status === 'cancelled' ? '⏹' : '⚠';
+                            const statusText = app.status === 'succeeded' ? 'Ready' :
+                                             app.status === 'cancelled' ? 'Cancelled' : app.status;
                             listHtml += '<span class="app-status status-' + app.status + '">' + statusIcon + ' ' + statusText + '</span>';
                         }
                     }
@@ -3379,10 +3381,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         app.status === 'loading' || app.status === 'generating' ||
                         app.status === 'validating') {
                         listHtml += '<div class="menu-item cancel-app"><span class="menu-icon">⏹️</span> Cancel generation</div>';
-                    } else {
+                    } else if (app.status === 'succeeded') {
+                        // Only succeeded apps can be opened
                         listHtml += '<div class="menu-item open-app"><span class="menu-icon">🔗</span> Open in new tab</div>';
                         listHtml += '<div class="menu-item reload-app"><span class="menu-icon">🔄</span> Reload data</div>';
                     }
+                    // All apps (succeeded, failed, cancelled) can be deleted
 
                     listHtml += '<div class="menu-item delete-app"><span class="menu-icon">🗑️</span> Delete app</div>';
                     listHtml += '</div>';
@@ -3753,9 +3757,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 },
                                 success: function(result) {
                                     debugLog('Generation cancelled successfully (Cloud)');
-                                    // Remove from list
-                                    window.odagGeneratedApps.splice(appIndex, 1);
+                                    // Update status to 'cancelled' instead of removing
+                                    window.odagGeneratedApps[appIndex].status = 'cancelled';
                                     updateAppsList(qId);
+                                    showNotification('Generation cancelled', 'success');
                                 },
                                 error: function(xhr) {
                                     console.error('Failed to cancel generation:', xhr.responseText);
@@ -3775,9 +3780,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 },
                                 success: function(result) {
                                     debugLog('Generation cancelled successfully (On-Premise)');
-                                    // Remove from list
-                                    window.odagGeneratedApps.splice(appIndex, 1);
+                                    // Update status to 'cancelled' instead of removing
+                                    window.odagGeneratedApps[appIndex].status = 'cancelled';
                                     updateAppsList(qId);
+                                    showNotification('Generation cancelled', 'success');
                                 },
                                 error: function(xhr) {
                                     console.error('Failed to cancel generation:', xhr.responseText);
