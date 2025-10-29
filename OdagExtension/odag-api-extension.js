@@ -1247,14 +1247,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             });
                         }
 
-                        // Show full detailed message in status div
+                        // Show message in status div - SHORT for dynamic view, FULL for list view
+                        const messageToShow = isDynamicView ? bindingErrorMessageShort : bindingErrorMessageFull;
                         $statusDiv.show().css({
                             'background': '#fff3cd',
                             'border': '1px solid #ffc107',
                             'color': '#856404',
                             'padding': '12px',
                             'line-height': '1.5'
-                        }).html(bindingErrorMessageFull);
+                        }).html(messageToShow);
 
                         debugLog('🚫 ODAG binding validation FAILED:', bindingErrorMessageShort);
                     } else if (!rowEstResult.canGenerate) {
