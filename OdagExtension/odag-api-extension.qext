@@ -4,7 +4,7 @@
     "type": "visualization",
     "version": "5.0.0",
     "icon": "extension",
-    "author": "Önder Altınbilek",
+    "author": "MuchachoAI",
     "homepage": "https://github.com/undsoul/qlik-odag-extension",
     "keywords": [
         "qlik-sense",
