@@ -3886,6 +3886,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const isCloud = window.qlikEnvironment === 'cloud';
                         const xrfkey = CONSTANTS.API.XRF_KEY;
 
+                        debugLog('Delete app - Environment:', window.qlikEnvironment, '| isCloud:', isCloud, '| isCancelled:', isCancelled, '| status:', appStatus);
+
                         // Build headers for Cloud vs On-Premise
                         const deleteHeaders = isCloud
                             ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
