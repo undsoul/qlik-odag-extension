@@ -4536,10 +4536,38 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     // Mark as being deleted
                                     window.odagDeletingRequests.add(app.requestId);
 
-                                    // Build proper URL and headers based on environment
-                                    const deleteUrl = (isCloud
-                                        ? tenantUrl + '/api/v1/odagrequests/'
-                                        : tenantUrl + '/api/odag/v1/requests/') + app.requestId + '/app?xrfkey=' + xrfkey;
+                                    // Check if app is cancelled
+                                    const isCancelled = app.status === 'cancelled';
+
+                                    // Build proper URL, method and headers based on status and environment
+                                    let deleteUrl, deleteMethod;
+
+                                    if (isCancelled) {
+                                        // Cancelled apps need special action parameter
+                                        if (isCloud) {
+                                            deleteUrl = tenantUrl + '/api/v1/odagrequests/' + app.requestId +
+                                                '?requestId=' + app.requestId +
+                                                '&action=ackcancel' +
+                                                '&ignoreSucceeded=true' +
+                                                '&delGenApp=true' +
+                                                '&autoAck=true';
+                                        } else {
+                                            deleteUrl = tenantUrl + '/api/odag/v1/requests/' + app.requestId +
+                                                '?requestId=' + app.requestId +
+                                                '&action=cancel' +
+                                                '&ignoreSucceeded=true' +
+                                                '&delGenApp=true' +
+                                                '&autoAck=true' +
+                                                '&xrfkey=' + xrfkey;
+                                        }
+                                        deleteMethod = 'PUT';
+                                    } else {
+                                        // Normal delete for succeeded/failed apps
+                                        deleteUrl = (isCloud
+                                            ? tenantUrl + '/api/v1/odagrequests/'
+                                            : tenantUrl + '/api/odag/v1/requests/') + app.requestId + '/app?xrfkey=' + xrfkey;
+                                        deleteMethod = 'DELETE';
+                                    }
 
                                     const deleteHeaders = isCloud
                                         ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
@@ -4550,7 +4578,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                                     $.ajax({
                                         url: deleteUrl,
-                                        type: 'DELETE',
+                                        type: deleteMethod,
                                         headers: deleteHeaders,
                                         xhrFields: {
                                             withCredentials: true
