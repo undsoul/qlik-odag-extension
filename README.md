@@ -117,14 +117,35 @@ Import extension from the QMC
 ### 1. ODAG Link Setup
 
 #### **Qlik Cloud** (Manual Entry)
-- Enter your ODAG Link ID (24-character hex string)
-- Example: `6901cd6e65b3db1f1a54bf3c`
-- Find it in Management Console → ODAG Links
+
+**Finding Your ODAG Link ID:**
+
+📹 **Video Tutorial**: [How to find ODAG Link ID](https://github.com/undsoul/qlik-odag-extension/blob/main/How-to.mov)
+
+<img width="500" height="500" alt="Finding ODAG Link ID in Qlik Cloud" src="https://github.com/user-attachments/assets/264351a2-0282-4f5f-b00b-0683e95c64c6" />
+
+**Steps:**
+1. Go to **Management Console** → **Data** → **ODAG Links**
+2. Find your ODAG link and click to open
+3. Copy the **Link ID** from the URL (24-character hex string)
+4. Paste it into the extension's **ODAG Link ID** field
+
+**Example Link ID**: `6901cd6e65b3db1f1a54bf3c`
+
+**URL Format**:
+```
+https://your-tenant.qlikcloud.com/console/odag-links/{LINK-ID}
+                                                        ↑
+                                                Copy this part
+```
 
 #### **On-Premise** (Dropdown Selector)
-- Extension automatically fetches all available ODAG links
-- Select from searchable dropdown
+
+**Automatic Link Selection:**
+- Extension automatically fetches all available ODAG links from your environment
+- Select from searchable dropdown in property panel
 - Shows link name and template app for easy identification
+- No manual ID entry required
 
 ### 2. View Mode Selection
 
