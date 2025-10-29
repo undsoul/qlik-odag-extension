@@ -1170,7 +1170,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     // First check binding validation
                     const cachedBindings = window['odagBindings_' + odagConfig.odagLinkId];
                     let bindingValidationPassed = true;
-                    let bindingErrorMessage = '';
+                    let bindingErrorMessageShort = '';
+                    let bindingErrorMessageFull = '';
 
                     if (cachedBindings && cachedBindings.length > 0) {
                         const buildResult = await buildPayload(app, odagConfig, layout);
@@ -1185,8 +1186,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             );
                         }
 
-                        // Check for missing required fields
+                        // Check for missing required fields with details
                         const missingFields = [];
+                        const missingFieldDetails = [];
                         for (const binding of cachedBindings) {
                             const fieldName = binding.selectAppParamName || binding.selectionAppParamName;
                             const selectionStates = binding.selectionStates || "SO";
@@ -1194,12 +1196,26 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                             if (selectionStates === "S" && fieldValues.length === 0) {
                                 missingFields.push(fieldName);
+                                missingFieldDetails.push({ field: fieldName, mode: selectionStates });
                             }
                         }
 
                         if (missingFields.length > 0) {
                             bindingValidationPassed = false;
-                            bindingErrorMessage = 'Selection required in: ' + missingFields.join(', ');
+                            bindingErrorMessageShort = 'Selection required in: ' + missingFields.join(', ');
+
+                            // Build full detailed message for status div
+                            const fieldListHTML = missingFieldDetails.map(detail => {
+                                const prefix = detail.mode === 'S' ? '$(odags_' + detail.field + ')' : '$(odag_' + detail.field + ')';
+                                return '<div style="margin: 4px 0; padding-left: 8px;">• <strong>' + detail.field + '</strong> → ' + prefix + '</div>';
+                            }).join('');
+
+                            bindingErrorMessageFull =
+                                '<div style="margin-bottom: 8px;"><strong>⚠️ Selection Required</strong></div>' +
+                                '<div style="margin-bottom: 8px;">The following fields require selections to generate the app:</div>' +
+                                fieldListHTML +
+                                '<div style="margin-top: 8px; font-size: 0.9em; opacity: 0.9;">These fields use "selected values only" mode (selectionStates: "S"). ' +
+                                'The template app expects selected values in variables like $(odags_FieldName).</div>';
                         }
                     }
 
@@ -1231,13 +1247,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             });
                         }
 
+                        // Show full detailed message in status div
                         $statusDiv.show().css({
                             'background': '#fff3cd',
                             'border': '1px solid #ffc107',
-                            'color': '#856404'
-                        }).html('⚠️ <strong>' + bindingErrorMessage + '</strong> (Click Generate for details)');
+                            'color': '#856404',
+                            'padding': '12px',
+                            'line-height': '1.5'
+                        }).html(bindingErrorMessageFull);
 
-                        debugLog('🚫 ODAG binding validation FAILED:', bindingErrorMessage);
+                        debugLog('🚫 ODAG binding validation FAILED:', bindingErrorMessageShort);
                     } else if (!rowEstResult.canGenerate) {
                         // BLOCK: Hide/disable button and show error
                         if (isDynamicView) {
@@ -1528,14 +1547,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                       '  • Mode "SO" = $(odag_Field)  - Selected + Optional values';
                                 }
 
-                                const warningMessage =
-                                    '⚠️ Selection Required\n\n' +
-                                    'The following fields require selections to generate the app:\n' +
-                                    fieldListBullets + '\n\n' +
-                                    explanationText + '\n\n' +
-                                    'Please make your selections and try again.';
-
-                                alert(warningMessage);
+                                // No need for alert - dynamic status already shows detailed message
+                                // Status bar shows: "Selection required - see alert for details"
+                                // But actually the real-time validation will show full details
+                                debugLog('[Dynamic View] Validation failed - shown in status, no alert needed');
                                 return;
                             }
 
@@ -4184,14 +4199,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                   '  • Mode "SO" = $(odag_Field)  - Selected + Optional values';
                             }
 
-                            const warningMessage =
-                                '⚠️ Selection Required\n\n' +
-                                'The following fields require selections to generate the app:\n' +
-                                fieldListBullets + '\n\n' +
-                                explanationText + '\n\n' +
-                                'Please make your selections and try again.';
-
-                            alert(warningMessage);
+                            // No need for alert - validation status already shows detailed message
+                            // User can see the full explanation in the yellow warning box above
+                            debugLog('Validation failed - message shown in status div, no alert needed');
                             return;
                         }
 
