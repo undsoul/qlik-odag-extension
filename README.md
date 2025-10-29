@@ -89,26 +89,105 @@ Map Qlik variables to ODAG template fields:
 ## 📦 Installation
 
 ### Qlik Sense Desktop
-```bash
-# Copy extension folder to:
-Documents/Qlik/Sense/Extensions/OdagExtension/
-```
 
-### Qlik Sense Server (On-Premise)
-Import extension from the QMC
-```
+**Manual Installation:**
+1. Download the extension ZIP file from [GitHub Releases](https://github.com/undsoul/qlik-odag-extension/releases)
+2. Extract the ZIP file
+3. Copy the `OdagExtension` folder to:
+   ```
+   Documents/Qlik/Sense/Extensions/
+   ```
+4. Restart Qlik Sense Desktop
+5. The extension will appear in the visualization panel
+
+### Qlik Sense Enterprise (On-Premise)
+
+**Import via QMC (Qlik Management Console):**
+
+1. **Prepare Extension Package:**
+   - Download the extension ZIP file from [GitHub Releases](https://github.com/undsoul/qlik-odag-extension/releases)
+   - Keep the ZIP file as-is (do not extract)
+
+2. **Access QMC:**
+   - Open your browser and navigate to Qlik Management Console
+   - URL format: `https://your-server/qmc`
+   - Log in with administrator credentials
+
+3. **Import Extension:**
+   - In QMC, go to **Extensions** (under "Manage Resources" section)
+   - Click **Import** button at the bottom
+   - Click **Choose File** and select the extension ZIP file
+   - Click **Import** to upload
+
+4. **Verify Installation:**
+   - The extension should appear in the extensions list
+   - Status should show as "Available"
+   - Note: No need to manually copy files to server directories
+
+5. **Apply to Apps:**
+   - Open any Qlik Sense app in Hub
+   - Enter edit mode
+   - The extension will appear in the visualization panel under "Custom objects"
+
+**Important Notes:**
+- You need QMC administrator access to import extensions
+- The extension will be available to all users once imported
+- No server restart required after import
 
 ### Qlik Cloud
-1. Go to **Management Console** → **Extensions**
-2. Click **Add** → Upload extension ZIP file
-3. Enable the extension for your spaces
-4. **Important**: Add `cdn.jsdelivr.net` to Content Security Policy (CSP) settings
 
-### Post-Installation
-1. Restart Qlik Sense or refresh your browser
-2. Open any Qlik Sense app
-3. Enter edit mode → Add visualization
-4. Find **"ODAG API Extension"** in the Custom Objects section
+**Import via Management Console:**
+
+1. **Prepare Extension:**
+   - Download the extension ZIP file from [GitHub Releases](https://github.com/undsoul/qlik-odag-extension/releases)
+   - Keep the ZIP file as-is (do not extract)
+
+2. **Access Management Console:**
+   - Go to **Management Console** → **Extensions**
+   - Click **Add** button
+
+3. **Upload Extension:**
+   - Click **Browse** or drag and drop the ZIP file
+   - Click **Upload**
+   - The extension will be validated automatically
+
+4. **Enable for Spaces:**
+   - After upload, click on the extension
+   - Click **Add to spaces**
+   - Select the spaces where you want to use the extension
+   - Click **Add**
+
+5. **Configure CSP (Critical):**
+   - Go to **Management Console** → **Settings** → **Content Security Policy**
+   - Add `cdn.jsdelivr.net` to the allowed domains list
+   - This is required for the embed functionality to work
+   - Click **Save**
+
+6. **Use in Apps:**
+   - Open any app in an enabled space
+   - Enter edit mode → Add visualization
+   - Find **"ODAG API Extension"** under Custom Objects
+
+**Important Notes:**
+- You need tenant admin access to import extensions
+- CSP configuration is mandatory for Cloud - extension won't work without it
+- Extension must be explicitly enabled for each space
+
+### Post-Installation Verification
+
+**For All Platforms:**
+1. Open any Qlik Sense app
+2. Enter edit mode (Edit button)
+3. Click **+** to add a new visualization
+4. Look for **"ODAG API Extension"** in the Custom Objects section
+5. If you see it, installation was successful! ✅
+
+**Troubleshooting:**
+- **Extension not appearing?**
+  - Desktop: Check folder path is correct
+  - Enterprise: Verify import completed in QMC
+  - Cloud: Verify extension is added to your current space
+- **Embed not loading in Cloud?** Check CSP settings include `cdn.jsdelivr.net`
 
 ---
 
