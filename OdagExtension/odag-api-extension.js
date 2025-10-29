@@ -1438,6 +1438,18 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     // Show cancel button
                     $('#cancel-btn-' + layout.qInfo.qId).show().css('display', 'flex');
 
+                    // Safety timeout: Clear loading state after 60 seconds if stuck
+                    const safetyTimeoutId = setTimeout(function() {
+                        if (isGenerating) {
+                            debugLog('⏱️ Safety timeout: Clearing stuck loading state after 60s');
+                            isGenerating = false;
+                            $('#cancel-btn-' + layout.qInfo.qId).hide();
+                            $('#dynamic-status-' + layout.qInfo.qId).html(
+                                getStatusHTML('error', 'Generation timed out. Please try again.')
+                            );
+                        }
+                    }, 60000); // 60 seconds
+
                     // Store the old request ID to delete later
                     const oldRequestId = previousRequestId;
 
@@ -1644,7 +1656,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         );
                         $('#cancel-btn-' + layout.qInfo.qId).hide();
                     } finally {
+                        // Always clear loading state and safety timeout
                         isGenerating = false;
+                        clearTimeout(safetyTimeoutId);
+                        debugLog('✅ [Dynamic View] Generation complete, loading state cleared');
                     }
                 };
 
