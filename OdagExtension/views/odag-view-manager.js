@@ -2,7 +2,7 @@
  * ODAG View Manager
  * Manages app list views, status monitoring, and UI updates
  *
- * @version 5.0.0
+ * @version 6.0.0
  */
 
 define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {

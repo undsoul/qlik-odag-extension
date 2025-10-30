@@ -2,7 +2,7 @@
  * ODAG State Manager
  * Manages extension state without polluting global window namespace
  *
- * @version 5.0.0-beta
+ * @version 6.0.0
  */
 
 define([], function() {

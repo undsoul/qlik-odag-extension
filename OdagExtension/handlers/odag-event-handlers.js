@@ -2,7 +2,7 @@
  * ODAG Event Handlers
  * Manages all user interaction handlers (buttons, clicks, etc.)
  *
- * @version 5.0.0
+ * @version 6.0.0
  */
 
 define([

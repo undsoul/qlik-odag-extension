@@ -2,7 +2,7 @@
  * ODAG Payload Builder
  * Core business logic for building ODAG request payloads and making API calls
  *
- * @version 5.0.0
+ * @version 6.0.0
  */
 
 define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CONSTANTS) {
