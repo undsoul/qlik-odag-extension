@@ -2848,7 +2848,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 
                 // Setup all app item action handlers using EventHandlers module
                 EventHandlers.setupAppMenuHandler($listContainer);
-                EventHandlers.setupAppItemHandlers($listContainer, qId, updateAppsList, showNotification, debugLog, getCookie);
+                EventHandlers.setupAppItemHandlers($listContainer, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
             };
 
             // Set updateAppsList on ViewManager context now that it's defined

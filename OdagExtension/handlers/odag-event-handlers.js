@@ -25,8 +25,9 @@ define([
          * @param {Function} showNotification - Notification function
          * @param {Function} debugLog - Debug logging function
          * @param {Function} getCookie - Cookie getter function
+         * @param {Function} checkODAGValidation - Validation check callback (optional)
          */
-        setupAppItemHandlers: function($listContainer, qId, updateAppsList, showNotification, debugLog, getCookie) {
+        setupAppItemHandlers: function($listContainer, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation) {
             const self = this;
 
             // Open app handler
@@ -115,7 +116,7 @@ define([
                 debugLog('User confirmation result:', confirmed);
 
                 if (confirmed) {
-                    self._deleteApp(requestId, appIndex, qId, updateAppsList, showNotification, debugLog, getCookie);
+                    self._deleteApp(requestId, appIndex, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
                 } else {
                     debugLog('Delete cancelled by user');
                 }
@@ -589,7 +590,7 @@ define([
          * Delete single app
          * @private
          */
-        _deleteApp: function(requestId, appIndex, qId, updateAppsList, showNotification, debugLog, getCookie) {
+        _deleteApp: function(requestId, appIndex, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation) {
             debugLog('Starting delete request for:', requestId);
             // Mark as being deleted
             window.odagDeletingRequests.add(requestId);
@@ -659,6 +660,12 @@ define([
 
                     // Hide iframe if this app was being viewed
                     $('#iframe-container-' + qId).hide();
+
+                    // Re-run validation to check if generate button should be re-enabled
+                    if (checkODAGValidation) {
+                        debugLog('Re-running validation after app deletion');
+                        checkODAGValidation();
+                    }
                 },
                 error: function(xhr) {
                     // Remove from deleting set on error (unless it's 404, which means already deleted)
@@ -671,6 +678,12 @@ define([
                         // Remove from our local array too
                         window.odagGeneratedApps.splice(appIndex, 1);
                         updateAppsList(qId);
+
+                        // Re-run validation to check if generate button should be re-enabled
+                        if (checkODAGValidation) {
+                            debugLog('Re-running validation after app deletion (404)');
+                            checkODAGValidation();
+                        }
                     } else {
                         showNotification('Failed to delete app: ' + xhr.status + ' ' + xhr.statusText, 'error');
                         console.error('Delete failed:', xhr.responseText);
