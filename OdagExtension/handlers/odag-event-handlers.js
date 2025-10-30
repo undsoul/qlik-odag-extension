@@ -81,8 +81,9 @@ define([
                 e.stopPropagation();
                 const requestId = $(this).closest('.odag-app-item').data('request-id');
                 const $item = $(this).closest('.odag-app-item');
+                const appIndex = $(this).closest('.odag-app-item').data('app-index');
 
-                self._reloadApp(requestId, $item, showNotification, getCookie);
+                self._reloadApp(requestId, appIndex, qId, $item, updateAppsList, showNotification, debugLog, getCookie);
 
                 $(this).closest('.app-menu-dropdown').hide();
             });
@@ -561,7 +562,7 @@ define([
          * Reload app
          * @private
          */
-        _reloadApp: function(requestId, $item, showNotification, getCookie) {
+        _reloadApp: function(requestId, appIndex, qId, $item, updateAppsList, showNotification, debugLog, getCookie) {
             const tenantUrl = window.qlikTenantUrl || window.location.origin;
             const isCloud = window.qlikEnvironment === 'cloud';
 
@@ -583,9 +584,60 @@ define([
                 success: function(result) {
                     showNotification('App reload started successfully!', 'success');
                     $item.addClass('reloading');
+
+                    debugLog('Reload started, polling for updated timestamp...');
+
+                    // Poll for updated request data to get new timestamp
+                    const pollInterval = setInterval(function() {
+                        const xrfkey = CONSTANTS.API.XRF_KEY;
+                        const requestUrl = isCloud
+                            ? tenantUrl + '/api/v1/odagrequests/' + requestId
+                            : tenantUrl + '/api/odag/v1/requests/' + requestId + '?xrfkey=' + xrfkey;
+
+                        $.ajax({
+                            url: requestUrl,
+                            type: 'GET',
+                            headers: isCloud ? {
+                                'Accept': 'application/json',
+                                'qlik-csrf-token': getCookie('_csrfToken') || ''
+                            } : {
+                                'Accept': 'application/json',
+                                'X-Qlik-XrfKey': xrfkey
+                            },
+                            xhrFields: { withCredentials: true },
+                            success: function(requestData) {
+                                // Update the app entry with new modifiedDate
+                                if (window.odagGeneratedApps && window.odagGeneratedApps[appIndex]) {
+                                    const oldDate = window.odagGeneratedApps[appIndex].created;
+                                    const newDate = requestData.modifiedDate || requestData.createdDate;
+
+                                    if (newDate && newDate !== oldDate) {
+                                        debugLog('Updating app timestamp:', {
+                                            old: oldDate,
+                                            new: newDate
+                                        });
+
+                                        window.odagGeneratedApps[appIndex].created = newDate;
+                                        updateAppsList(qId);
+
+                                        // Stop polling once we get the updated timestamp
+                                        clearInterval(pollInterval);
+                                        $item.removeClass('reloading');
+                                        showNotification('App reloaded and timestamp updated!', 'success');
+                                    }
+                                }
+                            },
+                            error: function() {
+                                debugLog('Error polling for request data');
+                            }
+                        });
+                    }, 2000); // Poll every 2 seconds
+
+                    // Stop polling after 30 seconds max
                     setTimeout(function() {
+                        clearInterval(pollInterval);
                         $item.removeClass('reloading');
-                    }, 5000);
+                    }, 30000);
                 },
                 error: function(xhr) {
                     showNotification('Failed to reload app', 'error');
