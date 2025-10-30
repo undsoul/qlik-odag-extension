@@ -2284,13 +2284,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             // Load existing ODAG requests from API on init
             // Use ViewManager module for loading existing requests
-            const loadExistingRequests = ViewManager.createLoadExistingRequests({
+            const viewManagerContext = {
                 odagConfig: odagConfig,
                 debugLog: debugLog,
                 $element: $element,
                 layout: layout,
                 updateAppsList: null // Will be set after updateAppsList is defined
-            });
+            };
+            const loadExistingRequests = ViewManager.createLoadExistingRequests(viewManagerContext);
             
             // Use ViewManager module for status monitoring
             const startStatusMonitoring = ViewManager.createStartStatusMonitoring({
@@ -2802,7 +2803,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 EventHandlers.setupAppMenuHandler($listContainer);
                 EventHandlers.setupAppItemHandlers($listContainer, qId, updateAppsList, showNotification, debugLog, getCookie);
             };
-            
+
+            // Set updateAppsList on ViewManager context now that it's defined
+            viewManagerContext.updateAppsList = updateAppsList;
+
             // Main generate function
             const generateODAGApp = async function() {
                 console.log('⚡ generateODAGApp() called', {

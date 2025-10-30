@@ -20,7 +20,7 @@ define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
          * @returns {Function} loadExistingRequests function
          */
         createLoadExistingRequests: function(context) {
-            const { odagConfig, debugLog, $element, layout, updateAppsList } = context;
+            const { odagConfig, debugLog, $element, layout } = context;
 
             return async function() {
                 if (!odagConfig.odagLinkId) {
@@ -179,7 +179,10 @@ define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
                                 });
                             });
 
-                            updateAppsList(layout.qInfo.qId);
+                            // Access updateAppsList from context (allows it to be set after initialization)
+                            if (context.updateAppsList) {
+                                context.updateAppsList(layout.qInfo.qId);
+                            }
 
                             // Auto-click the newly succeeded app to show it
                             if (newlySucceededApp && newlySucceededApp.appId) {
