@@ -1607,7 +1607,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                             }
                                         }
                                     });
-                                }, 3000));
+                                }, 3000);
                             }
 
                             // Store for next refresh
