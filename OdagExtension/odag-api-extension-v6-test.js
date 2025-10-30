@@ -1422,12 +1422,47 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         }
                     }, 60000); // 60 seconds
 
-                    // Store ALL old request IDs to delete later (not just the previous one)
-                    const oldRequestIds = (window.odagGeneratedApps || [])
-                        .map(app => app.requestId)
-                        .filter(id => id); // Remove any null/undefined IDs
-
                     try {
+                        // Fetch ALL existing apps from API to get their request IDs for deletion
+                        // This is critical for Dynamic View because window.odagGeneratedApps is not used
+                        const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                        const xrfkey = CONSTANTS.API.XRF_KEY;
+                        const apiUrl = isCloud
+                            ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
+                            : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
+
+                        const existingApps = await new Promise(function(resolve, reject) {
+                            $.ajax({
+                                url: apiUrl,
+                                type: 'GET',
+                                headers: isCloud ? {
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json'
+                                } : {
+                                    'Accept': 'application/json',
+                                    'Content-Type': 'application/json',
+                                    'X-Qlik-XrfKey': xrfkey
+                                },
+                                xhrFields: { withCredentials: true },
+                                success: function(result) {
+                                    resolve(result || []);
+                                },
+                                error: function() {
+                                    resolve([]); // If fetch fails, continue with empty array
+                                }
+                            });
+                        });
+
+                        // Extract request IDs from existing apps
+                        const oldRequestIds = existingApps
+                            .map(app => app.id)
+                            .filter(id => id);
+
+                        debugLog('Fetched existing apps before generation:', {
+                            count: oldRequestIds.length,
+                            requestIds: oldRequestIds
+                        });
+
                         // Build payload with current selections
                         const buildResult = await buildPayload(app, odagConfig, layout);
                         const payload = buildResult.payload;
