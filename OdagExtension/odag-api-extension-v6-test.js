@@ -1552,7 +1552,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 debugLog('Will delete ' + oldRequestIds.length + ' old app(s) after new one is ready:', oldRequestIds);
 
                                 // Wait and check periodically if new app is ready
-                                const deleteCheckInterval = CleanupManager.addInterval(setInterval(function() {
+                                // NOTE: Do NOT add to CleanupManager - we want this to survive paint() calls
+                                const deleteCheckInterval = setInterval(function() {
                                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
                                     const statusUrl = (isCloud
                                         ? tenantUrl + '/api/v1/odagrequests/'
