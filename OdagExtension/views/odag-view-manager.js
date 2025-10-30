@@ -8,6 +8,8 @@
 define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
     'use strict';
 
+    console.log('🔄 ODAG View Manager v6.0.0 LOADED - Fix applied');
+
     /**
      * ODAG View Manager Module
      * Handles all view-related functionality for app lists and status monitoring
