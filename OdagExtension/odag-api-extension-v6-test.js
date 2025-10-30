@@ -1795,18 +1795,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                             getStatusHTML('succeeded', latestAppName, false)
                                         );
 
-                                        // Keep top bar visible for 10 seconds after successful generation
-                                        // so user can see the completion status
-                                        const showTopBarFunc = StateManager.get(extensionId, 'showDynamicTopBar');
-                                        if (showTopBarFunc) {
-                                            showTopBarFunc(false); // Keep visible
-                                            // Then enable auto-hide after 10 seconds
-                                            setTimeout(function() {
-                                                const showTopBarFunc2 = StateManager.get(extensionId, 'showDynamicTopBar');
-                                                if (showTopBarFunc2) {
-                                                    showTopBarFunc2(true);
-                                                }
-                                            }, CONSTANTS.TIMING.TOP_BAR_HIDE_AFTER_COMPLETE_MS);
+                                        // Hide top bar immediately after successful generation
+                                        // It will re-appear when user changes selections
+                                        const hideTopBarFunc = StateManager.get(extensionId, 'hideDynamicTopBar');
+                                        if (hideTopBarFunc) {
+                                            hideTopBarFunc();
+                                            debugLog('✅ Top bar hidden after successful generation');
                                         }
 
                                         // Store the selection state from this app as baseline (if not already set)
@@ -2328,8 +2322,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
                 };
 
-                // Make showTopBar accessible via StateManager for status updates
+                // Make showTopBar and hideTopBar accessible via StateManager
                 StateManager.set(extensionId, 'showDynamicTopBar', showTopBar);
+                StateManager.set(extensionId, 'hideDynamicTopBar', hideTopBar);
 
                 // Show initially with auto-hide
                 showTopBar(true);
