@@ -1422,8 +1422,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         }
                     }, 60000); // 60 seconds
 
-                    // Store the old request ID to delete later
-                    const oldRequestId = previousRequestId;
+                    // Store ALL old request IDs to delete later (not just the previous one)
+                    const oldRequestIds = (window.odagGeneratedApps || [])
+                        .map(app => app.requestId)
+                        .filter(id => id); // Remove any null/undefined IDs
 
                     try {
                         // Build payload with current selections
@@ -1537,16 +1539,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('Dynamic View - New ODAG app generation started:', {
                                 newRequestId: odagData.id,
                                 appName: odagData.generatedAppName,
-                                oldRequestId: oldRequestId,
+                                oldRequestIds: oldRequestIds,
+                                oldAppsCount: oldRequestIds.length,
                                 currentSelections: payload
                             });
 
                             // Clear the current latestAppId so we detect the new one properly
                             latestAppId = null;
 
-                            // Delete the old app AFTER new one is ready
-                            if (oldRequestId && oldRequestId !== odagData.id && !deletedApps.has(oldRequestId)) {
-                                debugLog('Will delete old app after new one is ready:', oldRequestId);
+                            // Delete ALL old apps AFTER new one is ready
+                            if (oldRequestIds.length > 0) {
+                                debugLog('Will delete ' + oldRequestIds.length + ' old app(s) after new one is ready:', oldRequestIds);
 
                                 // Wait and check periodically if new app is ready
                                 const deleteCheckInterval = CleanupManager.addInterval(setInterval(function() {
@@ -1563,8 +1566,13 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                             if (newStatus && newStatus.state === 'succeeded') {
                                                 clearInterval(deleteCheckInterval);
 
-                                                // Check again before deleting
-                                                if (!deletedApps.has(oldRequestId)) {
+                                                // Delete all old apps
+                                                oldRequestIds.forEach(function(oldRequestId) {
+                                                    // Skip if it's the new app or already deleted
+                                                    if (oldRequestId === odagData.id || deletedApps.has(oldRequestId)) {
+                                                        return;
+                                                    }
+
                                                     // Mark as deleted before making the request
                                                     deletedApps.add(oldRequestId);
 
@@ -1594,7 +1602,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                             }
                                                         }
                                                     });
-                                                }
+                                                });
                                             }
                                         }
                                     });
