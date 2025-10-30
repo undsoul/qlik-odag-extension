@@ -153,8 +153,9 @@ define([
          * @param {Function} showNotification - Notification function
          * @param {Function} debugLog - Debug logging function
          * @param {Function} getCookie - Cookie getter function
+         * @param {Function} checkODAGValidation - Validation check callback (optional)
          */
-        setupDeleteAllHandler: function($element, layout, updateAppsList, showNotification, debugLog, getCookie) {
+        setupDeleteAllHandler: function($element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation) {
             const self = this;
 
             $element.find('.delete-all-btn').on('click', function() {
@@ -284,6 +285,12 @@ define([
 
                         // Update the UI
                         updateAppsList(layout.qInfo.qId);
+
+                        // Re-run validation to check if generate button should be re-enabled
+                        if (checkODAGValidation) {
+                            debugLog('Re-running validation after deleting all apps');
+                            checkODAGValidation();
+                        }
 
                         // Reset button
                         $btn.prop('disabled', false);

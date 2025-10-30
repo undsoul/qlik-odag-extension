@@ -3347,7 +3347,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 });
 
                 // Setup delete all button handler
-                EventHandlers.setupDeleteAllHandler($element, layout, updateAppsList, showNotification, debugLog, getCookie);
+                EventHandlers.setupDeleteAllHandler($element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
 
                 // Mobile dropdown selector handler
                 $element.find('.mobile-app-selector').on('change', function() {
