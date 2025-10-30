@@ -170,7 +170,7 @@ define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
                                     debugLog('App just succeeded:', newlySucceededApp);
                                 }
 
-                                window.odagGeneratedApps.push({
+                                const appEntry = {
                                     requestId: request.id,
                                     appId: generatedAppId,  // This is the actual generated app ID (extracted from object)
                                     templateAppId: request.templateApp || '', // Template app ID
@@ -178,7 +178,15 @@ define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
                                     created: request.createdDate,
                                     status: currentStatus,
                                     owner: request.owner?.name || 'Unknown'
+                                };
+
+                                debugLog('📅 Adding app to list:', {
+                                    name: appName,
+                                    createdDate: request.createdDate,
+                                    formatted: new Date(request.createdDate).toLocaleString()
                                 });
+
+                                window.odagGeneratedApps.push(appEntry);
                             });
 
                             // Access updateAppsList from context (allows it to be set after initialization)
