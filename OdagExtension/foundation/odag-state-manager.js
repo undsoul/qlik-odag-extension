@@ -11,7 +11,7 @@ define([], function() {
     /**
      * State Manager
      * Replaces window[dynamicKey] pattern with proper state management
-     * v5: Enhanced with timers, observers, and better cleanup
+     * v6: Enhanced with timers, observers, and better cleanup
      */
     const ODAGStateManager = {
 

@@ -445,15 +445,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 return b.selectAppParamName || b.selectionAppParamName || b.fieldName || b.name;
                             }).filter(function(name) { return name; });
 
-                            // Save to layout using backendApi
-                            if (fieldNames.length > 0) {
+                            // Save to layout using backendApi (only in edit mode)
+                            if (fieldNames.length > 0 && isEditMode) {
                                 app.getObject(layout.qInfo.qId).then(function(model) {
                                     model.getProperties().then(function(props) {
                                         // Preserve all existing properties
                                         if (props.odagConfig) {
                                             props.odagConfig._cachedBindingFields = fieldNames.join(', ');
                                         }
-                                        model.setProperties(props);
+                                        model.setProperties(props).catch(function(err) {
+                                            debugLog('Could not save bindings to layout (expected in published apps):', err.message);
+                                        });
                                         debugLog('✅ Saved bindings to layout:', fieldNames.join(', '));
                                     });
                                 });
@@ -474,7 +476,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         delete window[bindingsFetchingKey];
                     }
                 });
-            } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey] && !isEditMode) {
+            } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
                 // Set fetching flag to prevent duplicate requests
                 window[bindingsFetchingKey] = true;
                 // On-Premise: Fetch bindings from ODAG link details
@@ -518,6 +520,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             window[bindingsCacheKey] = bindings;
                             debugLog('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
                             debugLog('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
+
+                            // Cache full link data (including properties like genAppLimit) for On-Premise
+                            const linkDataCacheKey = 'odagLinkData_' + odagConfig.odagLinkId;
+                            window[linkDataCacheKey] = linkDetails.objectDef || linkDetails;
+                            debugLog('✅ [PAINT] On-Premise full link data cached for app limit validation');
 
                             // Cache row estimation config from ODAG link (On-Premise)
                             const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
@@ -563,15 +570,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 return b.selectAppParamName || b.selectionAppParamName || b.fieldName || b.name;
                             }).filter(function(name) { return name; });
 
-                            // Save to layout using backendApi
-                            if (fieldNames.length > 0) {
+                            // Save to layout using backendApi (only in edit mode)
+                            if (fieldNames.length > 0 && isEditMode) {
                                 app.getObject(layout.qInfo.qId).then(function(model) {
                                     model.getProperties().then(function(props) {
                                         // Preserve all existing properties
                                         if (props.odagConfig) {
                                             props.odagConfig._cachedBindingFields = fieldNames.join(', ');
                                         }
-                                        model.setProperties(props);
+                                        model.setProperties(props).catch(function(err) {
+                                            debugLog('Could not save bindings to layout (expected in published apps):', err.message);
+                                        });
                                         debugLog('✅ Saved bindings to layout:', fieldNames.join(', '));
                                     });
                                 });
@@ -1174,18 +1183,31 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     let appLimitReached = false;
                     let appLimit = null;
 
+                    debugLog('🔍 Checking app limit - linkData:', linkData);
+                    debugLog('🔍 linkData.properties:', linkData?.properties);
+                    debugLog('🔍 linkData.properties.genAppLimit:', linkData?.properties?.genAppLimit);
+
                     if (linkData && linkData.properties && linkData.properties.genAppLimit) {
                         // Get the limit from properties (usually first context applies)
                         const limitConfig = linkData.properties.genAppLimit[0];
+                        debugLog('🔍 genAppLimit config:', limitConfig);
                         if (limitConfig && limitConfig.limit) {
                             appLimit = limitConfig.limit;
                             const currentAppCount = window.odagGeneratedApps ? window.odagGeneratedApps.length : 0;
+
+                            debugLog('🔍 App limit check:', {
+                                appLimit: appLimit,
+                                currentAppCount: currentAppCount,
+                                willBlock: currentAppCount >= appLimit
+                            });
 
                             if (currentAppCount >= appLimit) {
                                 appLimitReached = true;
                                 debugLog('🚫 App limit reached:', currentAppCount + '/' + appLimit);
                             }
                         }
+                    } else {
+                        debugLog('⚠️ App limit not configured or not found in link data');
                     }
 
                     if (!bindingValidationPassed) {
@@ -1468,6 +1490,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const payload = buildResult.payload;
                         const rowEstResult = buildResult.rowEstResult;
 
+                        // Also get current variable values to store for change detection
+                        const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+
                         // CRITICAL VALIDATION: Check binding fields BEFORE sending to API (same as compact view)
                         const cachedBindings = window['odagBindings_' + odagConfig.odagLinkId];
 
@@ -1558,8 +1583,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             return;
                         }
 
-                        // Store this payload to compare for future selection changes
+                        // Store this payload AND variable state to compare for future selection changes
                         lastGeneratedPayload = payload;
+                        lastGeneratedPayload.variableState = currentVariableValues;
 
                         // Remove warning class from refresh button
                         $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
@@ -1795,14 +1821,6 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                             getStatusHTML('succeeded', latestAppName, false)
                                         );
 
-                                        // Hide top bar immediately after successful generation
-                                        // It will re-appear when user changes selections
-                                        const hideTopBarFunc = StateManager.get(extensionId, 'hideDynamicTopBar');
-                                        if (hideTopBarFunc) {
-                                            hideTopBarFunc();
-                                            debugLog('✅ Top bar hidden after successful generation');
-                                        }
-
                                         // Store the selection state from this app as baseline (if not already set)
                                         if (!lastGeneratedPayload && latestApp.bindSelectionState) {
                                             lastGeneratedPayload = {
@@ -1816,6 +1834,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         if (isNewApp) {
                                             debugLog('New ODAG app detected, refreshing embed:', appId);
                                             loadDynamicEmbed(appId, latestAppName);
+
+                                            // Hide top bar immediately after successful generation of NEW app
+                                            // It will re-appear when user changes selections
+                                            const hideTopBarFunc = StateManager.get(extensionId, 'hideDynamicTopBar');
+                                            if (hideTopBarFunc) {
+                                                hideTopBarFunc();
+                                                debugLog('✅ Top bar hidden after successful generation');
+                                            }
                                         } else {
                                             debugLog('Same app already loaded, skipping refresh:', appId);
                                         }
@@ -2140,29 +2166,40 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     if (!lastGeneratedPayload) return; // No previous payload to compare
 
                     try {
-                        // Lightweight check: just compare current selections, not full payload
+                        // Check both selections AND variables
                         const currentSelections = await getCurrentSelections(app);
-                        const currentSelStr = JSON.stringify(currentSelections);
-                        const lastSelStr = JSON.stringify(lastGeneratedPayload.selectionState);
+                        const currentVariables = await getVariableValues(app, odagConfig.variableMappings || []);
 
-                        debugLog('Checking selections changed:', currentSelStr !== lastSelStr);
+                        // Combine selections and variables for comparison
+                        const currentState = {
+                            selections: currentSelections,
+                            variables: currentVariables
+                        };
+                        const lastState = {
+                            selections: lastGeneratedPayload.selectionState,
+                            variables: lastGeneratedPayload.variableState || []
+                        };
 
-                        if (currentSelStr !== lastSelStr) {
-                            // Selections changed - highlight refresh button
+                        const currentStateStr = JSON.stringify(currentState);
+                        const lastStateStr = JSON.stringify(lastState);
+
+                        const hasChanged = currentStateStr !== lastStateStr;
+                        debugLog('Checking state changed (selections + variables):', hasChanged);
+
+                        if (hasChanged) {
+                            // State changed - highlight refresh button
                             $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
 
-                            // If top bar was manually closed, show it now with the warning
-                            if (topBarManuallyClosed) {
-                                debugLog('🔔 Selections changed - showing top bar with refresh warning');
-                                topBarManuallyClosed = false; // Reset flag
-                                showTopBar(false, true); // Show without auto-hide, force show for warning
-                            }
+                            // Show top bar with warning (always show when state changes)
+                            debugLog('🔔 State changed (selections or variables) - showing top bar with refresh warning');
+                            topBarManuallyClosed = false; // Reset flag
+                            showTopBar(false, true); // Show without auto-hide, force show for warning
                         } else {
-                            // Selections same - remove highlight
+                            // State same - remove highlight
                             $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
                         }
                     } catch (error) {
-                        debugLog('Error checking selections:', error);
+                        debugLog('Error checking state changes:', error);
                     }
                 };
 
@@ -2170,8 +2207,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 StateManager.set(extensionId, 'checkSelectionsChanged', checkSelectionsChanged);
 
                 // Listen for selection changes using selection state subscription
+                // This also triggers when variables change (Qlik treats variable changes as selection changes)
                 app.selectionState().OnData.bind(function() {
-                    debugLog('Selection state changed - checking...');
+                    debugLog('Selection state changed (includes variable changes) - checking...');
                     checkSelectionsChanged();
                 });
 

@@ -82,7 +82,12 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
 
                 await enigmaApp.destroySessionObject(listObj.id);
             } catch (error) {
-                console.error('Error getting optional values for field', fieldName, ':', error);
+                // Handle "Access denied" errors in published apps gracefully
+                if (error.code === 5 || error.message?.includes('Access denied')) {
+                    console.warn('Access denied when getting optional values for', fieldName, '(published app). Returning empty values.');
+                } else {
+                    console.error('Error getting optional values for field', fieldName, ':', error);
+                }
             }
 
             return values;
@@ -130,7 +135,12 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
 
                 await enigmaApp.destroySessionObject(listObj.id);
             } catch (error) {
-                console.error('Error getting all possible values for field', fieldName, ':', error);
+                // Handle "Access denied" errors in published apps gracefully
+                if (error.code === 5 || error.message?.includes('Access denied')) {
+                    console.warn('Access denied when getting all possible values for', fieldName, '(published app). Returning empty values.');
+                } else {
+                    console.error('Error getting all possible values for field', fieldName, ':', error);
+                }
             }
 
             return values;
@@ -260,7 +270,12 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                                 debugLog('Warning: Could not retrieve selected values for', fieldName, 'despite selectedCount:', selectedCount);
                             }
                         } catch (fieldError) {
-                            console.error('Error getting field data for', fieldName, ':', fieldError);
+                            // Handle "Access denied" errors in published apps gracefully
+                            if (fieldError.code === 5 || fieldError.message?.includes('Access denied')) {
+                                console.warn('Access denied when getting field data for', fieldName, '(published app). Using qSelected as fallback.');
+                            } else {
+                                console.error('Error getting field data for', fieldName, ':', fieldError);
+                            }
                             // Fallback to qSelected text
                             const fieldSelection = {
                                 selectionAppParamType: "Field",
@@ -435,7 +450,12 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                 };
 
             } catch (error) {
-                console.error('❌ Failed to calculate row estimation:', error);
+                // Handle "Access denied" errors in published apps gracefully
+                if (error.code === 5 || error.message?.includes('Access denied')) {
+                    debugLog('⚠️ Access denied when calculating row estimation (published app). Allowing generation.');
+                } else {
+                    console.error('❌ Failed to calculate row estimation:', error);
+                }
                 // On error, allow generation (fail open)
                 return {
                     actualRowEst: 1,
