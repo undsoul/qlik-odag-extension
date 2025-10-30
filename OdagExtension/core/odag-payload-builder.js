@@ -741,6 +741,8 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                                             '2. Make sure the field names match exactly\n' +
                                             '3. Or make selections on the correct fields\n\n' +
                                             'Error: ' + odagError.title;
+                                    } else if (odagError.code === 'ODAG-ERR-1204') {
+                                        userFriendlyMessage = '⚠️ App limit reached - Delete an app to generate new one';
                                     } else {
                                         userFriendlyMessage = '❌ ODAG Error (' + odagError.code + ')\n\n' + odagError.title;
                                     }
