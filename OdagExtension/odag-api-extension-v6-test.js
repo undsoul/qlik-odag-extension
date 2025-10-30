@@ -1167,50 +1167,49 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         }).html(messageToShow);
 
                         debugLog('🚫 ODAG binding validation FAILED:', bindingErrorMessageShort);
-                    } else {
-                        // Check app limit (if we have the limit info)
-                        const linkData = window['odagLinkData_' + odagConfig.odagLinkId];
-                        let appLimitReached = false;
-                        let appLimit = null;
+                    }
 
-                        if (linkData && linkData.properties && linkData.properties.genAppLimit) {
-                            // Get the limit from properties (usually first context applies)
-                            const limitConfig = linkData.properties.genAppLimit[0];
-                            if (limitConfig && limitConfig.limit) {
-                                appLimit = limitConfig.limit;
-                                const currentAppCount = window.odagGeneratedApps ? window.odagGeneratedApps.length : 0;
+                    // Check app limit (if we have the limit info)
+                    const linkData = window['odagLinkData_' + odagConfig.odagLinkId];
+                    let appLimitReached = false;
+                    let appLimit = null;
 
-                                if (currentAppCount >= appLimit) {
-                                    appLimitReached = true;
+                    if (linkData && linkData.properties && linkData.properties.genAppLimit) {
+                        // Get the limit from properties (usually first context applies)
+                        const limitConfig = linkData.properties.genAppLimit[0];
+                        if (limitConfig && limitConfig.limit) {
+                            appLimit = limitConfig.limit;
+                            const currentAppCount = window.odagGeneratedApps ? window.odagGeneratedApps.length : 0;
 
-                                    // BLOCK: Hide/disable button and show warning
-                                    if (isDynamicView) {
-                                        $generateBtn.hide();
-                                    } else {
-                                        $generateBtn.prop('disabled', true).css({
-                                            'opacity': '0.5',
-                                            'cursor': 'not-allowed',
-                                            'pointer-events': 'none'
-                                        });
-                                    }
-
-                                    $statusDiv.show().css({
-                                        'background': '#fff3cd',
-                                        'border': '1px solid #ffc107',
-                                        'color': '#856404',
-                                        'padding': '12px',
-                                        'line-height': '1.5'
-                                    }).html('⚠️ <strong>App limit reached (' + currentAppCount + '/' + appLimit + ')</strong><br>' +
-                                            'Delete an existing app to generate a new one.');
-
-                                    debugLog('🚫 App limit reached:', currentAppCount + '/' + appLimit);
-                                }
+                            if (currentAppCount >= appLimit) {
+                                appLimitReached = true;
+                                debugLog('🚫 App limit reached:', currentAppCount + '/' + appLimit);
                             }
                         }
                     }
 
                     if (!bindingValidationPassed) {
                         // Already handled above
+                    } else if (appLimitReached) {
+                        // BLOCK: App limit reached
+                        if (isDynamicView) {
+                            $generateBtn.hide();
+                        } else {
+                            $generateBtn.prop('disabled', true).css({
+                                'opacity': '0.5',
+                                'cursor': 'not-allowed',
+                                'pointer-events': 'none'
+                            });
+                        }
+
+                        $statusDiv.show().css({
+                            'background': '#fff3cd',
+                            'border': '1px solid #ffc107',
+                            'color': '#856404',
+                            'padding': '12px',
+                            'line-height': '1.5'
+                        }).html('⚠️ <strong>App limit reached (' + (window.odagGeneratedApps ? window.odagGeneratedApps.length : 0) + '/' + appLimit + ')</strong><br>' +
+                                'Delete an existing app to generate a new one.');
                     } else if (!rowEstResult.canGenerate) {
                         // BLOCK: Hide/disable button and show error
                         if (isDynamicView) {
