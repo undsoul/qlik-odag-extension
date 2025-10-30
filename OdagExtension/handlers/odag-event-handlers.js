@@ -204,14 +204,15 @@ define([
                                 // Mark as being deleted
                                 window.odagDeletingRequests.add(app.requestId);
 
-                                // Check if app is cancelled
+                                // Check app status to determine delete method
                                 const isCancelled = app.status === 'cancelled';
+                                const isFailed = app.status === 'failed';
 
                                 // Build proper URL, method and headers based on status and environment
                                 let deleteUrl, deleteMethod;
 
                                 if (isCancelled) {
-                                    // Cancelled apps need special action parameter
+                                    // Cancelled apps need ackcancel action
                                     if (isCloud) {
                                         deleteUrl = tenantUrl + '/api/v1/odagrequests/' + app.requestId +
                                             '?requestId=' + app.requestId +
@@ -229,8 +230,27 @@ define([
                                             '&xrfkey=' + xrfkey;
                                     }
                                     deleteMethod = 'PUT';
+                                } else if (isFailed) {
+                                    // Failed apps need ackfailure action
+                                    if (isCloud) {
+                                        deleteUrl = tenantUrl + '/api/v1/odagrequests/' + app.requestId +
+                                            '?requestId=' + app.requestId +
+                                            '&action=ackfailure' +
+                                            '&ignoreSucceeded=true' +
+                                            '&delGenApp=true' +
+                                            '&autoAck=true';
+                                    } else {
+                                        deleteUrl = tenantUrl + '/api/odag/v1/requests/' + app.requestId +
+                                            '?requestId=' + app.requestId +
+                                            '&action=ackfailure' +
+                                            '&ignoreSucceeded=true' +
+                                            '&delGenApp=true' +
+                                            '&autoAck=true' +
+                                            '&xrfkey=' + xrfkey;
+                                    }
+                                    deleteMethod = 'PUT';
                                 } else {
-                                    // Normal delete for succeeded/failed apps
+                                    // Normal delete for succeeded apps
                                     deleteUrl = (isCloud
                                         ? tenantUrl + '/api/v1/odagrequests/'
                                         : tenantUrl + '/api/odag/v1/requests/') + app.requestId + '/app?xrfkey=' + xrfkey;
@@ -657,6 +677,7 @@ define([
             // Get app status to determine delete method
             const appStatus = window.odagGeneratedApps[appIndex].status;
             const isCancelled = appStatus === 'cancelled';
+            const isFailed = appStatus === 'failed';
 
             // Delete ODAG app via API
             const tenantUrl = window.qlikTenantUrl || window.location.origin;
@@ -671,14 +692,15 @@ define([
                     'Content-Type': 'application/json'
                   };
 
-            // For cancelled apps, use PUT with action parameter
-            // For other apps, use DELETE /app endpoint
+            // Different statuses need different delete endpoints:
+            // - cancelled: PUT with action=ackcancel
+            // - failed: PUT with action=ackfailure
+            // - succeeded: DELETE /app endpoint
             let deleteUrl, deleteMethod;
 
             if (isCancelled) {
-                // Cancelled apps need special action parameter
+                // Cancelled apps need ackcancel action
                 if (isCloud) {
-                    // Cloud: use ackcancel
                     deleteUrl = tenantUrl + '/api/v1/odagrequests/' + requestId +
                         '?requestId=' + requestId +
                         '&action=ackcancel' +
@@ -687,7 +709,6 @@ define([
                         '&autoAck=true';
                     debugLog('Delete cancelled app (Cloud):', deleteUrl);
                 } else {
-                    // On-Premise: use ackcancel with delGenApp=true
                     deleteUrl = tenantUrl + '/api/odag/v1/requests/' + requestId +
                         '?requestId=' + requestId +
                         '&action=ackcancel' +
@@ -698,11 +719,32 @@ define([
                     debugLog('Delete cancelled app (On-Premise):', deleteUrl);
                 }
                 deleteMethod = 'PUT';
+            } else if (isFailed) {
+                // Failed apps need ackfailure action
+                if (isCloud) {
+                    deleteUrl = tenantUrl + '/api/v1/odagrequests/' + requestId +
+                        '?requestId=' + requestId +
+                        '&action=ackfailure' +
+                        '&ignoreSucceeded=true' +
+                        '&delGenApp=true' +
+                        '&autoAck=true';
+                    debugLog('Delete failed app (Cloud):', deleteUrl);
+                } else {
+                    deleteUrl = tenantUrl + '/api/odag/v1/requests/' + requestId +
+                        '?requestId=' + requestId +
+                        '&action=ackfailure' +
+                        '&ignoreSucceeded=true' +
+                        '&delGenApp=true' +
+                        '&autoAck=true' +
+                        '&xrfkey=' + xrfkey;
+                    debugLog('Delete failed app (On-Premise):', deleteUrl);
+                }
+                deleteMethod = 'PUT';
             } else {
-                // Normal delete for succeeded/failed apps
+                // Normal delete for succeeded apps
                 deleteUrl = (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + requestId + '/app?xrfkey=' + xrfkey;
                 deleteMethod = 'DELETE';
-                debugLog('Delete app (standard):', deleteUrl);
+                debugLog('Delete succeeded app (standard):', deleteUrl);
             }
 
             $.ajax({
