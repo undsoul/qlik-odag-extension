@@ -39,7 +39,6 @@ This extension provides an **enhanced user interface** for Qlik's native ODAG fu
 - Full compatibility with both Qlik Cloud and On-Premise
 - Automatic environment detection
 - Proper API routing for each platform
-- No configuration needed - works out of the box
 
 #### **Improved Dynamic View Experience**
 - Auto-hides top bar after successful generation
