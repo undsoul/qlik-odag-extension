@@ -3203,6 +3203,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         updateAppsList(layout.qInfo.qId);
                         showNotification('ODAG app "' + odagData.generatedAppName + '" generated successfully!', 'success');
 
+                        // Re-run validation to check if app limit is now reached
+                        debugLog('Re-running validation after app generation');
+                        checkODAGValidation();
+
                         // Start monitoring for status updates since we have a new pending app
                         if (window.startODAGStatusMonitoring) {
                             debugLog('Starting status monitoring for newly generated app...');
