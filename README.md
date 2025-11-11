@@ -168,6 +168,22 @@ Map Qlik variables to ODAG template fields:
 3. Click "Add" and upload the ZIP file
 4. The extension will be available in all apps
 
+**CSP Configuration (Required for Qlik Cloud):**
+The extension uses Font Awesome icons from CDN. Add the following to your CSP settings:
+
+1. Go to Management Console → Settings → Content Security Policy
+2. Add `cdn.jsdelivr.net` to the allowed domains for:
+   - **script-src** (for Font Awesome JavaScript)
+   - **style-src** (for Font Awesome CSS)
+   - **font-src** (for Font Awesome fonts)
+
+Example CSP directive:
+```
+script-src 'self' 'unsafe-inline' 'unsafe-eval' cdn.jsdelivr.net;
+style-src 'self' 'unsafe-inline' cdn.jsdelivr.net;
+font-src 'self' data: cdn.jsdelivr.net;
+```
+
 ### Qlik Sense Enterprise (On-Premise)
 
 **Via QMC:**
