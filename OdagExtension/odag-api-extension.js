@@ -1900,9 +1900,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                             debugLog('New ODAG app detected, refreshing embed:', appId);
                                             loadDynamicEmbed(appId, latestAppName);
 
-                                            // Hide top bar only if we have a stored payload
-                                            // If no payload exists (initial load), we'll check for binding selections
-                                            // in setTimeout and show warning if needed
+                                            // Hide top bar immediately after successful generation of NEW app
+                                            // IMPORTANT: Only hide if we have a stored payload (user generated this app)
+                                            // Don't hide on initial page load with existing app (no stored payload)
                                             if (lastGeneratedPayload) {
                                                 const hideTopBarFunc = StateManager.get(extensionId, 'hideDynamicTopBar');
                                                 if (hideTopBarFunc) {
@@ -1910,7 +1910,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                     debugLog('✅ Top bar hidden after successful generation');
                                                 }
                                             } else {
-                                                debugLog('⏸️ Skipping top bar hide - no stored payload (will check for binding selections)');
+                                                debugLog('📍 Not hiding top bar - no stored payload (initial page load with existing app)');
                                             }
                                         } else {
                                             debugLog('Same app already loaded, skipping refresh:', appId);
