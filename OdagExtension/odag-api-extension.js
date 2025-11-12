@@ -2433,6 +2433,13 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const $topBar = $('#dynamic-top-bar-' + layout.qInfo.qId);
 
                 const hideTopBar = function() {
+                    // Don't hide if refresh button has warning state (selections changed)
+                    const refreshBtn = $('#refresh-btn-' + layout.qInfo.qId);
+                    if (refreshBtn.hasClass('needs-refresh')) {
+                        debugLog('⚠️ Not hiding top bar - refresh button needs attention');
+                        return;
+                    }
+
                     $topBar.css({
                         'transform': 'translateY(-100%)',
                         'opacity': '0'
