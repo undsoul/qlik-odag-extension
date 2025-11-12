@@ -2242,6 +2242,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 }
                             } else {
                                 debugLog('✅ Found existing app and have stored payload from previous generation');
+                                // Check if current selections differ from stored payload
+                                // Wait a bit for checkSelectionsChanged to be defined and stored
+                                setTimeout(function() {
+                                    const checkFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                                    if (checkFunc) {
+                                        debugLog('🔍 Calling checkSelectionsChanged after page reload with stored payload');
+                                        checkFunc();
+                                    }
+                                }, 500);
                             }
                         }
                     }, 1000);
