@@ -2217,6 +2217,29 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             // The baseline should only be set when user actually generates a new app.
                             if (!lastGeneratedPayload) {
                                 debugLog('📝 Found existing app but no stored payload - baseline will be set when user generates new app');
+
+                                // Check if user has binding field selections - if yes, activate refresh button
+                                // This indicates selections may have changed since the app was generated
+                                try {
+                                    const buildResult = await buildPayload(app, odagConfig, layout);
+                                    const currentPayload = buildResult.payload;
+
+                                    // Check if there are any selections in binding fields
+                                    const hasBindingSelections = currentPayload.bindSelectionState &&
+                                        currentPayload.bindSelectionState.some(binding =>
+                                            binding.values && binding.values.length > 0
+                                        );
+
+                                    if (hasBindingSelections) {
+                                        debugLog('⚠️ Found binding selections but no baseline - activating refresh button');
+                                        $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
+                                        showTopBar(false, true); // Show top bar with warning
+                                    } else {
+                                        debugLog('✅ No binding selections yet, refresh button stays inactive');
+                                    }
+                                } catch (error) {
+                                    console.error('Error checking initial binding selections:', error);
+                                }
                             } else {
                                 debugLog('✅ Found existing app and have stored payload from previous generation');
                             }
