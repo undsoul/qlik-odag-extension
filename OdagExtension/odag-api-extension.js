@@ -832,6 +832,20 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 if (hasContent) {
                     // Already initialized and staying in analysis mode - skip rebuild
                     debugLog('⏭️ ODAG Extension already initialized - skipping HTML rebuild to preserve embeds');
+
+                    // IMPORTANT: Check for selection changes even when skipping rebuild
+                    // This ensures we catch selection changes made on other pages
+                    if (isDynamicView) {
+                        debugLog('🔍 Paint (early exit) - Checking for selection changes in Dynamic View...');
+                        const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                        if (checkSelectionsFunc) {
+                            debugLog('✅ checkSelectionsFunc found, calling it...');
+                            checkSelectionsFunc();
+                        } else {
+                            debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
+                        }
+                    }
+
                     return qlik.Promise.resolve();
                 } else {
                     // DOM was cleared (likely due to page navigation), need to reinitialize
