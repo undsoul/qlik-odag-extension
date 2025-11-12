@@ -26,7 +26,7 @@ This extension provides an **enhanced user interface** for Qlik's native ODAG fu
 
 ---
 
-## 🆕 Version 7.0.0 - Multilingual Support
+## 🆕 Version 7.0.0 - Multilingual Support & Cross-Page Selection Tracking
 
 ### 🌍 New Feature: Multilingual Interface
 
@@ -72,6 +72,50 @@ All user-facing messages are now available in multiple languages:
 - **Better UX**: Clear, localized messages reduce confusion
 - **Enterprise Ready**: Supports multinational deployments
 - **Easy to Extend**: New languages can be added easily to the language module
+
+### 🔄 Fixed: Selection Tracking Across Page Navigation (Dynamic View)
+
+#### The Problem
+When users made binding field selections, navigated to another sheet, and returned to the extension, the selections were lost. The extension couldn't detect that selections had changed because they were only stored in memory, which cleared during page navigation.
+
+#### The Solution
+Implemented persistent selection tracking using sessionStorage with stable storage keys:
+
+- **Persistent Current Selections**: Extension now stores `currentBindSelections` to sessionStorage whenever selections are checked
+- **Cross-Page Memory**: When you navigate away and return, stored selections are automatically restored
+- **Smart Comparison**: On page reload, extension compares restored selections with baseline (`lastGeneratedPayload`)
+- **Visual Feedback**: If selections changed, refresh button activates and top bar appears with warning
+- **Clean Lifecycle**: Stored selections are cleared after successful generation (they become the new baseline)
+
+#### What Changed
+
+**StateManager** (`foundation/odag-state-manager.js`):
+- Added `currentBindSelections` to persistent keys
+- Enhanced `delete()` to support custom storage keys
+- Better cross-page-load persistence
+
+**Main Extension** (`odag-api-extension.js`):
+- Created stable storage key for current selections (using `app.id + odagLinkId`)
+- Store selections continuously to sessionStorage
+- Restore and compare selections after page navigation
+- Clear stored selections after successful generation
+
+#### How It Works Now
+
+```
+1. User makes selections → Stored to sessionStorage
+2. User navigates to another sheet → Selections persist
+3. User returns to extension → Selections restored
+4. Extension compares with baseline → Shows warning if changed
+5. User generates new app → Stored selections cleared (new baseline)
+```
+
+#### Benefits
+
+- ✅ **No Lost Selections**: Selections survive page navigation
+- ✅ **Reliable Detection**: Warning system works across pages
+- ✅ **Better UX**: Users don't lose their context when navigating
+- ✅ **Stable Tracking**: Uses stable keys that don't change between page loads
 
 ---
 
@@ -511,6 +555,10 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 🏗️ **New Module**: Created `foundation/odag-language.js` with 600+ lines of translations
 - ✨ **Auto-Update**: UI text automatically updates when language changes
 - 🔧 **Global Access**: Messages stored in StateManager for use across all modules
+- 🔄 **Fixed: Cross-Page Selection Tracking**: Selections now persist across page navigation in Dynamic View
+- 💾 **Persistent State**: Current selections stored to sessionStorage with stable keys
+- 🎯 **Smart Comparison**: Automatically compares stored selections with baseline after page reload
+- ⚠️ **Better Warnings**: Refresh button and top bar activate correctly when returning from navigation
 
 ### v6.0.0
 - ✨ Added variable change detection in Dynamic View
