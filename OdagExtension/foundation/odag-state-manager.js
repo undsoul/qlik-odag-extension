@@ -48,12 +48,39 @@ define([], function() {
          */
         get: function(extensionId, key, defaultValue) {
             if (!this._states.has(extensionId)) {
-                return defaultValue;
+                this._states.set(extensionId, new Map());
             }
 
             const instanceState = this._states.get(extensionId);
-            return instanceState.has(key) ? instanceState.get(key) : defaultValue;
+
+            // If key exists in memory, return it
+            if (instanceState.has(key)) {
+                return instanceState.get(key);
+            }
+
+            // If this is a persistent key, try loading from sessionStorage
+            if (this._persistentKeys.indexOf(key) > -1) {
+                try {
+                    const storageKey = 'odagState_' + extensionId + '_' + key;
+                    const storedValue = sessionStorage.getItem(storageKey);
+                    if (storedValue !== null) {
+                        const parsed = JSON.parse(storedValue);
+                        // Store in memory for future access
+                        instanceState.set(key, parsed);
+                        return parsed;
+                    }
+                } catch (e) {
+                    console.warn('[ODAG StateManager] Failed to load state from sessionStorage:', e);
+                }
+            }
+
+            return defaultValue;
         },
+
+        /**
+         * Keys that should persist across browser refreshes
+         */
+        _persistentKeys: ['lastGeneratedPayload'],
 
         /**
          * Set state value for extension instance
@@ -69,6 +96,16 @@ define([], function() {
 
             const oldValue = this._states.get(extensionId).get(key);
             this._states.get(extensionId).set(key, value);
+
+            // Persist to sessionStorage if this is a persistent key
+            if (this._persistentKeys.indexOf(key) > -1) {
+                try {
+                    const storageKey = 'odagState_' + extensionId + '_' + key;
+                    sessionStorage.setItem(storageKey, JSON.stringify(value));
+                } catch (e) {
+                    console.warn('[ODAG StateManager] Failed to persist state to sessionStorage:', e);
+                }
+            }
 
             // Notify observers if not silent
             if (!silent) {
@@ -97,6 +134,16 @@ define([], function() {
          * @returns {boolean} True if deleted
          */
         delete: function(extensionId, key) {
+            // Remove from sessionStorage if persistent key
+            if (this._persistentKeys.indexOf(key) > -1) {
+                try {
+                    const storageKey = 'odagState_' + extensionId + '_' + key;
+                    sessionStorage.removeItem(storageKey);
+                } catch (e) {
+                    console.warn('[ODAG StateManager] Failed to remove state from sessionStorage:', e);
+                }
+            }
+
             if (!this._states.has(extensionId)) {
                 return false;
             }
@@ -143,6 +190,17 @@ define([], function() {
             if (this._observers.has(extensionId)) {
                 this._observers.delete(extensionId);
             }
+
+            // Remove persistent keys from sessionStorage
+            const self = this;
+            this._persistentKeys.forEach(function(key) {
+                try {
+                    const storageKey = 'odagState_' + extensionId + '_' + key;
+                    sessionStorage.removeItem(storageKey);
+                } catch (e) {
+                    console.warn('[ODAG StateManager] Failed to cleanup sessionStorage:', e);
+                }
+            });
 
             // Remove state
             if (this._states.has(extensionId)) {
