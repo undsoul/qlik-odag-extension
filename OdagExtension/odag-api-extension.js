@@ -1901,16 +1901,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                             loadDynamicEmbed(appId, latestAppName);
 
                                             // Hide top bar immediately after successful generation of NEW app
-                                            // IMPORTANT: Only hide if we have a stored payload (user generated this app)
-                                            // Don't hide on initial page load with existing app (no stored payload)
-                                            if (lastGeneratedPayload) {
-                                                const hideTopBarFunc = StateManager.get(extensionId, 'hideDynamicTopBar');
-                                                if (hideTopBarFunc) {
-                                                    hideTopBarFunc();
-                                                    debugLog('✅ Top bar hidden after successful generation');
-                                                }
-                                            } else {
-                                                debugLog('📍 Not hiding top bar - no stored payload (initial page load with existing app)');
+                                            // It will re-appear when user changes selections
+                                            const hideTopBarFunc = StateManager.get(extensionId, 'hideDynamicTopBar');
+                                            if (hideTopBarFunc) {
+                                                hideTopBarFunc();
+                                                debugLog('✅ Top bar hidden after successful generation');
                                             }
                                         } else {
                                             debugLog('Same app already loaded, skipping refresh:', appId);
@@ -2236,9 +2231,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         );
 
                                     if (hasBindingSelections) {
-                                        debugLog('⚠️ Found binding selections but no baseline - activating refresh button');
+                                        debugLog('⚠️ Found binding selections but no baseline - activating refresh button (top bar hidden)');
                                         $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
-                                        showTopBar(false, true); // Show top bar with warning
+                                        // Don't show top bar on initial load - it will appear when selections change
                                     } else {
                                         debugLog('✅ No binding selections yet, refresh button stays inactive');
                                     }
@@ -2438,13 +2433,6 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const $topBar = $('#dynamic-top-bar-' + layout.qInfo.qId);
 
                 const hideTopBar = function() {
-                    // Don't hide if refresh button has warning state (selections changed)
-                    const refreshBtn = $('#refresh-btn-' + layout.qInfo.qId);
-                    if (refreshBtn.hasClass('needs-refresh')) {
-                        debugLog('⚠️ Not hiding top bar - refresh button needs attention');
-                        return;
-                    }
-
                     $topBar.css({
                         'transform': 'translateY(-100%)',
                         'opacity': '0'
