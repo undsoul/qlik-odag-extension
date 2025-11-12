@@ -943,7 +943,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += 'style="background: #ef4444; border: 1px solid #dc2626; border-radius: 3px; color: white; ';
                 html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: none; align-items: center; gap: 4px;">';
-                html += '<span style="font-size: 16px;">⏹</span> Cancel';
+                html += '<span style="font-size: 16px;">⏹</span> ' + Validators.sanitizeHtml(messages.buttons.cancel);
                 html += '</button>';
 
                 // Refresh button
@@ -951,7 +951,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += 'style="background: white; border: 1px solid #ccc; border-radius: 3px; ';
                 html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px;">';
-                html += '<span style="font-size: 16px;">↻</span> Refresh';
+                html += '<span style="font-size: 16px;">↻</span> ' + Validators.sanitizeHtml(messages.buttons.refresh);
                 html += '</button>';
 
                 html += '</div>'; // Close button container
