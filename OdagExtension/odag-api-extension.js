@@ -693,6 +693,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('ODAG Extension: Keeping latest app:', latestApp.generatedAppName);
                             debugLog('ODAG Extension: Deleting', appsToDelete.length, 'older apps');
 
+                            // Track deletion promises to update window.odagGeneratedApps after all deletions
+                            const deletionPromises = [];
+
                             appsToDelete.forEach(function(app) {
                                 const isCloud = window.qlikEnvironment === 'cloud';
                                 const xrfkey = CONSTANTS.API.XRF_KEY;
@@ -700,7 +703,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                     : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
 
-                                $.ajax({
+                                const deletePromise = $.ajax({
                                     url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + app.id + '/app?xrfkey=' + xrfkey,
                                     type: 'DELETE',
                                     headers: deleteHeaders,
@@ -716,6 +719,40 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         }
                                     }
                                 });
+
+                                deletionPromises.push(deletePromise);
+                            });
+
+                            // After all deletions complete, update window.odagGeneratedApps to only contain the latest app
+                            // This ensures app limit validation works correctly in Dynamic View
+                            Promise.all(deletionPromises).then(function() {
+                                debugLog('ODAG Extension: All old apps deleted, updating window.odagGeneratedApps');
+
+                                // Extract app info from latestApp to match the format used by window.odagGeneratedApps
+                                let generatedAppId = '';
+                                let appName = latestApp.generatedAppName || latestApp.name || 'Generated App';
+
+                                if (latestApp.generatedApp) {
+                                    if (typeof latestApp.generatedApp === 'object' && latestApp.generatedApp.id) {
+                                        generatedAppId = latestApp.generatedApp.id;
+                                    } else if (typeof latestApp.generatedApp === 'string') {
+                                        generatedAppId = latestApp.generatedApp;
+                                    }
+                                }
+
+                                // Update window.odagGeneratedApps to only contain the latest app
+                                window.odagGeneratedApps = [{
+                                    id: latestApp.id,
+                                    requestId: latestApp.id,
+                                    appId: generatedAppId,
+                                    name: appName,
+                                    status: latestApp.state === 'succeeded' ? 'succeeded' : latestApp.state,
+                                    createdDate: latestApp.createdDate
+                                }];
+
+                                debugLog('ODAG Extension: window.odagGeneratedApps updated. App count:', window.odagGeneratedApps.length);
+                            }).catch(function(error) {
+                                console.error('ODAG Extension: Error during app deletions:', error);
                             });
                         } else {
                             debugLog('ODAG Extension: Only one or zero apps exist, no cleanup needed');
