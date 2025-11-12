@@ -2207,8 +2207,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Function to check if current selections differ from last generated payload
                 const checkSelectionsChanged = async function() {
-                    if (isGenerating) return; // Don't check while generating
-                    if (!lastGeneratedPayload) return; // No previous payload to compare
+                    debugLog('🔍 checkSelectionsChanged called - isGenerating:', isGenerating, 'lastGeneratedPayload:', !!lastGeneratedPayload);
+                    if (isGenerating) {
+                        debugLog('⏭️ Skipping check - currently generating');
+                        return; // Don't check while generating
+                    }
+                    if (!lastGeneratedPayload) {
+                        debugLog('⏭️ Skipping check - no previous payload to compare');
+                        return; // No previous payload to compare
+                    }
 
                     try {
                         // Check both selections AND variables
@@ -2229,7 +2236,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const lastStateStr = JSON.stringify(lastState);
 
                         const hasChanged = currentStateStr !== lastStateStr;
-                        debugLog('Checking state changed (selections + variables):', hasChanged);
+                        debugLog('🔍 Checking state changed (selections + variables):', hasChanged);
+                        if (hasChanged) {
+                            debugLog('📊 Current selections:', currentSelections);
+                            debugLog('📊 Last selections:', lastGeneratedPayload.selectionState);
+                        }
 
                         if (hasChanged) {
                             // State changed - highlight refresh button
@@ -3543,10 +3554,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             }
 
             // Check for selection changes on every paint (for Dynamic View)
+            // This ensures we catch selection changes made on other pages
             if (isDynamicView) {
+                debugLog('🔍 Paint - Checking for selection changes in Dynamic View...');
                 const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
                 if (checkSelectionsFunc) {
+                    debugLog('✅ checkSelectionsFunc found, calling it...');
                     checkSelectionsFunc();
+                } else {
+                    debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
                 }
             }
 
