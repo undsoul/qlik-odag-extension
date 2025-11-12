@@ -2919,7 +2919,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     $container.show();
 
                                     // Show loading animation first
-                                    $container.html(getLoadingPlaceholder('Loading app...'));
+                                    $container.html(getLoadingPlaceholder(messages.progress.loadingApp));
 
                                     // Create a wrapper div to contain the qlik-embed properly with relative positioning
                                     setTimeout(function() {
