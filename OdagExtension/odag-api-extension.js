@@ -1389,9 +1389,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 let currentRequestId = null;
                 let deletedApps = new Set(); // Track deleted apps to avoid duplicate deletions
 
-                // Create stable storage key for sessionStorage (appId + odagLinkId doesn't change between page loads)
+                // Create stable storage keys for sessionStorage (appId + odagLinkId doesn't change between page loads)
                 const stableStorageKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_lastGeneratedPayload';
+                const currentSelectionsKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_currentBindSelections';
                 debugLog('📍 Using stable storage key for lastGeneratedPayload:', stableStorageKey);
+                debugLog('📍 Using stable storage key for currentBindSelections:', currentSelectionsKey);
 
                 // Get lastGeneratedPayload from StateManager (persists across page navigation via sessionStorage)
                 let lastGeneratedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
@@ -1654,6 +1656,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         lastGeneratedPayload.variableState = currentVariableValues;
                         StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
                         debugLog('💾 Stored lastGeneratedPayload to StateManager with stable key');
+
+                        // Clear stored currentBindSelections since these selections now become the new baseline
+                        StateManager.delete(extensionId, 'currentBindSelections', currentSelectionsKey);
+                        debugLog('🗑️ Cleared stored currentBindSelections (now part of baseline)');
 
                         // Remove warning class from refresh button
                         $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
@@ -2228,6 +2234,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     const buildResult = await buildPayload(app, odagConfig, layout);
                                     const currentPayload = buildResult.payload;
 
+                                    // Store current selections to sessionStorage (persist across page navigation)
+                                    const currentSelections = {
+                                        bindSelections: currentPayload.bindSelectionState,
+                                        variables: currentPayload.variableState || []
+                                    };
+                                    StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+                                    debugLog('💾 Stored currentBindSelections on initial paint for cross-page tracking');
+
                                     // Check if there are any selections in binding fields
                                     const hasBindingSelections = currentPayload.bindSelectionState &&
                                         currentPayload.bindSelectionState.some(binding =>
@@ -2246,15 +2260,47 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 }
                             } else {
                                 debugLog('✅ Found existing app and have stored payload from previous generation');
-                                // Check if current selections differ from stored payload
-                                // Wait a bit for checkSelectionsChanged to be defined and stored
-                                setTimeout(function() {
-                                    const checkFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
-                                    if (checkFunc) {
-                                        debugLog('🔍 Calling checkSelectionsChanged after page reload with stored payload');
-                                        checkFunc();
+
+                                // Check if we have stored currentBindSelections from before page navigation
+                                const storedCurrentSelections = StateManager.get(extensionId, 'currentBindSelections', null, currentSelectionsKey);
+                                debugLog('🔄 Retrieved stored currentBindSelections from sessionStorage:', !!storedCurrentSelections);
+
+                                if (storedCurrentSelections) {
+                                    // Compare stored selections with baseline
+                                    const lastState = {
+                                        bindSelections: lastGeneratedPayload.bindSelectionState,
+                                        variables: lastGeneratedPayload.variableState || []
+                                    };
+
+                                    const currentStateStr = JSON.stringify(storedCurrentSelections);
+                                    const lastStateStr = JSON.stringify(lastState);
+                                    const hasChanged = currentStateStr !== lastStateStr;
+
+                                    debugLog('🔍 Comparing stored selections with baseline after page reload - changed:', hasChanged);
+                                    if (hasChanged) {
+                                        debugLog('📊 Stored selections:', storedCurrentSelections.bindSelections);
+                                        debugLog('📊 Baseline selections:', lastGeneratedPayload.bindSelectionState);
+
+                                        // Activate refresh button and show top bar
+                                        $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
+                                        debugLog('🟡 Added needs-refresh warning state to refresh button after page reload');
+
+                                        // Show top bar with warning
+                                        topBarManuallyClosed = false;
+                                        showTopBar(false, true);
+                                        debugLog('🔔 Showing top bar with refresh warning after detecting stored selection changes');
                                     }
-                                }, 500);
+                                } else {
+                                    // No stored selections - call checkSelectionsChanged to build fresh payload
+                                    debugLog('⚠️ No stored selections - will check fresh selections after function initialization');
+                                    setTimeout(function() {
+                                        const checkFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                                        if (checkFunc) {
+                                            debugLog('🔍 Calling checkSelectionsChanged after page reload with stored payload');
+                                            checkFunc();
+                                        }
+                                    }, 500);
+                                }
                             }
                         }
                     }, 1000);
@@ -2283,12 +2329,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const buildResult = await buildPayload(app, odagConfig, layout);
                         const currentPayload = buildResult.payload;
 
-                        // Compare ONLY the binding field selections (bindSelectionState)
-                        // Also compare variables if any are mapped
-                        const currentState = {
+                        // Store current selections to sessionStorage (persist across page navigation)
+                        const currentSelections = {
                             bindSelections: currentPayload.bindSelectionState,
                             variables: currentPayload.variableState || []
                         };
+                        StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+                        debugLog('💾 Stored currentBindSelections to sessionStorage for cross-page tracking');
+
+                        // Compare ONLY the binding field selections (bindSelectionState)
+                        // Also compare variables if any are mapped
+                        const currentState = currentSelections;
                         const lastState = {
                             bindSelections: lastGeneratedPayload.bindSelectionState,
                             variables: lastGeneratedPayload.variableState || []

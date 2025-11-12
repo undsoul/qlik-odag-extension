@@ -83,7 +83,7 @@ define([], function() {
         /**
          * Keys that should persist across browser refreshes
          */
-        _persistentKeys: ['lastGeneratedPayload'],
+        _persistentKeys: ['lastGeneratedPayload', 'currentBindSelections'],
 
         /**
          * Set state value for extension instance
@@ -137,14 +137,17 @@ define([], function() {
          * Delete specific state key
          * @param {string} extensionId - Extension instance ID
          * @param {string} key - State key
+         * @param {string} customStorageKey - Optional custom storage key for sessionStorage (for persistent keys)
          * @returns {boolean} True if deleted
          */
-        delete: function(extensionId, key) {
+        delete: function(extensionId, key, customStorageKey) {
             // Remove from sessionStorage if persistent key
             if (this._persistentKeys.indexOf(key) > -1) {
                 try {
-                    const storageKey = 'odagState_' + extensionId + '_' + key;
+                    // Use custom storage key if provided, otherwise use extensionId
+                    const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
                     sessionStorage.removeItem(storageKey);
+                    console.log('[ODAG StateManager] Removed ' + key + ' from sessionStorage with key:', storageKey);
                 } catch (e) {
                     console.warn('[ODAG StateManager] Failed to remove state from sessionStorage:', e);
                 }
