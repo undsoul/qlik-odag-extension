@@ -103,7 +103,10 @@ define([], function() {
                 optionalFields: 'Optional Binding Fields',
                 appCount: 'apps',
                 generatedOn: 'Generated on',
-                lastReloaded: 'Last reloaded'
+                lastReloaded: 'Last reloaded',
+                generatedApps: 'Generated Apps',
+                initializing: 'Initializing Dynamic View...',
+                actions: 'Actions'
             }
         },
 
@@ -197,7 +200,10 @@ define([], function() {
                 optionalFields: 'İsteğe Bağlı Alanlar',
                 appCount: 'uygulama',
                 generatedOn: 'Oluşturulma',
-                lastReloaded: 'Son yenileme'
+                lastReloaded: 'Son yenileme',
+                generatedApps: 'Oluşturulan Uygulamalar',
+                initializing: 'Dinamik Görünüm başlatılıyor...',
+                actions: 'İşlemler'
             }
         },
 
@@ -291,7 +297,10 @@ define([], function() {
                 optionalFields: 'Campos Opcionales',
                 appCount: 'aplicaciones',
                 generatedOn: 'Generado el',
-                lastReloaded: 'Última recarga'
+                lastReloaded: 'Última recarga',
+                generatedApps: 'Aplicaciones Generadas',
+                initializing: 'Inicializando Vista Dinámica...',
+                actions: 'Acciones'
             }
         },
 
@@ -385,7 +394,10 @@ define([], function() {
                 optionalFields: '可选字段',
                 appCount: '应用',
                 generatedOn: '生成于',
-                lastReloaded: '最后重新加载'
+                lastReloaded: '最后重新加载',
+                generatedApps: '已生成的应用',
+                initializing: '正在初始化动态视图...',
+                actions: '操作'
             }
         },
 
@@ -479,7 +491,10 @@ define([], function() {
                 optionalFields: 'الحقول الاختيارية',
                 appCount: 'تطبيقات',
                 generatedOn: 'تم الإنشاء في',
-                lastReloaded: 'آخر إعادة تحميل'
+                lastReloaded: 'آخر إعادة تحميل',
+                generatedApps: 'التطبيقات المُنشأة',
+                initializing: 'جارٍ تهيئة العرض الديناميكي...',
+                actions: 'الإجراءات'
             }
         }
     };

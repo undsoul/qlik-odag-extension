@@ -401,11 +401,11 @@ define([], function() {
                         ref: "odagConfig.language",
                         label: "Language / Dil / 语言",
                         options: [
-                            { value: "en", label: "English" },
-                            { value: "tr", label: "Türkçe" },
-                            { value: "es", label: "Español" },
-                            { value: "zh", label: "中文 (Chinese)" },
-                            { value: "ar", label: "العربية (Arabic)" }
+                            { value: "en", label: "🇬🇧 English" },
+                            { value: "tr", label: "🇹🇷 Türkçe" },
+                            { value: "es", label: "🇪🇸 Español" },
+                            { value: "zh", label: "🇨🇳 中文 (Chinese)" },
+                            { value: "ar", label: "🇸🇦 العربية (Arabic)" }
                         ],
                         defaultValue: "en"
                     },

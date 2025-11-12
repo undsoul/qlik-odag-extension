@@ -1035,7 +1035,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += '<div class="odag-apps-list-panel" id="apps-list-panel-' + layout.qInfo.qId + '" style="width:' + listWidth + 'px; transition: margin-left 0.3s ease;">';
                     html += '<div class="list-header">';
                     html += '<div class="header-top">';
-                    html += '<h3>Generated Apps</h3>';
+                    html += '<h3>' + Validators.sanitizeHtml(messages.info.generatedApps) + '</h3>';
                     html += '<div style="display: flex; align-items: center; gap: 6px;">';
                     html += '<span class="app-count" id="app-count-' + layout.qInfo.qId + '">0 apps</span>';
                     html += '<button class="refresh-list-btn" id="refresh-list-btn-' + layout.qInfo.qId + '" title="Refresh app list" style="background: transparent; border: none; color: #3b82f6; cursor: pointer; font-size: 16px; padding: 4px 6px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center;">';
@@ -2145,7 +2145,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Initial load - Delete all existing apps, then generate a new one
                 $('#dynamic-status-' + layout.qInfo.qId).html(
-                    getStatusHTML('loading', 'Initializing Dynamic View...', true)
+                    getStatusHTML('loading', messages.info.initializing, true)
                 );
 
                 // Keep top bar visible during initialization
@@ -2662,7 +2662,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     listHtml += '</div>';
 
                     listHtml += '<div class="app-menu-container">';
-                    listHtml += '<button class="app-menu-btn" title="Actions">⋮</button>';
+                    listHtml += '<button class="app-menu-btn" title="' + Validators.sanitizeHtml(messages.info.actions) + '">⋮</button>';
                     listHtml += '<div class="app-menu-dropdown" style="display:none;">';
 
                     // Show cancel option for pending/generating apps
