@@ -2,7 +2,7 @@
 
 A powerful, production-ready Qlik Sense extension for managing On-Demand App Generation (ODAG) with enterprise features including Dynamic View mode, variable mapping, real-time status monitoring, and intelligent app lifecycle management.
 
-[![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
+[![Version](https://img.shields.io/badge/version-7.0.0-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
 [![Qlik Cloud](https://img.shields.io/badge/Qlik-Cloud-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![On-Premise](https://img.shields.io/badge/Qlik-On--Premise-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -21,11 +21,61 @@ This extension provides an **enhanced user interface** for Qlik's native ODAG fu
 - 📊 **Variable Support** - Map Qlik variables to ODAG fields (single or multiple values)
 - 🎯 **Dynamic View** - Maintain only the latest app with automatic cleanup
 - 📱 **Responsive** - Works on desktop, tablet, and mobile devices
+- 🌍 **Multilingual** - Support for 5 languages (English, Turkish, Spanish, Chinese, Arabic)
 - ⚡ **Production Ready** - Enterprise-grade error handling, proper cleanup, Cloud & On-Premise support
 
 ---
 
-## 🆕 Version 6.0.0 - Production Release
+## 🆕 Version 7.0.0 - Multilingual Support
+
+### 🌍 New Feature: Multilingual Interface
+
+The extension now supports **5 languages** out of the box, making it accessible to users worldwide:
+
+- 🇬🇧 **English** (Default)
+- 🇹🇷 **Türkçe** (Turkish)
+- 🇪🇸 **Español** (Spanish)
+- 🇨🇳 **中文** (Chinese - Simplified)
+- 🇸🇦 **العربية** (Arabic)
+
+#### What's Translated
+
+All user-facing messages are now available in multiple languages:
+
+- **Button Labels**: Generate, Refresh, Cancel, Delete, Open, Reload, Close
+- **Status Messages**: Queued, Generating, Validating, Ready, Failed, Loading
+- **Progress Indicators**: "Generating ODAG app...", "Loading app...", "Deleting app..."
+- **Validation Messages**: Selection required, Row limit exceeded, App limit reached
+- **Warning Messages**: Selections changed, State changed, Dynamic view alerts
+- **Error Messages**: Load failed, Generation failed, API errors, Access denied
+- **Info Messages**: Select an app, Required fields, Generated on, Last reloaded
+
+#### How to Use
+
+1. Open the extension properties panel
+2. Go to **"Appearance & Language"** section
+3. Select your preferred language from the dropdown
+4. All UI text will automatically update to the selected language
+
+#### Technical Details
+
+- New module: `foundation/odag-language.js` (~600 lines)
+- Language messages organized by category (buttons, status, progress, validation, errors, warnings, success, info)
+- Seamless integration with existing codebase
+- Messages stored in StateManager for global access
+- Fallback to English if translation is missing
+- No performance impact - all translations loaded at startup
+
+#### Benefits
+
+- **Global Accessibility**: Users can work in their native language
+- **Better UX**: Clear, localized messages reduce confusion
+- **Enterprise Ready**: Supports multinational deployments
+- **Easy to Extend**: New languages can be added easily to the language module
+
+---
+
+## Version 6.0.0 - Production Release
 
 ### Major Features
 
@@ -245,6 +295,12 @@ Add the extension to your selection app:
 
 #### **Optional Settings:**
 
+**Language**
+- Choose your preferred interface language
+- Options: English (default), Türkçe, Español, 中文, العربية
+- All UI text updates automatically when you change the language
+- Located in "Appearance & Language" section
+
 **View Mode**
 - `List View` (default): Show all generated apps in a list
 - `Dynamic View`: Show only the latest app, auto-delete old ones
@@ -448,7 +504,15 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Version History
 
-### v6.0.0 (Current)
+### v7.0.0 (Current)
+- 🌍 **Multilingual Support**: Added support for 5 languages (English, Türkçe, Español, 中文, العربية)
+- 🎨 **Language Selection**: New dropdown in properties panel for language preference
+- 📝 **Comprehensive Translations**: All user-facing messages translated
+- 🏗️ **New Module**: Created `foundation/odag-language.js` with 600+ lines of translations
+- ✨ **Auto-Update**: UI text automatically updates when language changes
+- 🔧 **Global Access**: Messages stored in StateManager for use across all modules
+
+### v6.0.0
 - ✨ Added variable change detection in Dynamic View
 - 🐛 Fixed "Access denied" errors in published apps
 - 🐛 Fixed On-Premise binding fields not displaying
