@@ -1374,7 +1374,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 let checkStatusInterval = null;
                 let currentRequestId = null;
                 let deletedApps = new Set(); // Track deleted apps to avoid duplicate deletions
-                let lastGeneratedPayload = null; // Track last payload to detect selection changes
+
+                // Get lastGeneratedPayload from StateManager (persists across page navigation)
+                let lastGeneratedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null);
+                debugLog('🔄 Retrieved lastGeneratedPayload from StateManager:', !!lastGeneratedPayload);
 
                 // Store deletedApps in StateManager so restoreDynamicView can access it
                 StateManager.set(extensionId, 'deletedApps', deletedApps);
@@ -1631,6 +1634,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         // Store this payload AND variable state to compare for future selection changes
                         lastGeneratedPayload = payload;
                         lastGeneratedPayload.variableState = currentVariableValues;
+                        StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload);
+                        debugLog('💾 Stored lastGeneratedPayload to StateManager');
 
                         // Remove warning class from refresh button
                         $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
@@ -1872,7 +1877,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                 bindSelectionState: latestApp.bindSelectionState,
                                                 selectionState: latestApp.selectionState || latestApp.bindSelectionState
                                             };
-                                            debugLog('Stored initial payload from existing ODAG app:', lastGeneratedPayload.bindSelectionState);
+                                            StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload);
+                                            debugLog('💾 Stored initial payload from existing ODAG app:', lastGeneratedPayload.bindSelectionState);
                                         }
 
                                         // Load the app in embed - only if it's a new app
@@ -2196,7 +2202,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 try {
                                     const buildResult = await buildPayload(app, odagConfig, layout);
                                     lastGeneratedPayload = buildResult.payload;
-                                    debugLog('Stored initial selection state:', lastGeneratedPayload.bindSelectionState);
+                                    StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload);
+                                    debugLog('💾 Stored initial selection state:', lastGeneratedPayload.bindSelectionState);
                                 } catch (error) {
                                     console.error('Error storing initial payload:', error);
                                 }
@@ -2207,6 +2214,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Function to check if current selections differ from last generated payload
                 const checkSelectionsChanged = async function() {
+                    // Always get fresh value from StateManager (in case it was updated elsewhere)
+                    const storedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null);
+                    if (storedPayload) {
+                        lastGeneratedPayload = storedPayload;
+                    }
+
                     debugLog('🔍 checkSelectionsChanged called - isGenerating:', isGenerating, 'lastGeneratedPayload:', !!lastGeneratedPayload);
                     if (isGenerating) {
                         debugLog('⏭️ Skipping check - currently generating');
