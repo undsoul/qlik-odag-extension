@@ -1236,8 +1236,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             'color': '#856404',
                             'padding': '12px',
                             'line-height': '1.5'
-                        }).html('⚠️ <strong>App limit reached (' + (window.odagGeneratedApps ? window.odagGeneratedApps.length : 0) + '/' + appLimit + ')</strong><br>' +
-                                'Delete an existing app to generate a new one.');
+                        }).html('⚠️ <strong>' + messages.validation.appLimitReached + ' (' + (window.odagGeneratedApps ? window.odagGeneratedApps.length : 0) + '/' + appLimit + ')</strong>');
                     } else if (!rowEstResult.canGenerate) {
                         // BLOCK: Hide/disable button and show error
                         if (isDynamicView) {
@@ -1448,7 +1447,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             isGenerating = false;
                             $('#cancel-btn-' + layout.qInfo.qId).hide();
                             $('#dynamic-status-' + layout.qInfo.qId).html(
-                                getStatusHTML('error', 'Generation timed out. Please try again.')
+                                getStatusHTML('error', messages.errors.generationTimeout)
                             );
                         }
                     }, 60000); // 60 seconds
@@ -1881,7 +1880,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 }
                             } else {
                                 $('#dynamic-status-' + layout.qInfo.qId).html(
-                                    getStatusHTML('none', 'No ODAG apps yet', false)
+                                    getStatusHTML('none', messages.status.noApps, false)
                                 );
 
                                 // Stop checking if no apps
@@ -1894,7 +1893,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         error: function(xhr) {
                             console.error('Failed to load ODAG requests:', xhr.responseText);
                             $('#dynamic-status-' + layout.qInfo.qId).html(
-                                getStatusHTML('error', 'Error loading apps', false)
+                                getStatusHTML('error', messages.errors.errorLoadingApps, false)
                             );
 
                             // Stop checking on error
@@ -2261,7 +2260,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 console.error('Failed to cancel:', error.responseText || error.message);
                                 // Even if cancel fails, reset the UI
                                 $('#dynamic-status-' + layout.qInfo.qId).html(
-                                    getStatusHTML('error', 'Cancel failed', false)
+                                    getStatusHTML('error', messages.errors.cancelFailed, false)
                                 );
                                 $('#cancel-btn-' + layout.qInfo.qId).hide();
                                 isGenerating = false;
@@ -2526,17 +2525,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const elementHeight = $element.height();
                 const isLargeView = elementHeight > 400;
 
-                // Update app count
+                // Update app count (localized)
                 const appCount = window.odagGeneratedApps.length;
-                $appCount.text(appCount + (appCount === 1 ? ' app' : ' apps'));
+                $appCount.text(appCount + ' ' + messages.info.appCount);
 
                 // Update mobile dropdown if it exists
                 const $mobileSelector = $('#mobile-app-selector-' + qId);
                 if ($mobileSelector.length > 0) {
                     if (appCount === 0) {
-                        $mobileSelector.html('<option value="">No apps generated yet</option>');
+                        $mobileSelector.html('<option value="">' + messages.status.noApps + '</option>');
                     } else {
-                        let dropdownHtml = '<option value="">Select an app...</option>';
+                        let dropdownHtml = '<option value="">' + messages.info.selectApp + '</option>';
                         window.odagGeneratedApps.forEach(function(app, index) {
                             // Get app ID as string
                             let appIdStr = '';
@@ -2603,12 +2602,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             listHtml += '<span class="app-status status-loading">';
                             listHtml += '<span class="status-spinner"></span> ';
 
-                            // Show user-friendly status text
+                            // Show user-friendly status text (localized)
                             let statusDisplayText = app.status.charAt(0).toUpperCase() + app.status.slice(1);
-                            if (app.status === 'queued') statusDisplayText = 'Queued';
-                            if (app.status === 'validating') statusDisplayText = 'Validating';
-                            if (app.status === 'generating') statusDisplayText = 'Generating';
-                            if (app.status === 'loading') statusDisplayText = 'Loading';
+                            if (app.status === 'queued') statusDisplayText = messages.status.queued;
+                            if (app.status === 'validating') statusDisplayText = messages.status.validating;
+                            if (app.status === 'generating') statusDisplayText = messages.status.generating;
+                            if (app.status === 'loading') statusDisplayText = messages.status.loading;
 
                             listHtml += statusDisplayText;
                             listHtml += '</span>';
@@ -2616,8 +2615,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             const statusIcon = app.status === 'succeeded' ? '✓' :
                                              app.status === 'failed' ? '❌' :
                                              app.status === 'cancelled' ? '⏹' : '⚠';
-                            const statusText = app.status === 'succeeded' ? 'Ready' :
-                                             app.status === 'cancelled' ? 'Cancelled' : app.status;
+                            const statusText = app.status === 'succeeded' ? messages.status.ready :
+                                             app.status === 'cancelled' ? messages.status.cancelled :
+                                             app.status === 'failed' ? messages.status.failed : app.status;
                             listHtml += '<span class="app-status status-' + app.status + '">' + statusIcon + ' ' + statusText + '</span>';
                         }
                     }
@@ -2632,15 +2632,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     if (app.status === 'pending' || app.status === 'queued' ||
                         app.status === 'loading' || app.status === 'generating' ||
                         app.status === 'validating') {
-                        listHtml += '<div class="menu-item cancel-app"><span class="menu-icon">⏹️</span> Cancel generation</div>';
+                        listHtml += '<div class="menu-item cancel-app"><span class="menu-icon">⏹️</span> ' + messages.buttons.cancel + '</div>';
                     } else if (app.status === 'succeeded') {
                         // Only succeeded apps can be opened
-                        listHtml += '<div class="menu-item open-app"><span class="menu-icon">🔗</span> Open in new tab</div>';
-                        listHtml += '<div class="menu-item reload-app"><span class="menu-icon">🔄</span> Reload data</div>';
+                        listHtml += '<div class="menu-item open-app"><span class="menu-icon">🔗</span> ' + messages.buttons.open + '</div>';
+                        listHtml += '<div class="menu-item reload-app"><span class="menu-icon">🔄</span> ' + messages.buttons.reload + '</div>';
                     }
                     // All apps (succeeded, failed, cancelled) can be deleted
 
-                    listHtml += '<div class="menu-item delete-app"><span class="menu-icon">🗑️</span> Delete app</div>';
+                    listHtml += '<div class="menu-item delete-app"><span class="menu-icon">🗑️</span> ' + messages.buttons.delete + '</div>';
                     listHtml += '</div>';
                     listHtml += '</div>';
 

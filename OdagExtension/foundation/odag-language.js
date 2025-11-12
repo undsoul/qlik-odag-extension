@@ -27,8 +27,8 @@ define([], function() {
                 cancel: 'Cancel',
                 delete: 'Delete',
                 deleteAll: 'Delete All Apps',
-                open: 'Open',
-                reload: 'Reload',
+                open: 'Open in new tab',
+                reload: 'Reload data',
                 close: 'Close'
             },
 
@@ -77,10 +77,12 @@ define([], function() {
             errors: {
                 loadFailed: 'Loading failed',
                 generationFailed: 'Generation failed',
+                generationTimeout: 'Generation timed out. Please try again.',
                 deleteFailed: 'Delete failed',
                 cancelFailed: 'Cancel failed',
                 reloadFailed: 'Reload failed',
                 apiError: 'API request failed',
+                errorLoadingApps: 'Error loading apps',
                 accessDenied: 'Access denied',
                 unknownError: 'An unknown error occurred'
             },
@@ -119,8 +121,8 @@ define([], function() {
                 cancel: 'İptal',
                 delete: 'Sil',
                 deleteAll: 'Tüm Uygulamaları Sil',
-                open: 'Aç',
-                reload: 'Yeniden Yükle',
+                open: 'Yeni sekmede aç',
+                reload: 'Veriyi yeniden yükle',
                 close: 'Kapat'
             },
 
@@ -169,10 +171,12 @@ define([], function() {
             errors: {
                 loadFailed: 'Yükleme başarısız',
                 generationFailed: 'Oluşturma başarısız',
+                generationTimeout: 'Oluşturma zaman aşımına uğradı. Lütfen tekrar deneyin.',
                 deleteFailed: 'Silme başarısız',
                 cancelFailed: 'İptal başarısız',
                 reloadFailed: 'Yeniden yükleme başarısız',
                 apiError: 'API isteği başarısız',
+                errorLoadingApps: 'Uygulamalar yüklenirken hata',
                 accessDenied: 'Erişim reddedildi',
                 unknownError: 'Bilinmeyen bir hata oluştu'
             },
@@ -211,8 +215,8 @@ define([], function() {
                 cancel: 'Cancelar',
                 delete: 'Eliminar',
                 deleteAll: 'Eliminar Todas las Apps',
-                open: 'Abrir',
-                reload: 'Recargar',
+                open: 'Abrir en nueva pestaña',
+                reload: 'Recargar datos',
                 close: 'Cerrar'
             },
 
@@ -261,10 +265,12 @@ define([], function() {
             errors: {
                 loadFailed: 'Carga fallida',
                 generationFailed: 'Generación fallida',
+                generationTimeout: 'Tiempo de generación agotado. Inténtalo de nuevo.',
                 deleteFailed: 'Eliminación fallida',
                 cancelFailed: 'Cancelación fallida',
                 reloadFailed: 'Recarga fallida',
                 apiError: 'Solicitud API fallida',
+                errorLoadingApps: 'Error al cargar aplicaciones',
                 accessDenied: 'Acceso denegado',
                 unknownError: 'Ocurrió un error desconocido'
             },
@@ -303,8 +309,8 @@ define([], function() {
                 cancel: '取消',
                 delete: '删除',
                 deleteAll: '删除所有应用',
-                open: '打开',
-                reload: '重新加载',
+                open: '在新标签页中打开',
+                reload: '重新加载数据',
                 close: '关闭'
             },
 
@@ -353,10 +359,12 @@ define([], function() {
             errors: {
                 loadFailed: '加载失败',
                 generationFailed: '生成失败',
+                generationTimeout: '生成超时。请重试。',
                 deleteFailed: '删除失败',
                 cancelFailed: '取消失败',
                 reloadFailed: '重新加载失败',
                 apiError: 'API 请求失败',
+                errorLoadingApps: '加载应用时出错',
                 accessDenied: '访问被拒绝',
                 unknownError: '发生未知错误'
             },
@@ -395,8 +403,8 @@ define([], function() {
                 cancel: 'إلغاء',
                 delete: 'حذف',
                 deleteAll: 'حذف جميع التطبيقات',
-                open: 'فتح',
-                reload: 'إعادة تحميل',
+                open: 'فتح في علامة تبويب جديدة',
+                reload: 'إعادة تحميل البيانات',
                 close: 'إغلاق'
             },
 
@@ -445,10 +453,12 @@ define([], function() {
             errors: {
                 loadFailed: 'فشل التحميل',
                 generationFailed: 'فشل الإنشاء',
+                generationTimeout: 'انتهت مهلة الإنشاء. يرجى المحاولة مرة أخرى.',
                 deleteFailed: 'فشل الحذف',
                 cancelFailed: 'فشل الإلغاء',
                 reloadFailed: 'فشلت إعادة التحميل',
                 apiError: 'فشل طلب API',
+                errorLoadingApps: 'خطأ في تحميل التطبيقات',
                 accessDenied: 'تم رفض الوصول',
                 unknownError: 'حدث خطأ غير معروف'
             },
