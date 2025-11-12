@@ -1900,12 +1900,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                             debugLog('New ODAG app detected, refreshing embed:', appId);
                                             loadDynamicEmbed(appId, latestAppName);
 
-                                            // Hide top bar immediately after successful generation of NEW app
-                                            // It will re-appear when user changes selections
-                                            const hideTopBarFunc = StateManager.get(extensionId, 'hideDynamicTopBar');
-                                            if (hideTopBarFunc) {
-                                                hideTopBarFunc();
-                                                debugLog('✅ Top bar hidden after successful generation');
+                                            // Hide top bar only if we have a stored payload
+                                            // If no payload exists (initial load), we'll check for binding selections
+                                            // in setTimeout and show warning if needed
+                                            if (lastGeneratedPayload) {
+                                                const hideTopBarFunc = StateManager.get(extensionId, 'hideDynamicTopBar');
+                                                if (hideTopBarFunc) {
+                                                    hideTopBarFunc();
+                                                    debugLog('✅ Top bar hidden after successful generation');
+                                                }
+                                            } else {
+                                                debugLog('⏸️ Skipping top bar hide - no stored payload (will check for binding selections)');
                                             }
                                         } else {
                                             debugLog('Same app already loaded, skipping refresh:', appId);
