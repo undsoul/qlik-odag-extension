@@ -2211,16 +2211,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('No existing apps found, generating initial app...');
                             generateNewODAGApp();
                         } else {
-                            // We found an existing app, capture current selections as baseline
+                            // We found an existing app
+                            // IMPORTANT: Do NOT store current selections as baseline here!
+                            // We don't know what selections were used to generate this existing app.
+                            // The baseline should only be set when user actually generates a new app.
                             if (!lastGeneratedPayload) {
-                                try {
-                                    const buildResult = await buildPayload(app, odagConfig, layout);
-                                    lastGeneratedPayload = buildResult.payload;
-                                    StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload);
-                                    debugLog('💾 Stored initial selection state:', lastGeneratedPayload.bindSelectionState);
-                                } catch (error) {
-                                    console.error('Error storing initial payload:', error);
-                                }
+                                debugLog('📝 Found existing app but no stored payload - baseline will be set when user generates new app');
+                            } else {
+                                debugLog('✅ Found existing app and have stored payload from previous generation');
                             }
                         }
                     }, 1000);
@@ -2245,17 +2243,18 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
 
                     try {
-                        // Check both selections AND variables
-                        const currentSelections = await getCurrentSelections(app);
-                        const currentVariables = await getVariableValues(app, odagConfig.variableMappings || []);
+                        // Build current payload to compare binding field selections
+                        const buildResult = await buildPayload(app, odagConfig, layout);
+                        const currentPayload = buildResult.payload;
 
-                        // Combine selections and variables for comparison
+                        // Compare ONLY the binding field selections (bindSelectionState)
+                        // Also compare variables if any are mapped
                         const currentState = {
-                            selections: currentSelections,
-                            variables: currentVariables
+                            bindSelections: currentPayload.bindSelectionState,
+                            variables: currentPayload.variableState || []
                         };
                         const lastState = {
-                            selections: lastGeneratedPayload.selectionState,
+                            bindSelections: lastGeneratedPayload.bindSelectionState,
                             variables: lastGeneratedPayload.variableState || []
                         };
 
@@ -2263,10 +2262,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const lastStateStr = JSON.stringify(lastState);
 
                         const hasChanged = currentStateStr !== lastStateStr;
-                        debugLog('🔍 Checking state changed (selections + variables):', hasChanged);
+                        debugLog('🔍 Checking state changed (binding selections + variables):', hasChanged);
                         if (hasChanged) {
-                            debugLog('📊 Current selections:', currentSelections);
-                            debugLog('📊 Last selections:', lastGeneratedPayload.selectionState);
+                            debugLog('📊 Current binding selections:', currentPayload.bindSelectionState);
+                            debugLog('📊 Last binding selections:', lastGeneratedPayload.bindSelectionState);
                         }
 
                         if (hasChanged) {
@@ -2274,7 +2273,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
 
                             // Show top bar with warning (always show when state changes)
-                            debugLog('🔔 State changed (selections or variables) - showing top bar with refresh warning');
+                            debugLog('🔔 State changed (binding selections or variables) - showing top bar with refresh warning');
                             topBarManuallyClosed = false; // Reset flag
                             showTopBar(false, true); // Show without auto-hide, force show for warning
                         } else {
