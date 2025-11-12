@@ -1389,8 +1389,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 let currentRequestId = null;
                 let deletedApps = new Set(); // Track deleted apps to avoid duplicate deletions
 
-                // Get lastGeneratedPayload from StateManager (persists across page navigation)
-                let lastGeneratedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null);
+                // Create stable storage key for sessionStorage (appId + odagLinkId doesn't change between page loads)
+                const stableStorageKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_lastGeneratedPayload';
+                debugLog('📍 Using stable storage key for lastGeneratedPayload:', stableStorageKey);
+
+                // Get lastGeneratedPayload from StateManager (persists across page navigation via sessionStorage)
+                let lastGeneratedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
                 debugLog('🔄 Retrieved lastGeneratedPayload from StateManager:', !!lastGeneratedPayload);
 
                 // Store deletedApps in StateManager so restoreDynamicView can access it
@@ -1648,8 +1652,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         // Store this payload AND variable state to compare for future selection changes
                         lastGeneratedPayload = payload;
                         lastGeneratedPayload.variableState = currentVariableValues;
-                        StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload);
-                        debugLog('💾 Stored lastGeneratedPayload to StateManager');
+                        StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
+                        debugLog('💾 Stored lastGeneratedPayload to StateManager with stable key');
 
                         // Remove warning class from refresh button
                         $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
@@ -1891,8 +1895,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                 bindSelectionState: latestApp.bindSelectionState,
                                                 selectionState: latestApp.selectionState || latestApp.bindSelectionState
                                             };
-                                            StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload);
-                                            debugLog('💾 Stored initial payload from existing ODAG app:', lastGeneratedPayload.bindSelectionState);
+                                            StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
+                                            debugLog('💾 Stored initial payload from existing ODAG app with stable key:', lastGeneratedPayload.bindSelectionState);
                                         }
 
                                         // Load the app in embed - only if it's a new app
@@ -2259,7 +2263,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 // Function to check if current selections differ from last generated payload
                 const checkSelectionsChanged = async function() {
                     // Always get fresh value from StateManager (in case it was updated elsewhere)
-                    const storedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null);
+                    const storedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
                     if (storedPayload) {
                         lastGeneratedPayload = storedPayload;
                     }

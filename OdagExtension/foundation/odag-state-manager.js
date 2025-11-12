@@ -44,9 +44,10 @@ define([], function() {
          * @param {string} extensionId - Extension instance ID (layout.qInfo.qId)
          * @param {string} key - State key
          * @param {any} defaultValue - Default value if not found
+         * @param {string} customStorageKey - Optional custom storage key for sessionStorage (for persistent keys)
          * @returns {any} State value
          */
-        get: function(extensionId, key, defaultValue) {
+        get: function(extensionId, key, defaultValue, customStorageKey) {
             if (!this._states.has(extensionId)) {
                 this._states.set(extensionId, new Map());
             }
@@ -61,12 +62,14 @@ define([], function() {
             // If this is a persistent key, try loading from sessionStorage
             if (this._persistentKeys.indexOf(key) > -1) {
                 try {
-                    const storageKey = 'odagState_' + extensionId + '_' + key;
+                    // Use custom storage key if provided, otherwise use extensionId
+                    const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
                     const storedValue = sessionStorage.getItem(storageKey);
                     if (storedValue !== null) {
                         const parsed = JSON.parse(storedValue);
                         // Store in memory for future access
                         instanceState.set(key, parsed);
+                        console.log('[ODAG StateManager] Loaded ' + key + ' from sessionStorage with key:', storageKey);
                         return parsed;
                     }
                 } catch (e) {
@@ -88,8 +91,9 @@ define([], function() {
          * @param {string} key - State key
          * @param {any} value - State value
          * @param {boolean} silent - Don't notify observers if true
+         * @param {string} customStorageKey - Optional custom storage key for sessionStorage (for persistent keys)
          */
-        set: function(extensionId, key, value, silent) {
+        set: function(extensionId, key, value, silent, customStorageKey) {
             if (!this._states.has(extensionId)) {
                 this._states.set(extensionId, new Map());
             }
@@ -100,8 +104,10 @@ define([], function() {
             // Persist to sessionStorage if this is a persistent key
             if (this._persistentKeys.indexOf(key) > -1) {
                 try {
-                    const storageKey = 'odagState_' + extensionId + '_' + key;
+                    // Use custom storage key if provided, otherwise use extensionId
+                    const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
                     sessionStorage.setItem(storageKey, JSON.stringify(value));
+                    console.log('[ODAG StateManager] Persisted ' + key + ' to sessionStorage with key:', storageKey);
                 } catch (e) {
                     console.warn('[ODAG StateManager] Failed to persist state to sessionStorage:', e);
                 }
