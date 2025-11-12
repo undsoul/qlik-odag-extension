@@ -7,12 +7,13 @@ define([
     "./foundation/odag-constants",
     "./foundation/odag-validators",
     "./foundation/odag-error-handler",
+    "./foundation/odag-language",
     "./handlers/odag-event-handlers",
     "./core/odag-payload-builder",
     "./views/odag-view-manager",
     "css!./styles/odag-api-extension.css"
 ],
-function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, EventHandlers, PayloadBuilder, ViewManager) {
+function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
@@ -75,6 +76,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             const elementHeight = $element.height();
             const elementWidth = $element.width();
 
+            // Get language preference (default: English)
+            const selectedLanguage = odagConfig.language || 'en';
+            const messages = Language.getMessages(selectedLanguage);
+
             // Debug logger - only logs when debug mode is enabled
             const debugLog = function() {
                 if (odagConfig.enableDebug) {
@@ -84,6 +89,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             debugLog('ODAG Extension: paint() called');
             debugLog('ODAG Extension: odagConfig =', odagConfig);
+            debugLog('ODAG Extension: selected language =', selectedLanguage);
 
             // Validate ODAG Link ID early to prevent issues
             if (odagConfig.odagLinkId) {
@@ -921,7 +927,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Embed container takes full space
                 html += '<div class="odag-dynamic-embed" id="dynamic-embed-' + layout.qInfo.qId + '" style="height: 100%; width: 100%;">';
-                html += getLoadingPlaceholder('Loading ODAG app...');
+                html += getLoadingPlaceholder(messages.progress.loadingApp);
                 html += '</div>';
 
                 html += '</div>';
@@ -943,7 +949,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += 'background-color:' + (odagConfig.buttonColor || '#009845') + ';';
                     html += 'color:' + (odagConfig.buttonTextColor || '#ffffff') + '; width: 100%; margin-bottom: 10px;">';
                     html += '<span class="btn-icon">⚡</span>';
-                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || CONSTANTS.DEFAULTS.BUTTON_TEXT) + '</span>';
+                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || messages.buttons.generate) + '</span>';
                     html += '</button>';
 
                     // Controls row: dropdown + buttons
@@ -953,7 +959,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += '<select id="mobile-app-selector-' + layout.qInfo.qId + '" class="mobile-app-selector" style="';
                     html += 'flex: 1; padding: 10px; font-size: 14px; border: 1px solid #e5e7eb; border-radius: 6px; ';
                     html += 'background: white; color: #374151; cursor: pointer;">';
-                    html += '<option value="">No apps generated yet</option>';
+                    html += '<option value="">' + messages.status.noApps + '</option>';
                     html += '</select>';
 
                     // Action buttons
@@ -977,7 +983,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += '<div class="odag-iframe-panel" id="iframe-container-' + layout.qInfo.qId + '" style="flex: 1; overflow: hidden;">';
                     html += '<div class="iframe-placeholder">';
                     html += '<div class="placeholder-icon">📊</div>';
-                    html += '<div class="placeholder-text">Select an app from the dropdown to preview</div>';
+                    html += '<div class="placeholder-text">' + messages.info.selectApp + '</div>';
                     html += '</div>';
                     html += '</div>';
 
@@ -1007,7 +1013,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += 'background-color:' + (odagConfig.buttonColor || '#009845') + ';';
                     html += 'color:' + (odagConfig.buttonTextColor || '#ffffff') + ';">';
                     html += '<span class="btn-icon">⚡</span>';
-                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || CONSTANTS.DEFAULTS.BUTTON_TEXT) + '</span>';
+                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || messages.buttons.generate) + '</span>';
                     html += '</button>';
                     html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin-top: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; text-align: center; font-weight: 500;"></div>';
                     html += '</div>';
@@ -1035,9 +1041,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                     // Show different message based on whether sheet ID is configured
                     if (odagConfig.templateSheetId && odagConfig.templateSheetId.trim() !== '') {
-                        html += '<div class="placeholder-text">Click on any app to view its sheet</div>';
+                        html += '<div class="placeholder-text">' + messages.info.selectApp + '</div>';
                     } else {
-                        html += '<div class="placeholder-text">Select an app from the list to preview</div>';
+                        html += '<div class="placeholder-text">' + messages.info.selectApp + '</div>';
                     }
 
                     html += '</div>';
@@ -1287,6 +1293,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 }
             };
 
+            // Store language messages in StateManager for access from all functions
+            StateManager.set(extensionId, 'messages', messages);
+
             // Store validation function in StateManager so it can be called on every paint
             StateManager.set(extensionId, 'checkODAGValidation', checkODAGValidation);
 
@@ -1420,7 +1429,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                     isGenerating = true;
                     $('#dynamic-status-' + layout.qInfo.qId).html(
-                        getStatusHTML('generating', 'Generating new app with current selections...', true)
+                        getStatusHTML('generating', messages.progress.generatingApp, true)
                     );
 
                     // Show top bar and keep it visible (no auto-hide during generation)

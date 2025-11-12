@@ -393,8 +393,22 @@ define([], function() {
             },
             appearance: {
                 type: "items",
-                label: "Button Appearance",
+                label: "Appearance & Language",
                 items: {
+                    language: {
+                        type: "string",
+                        component: "dropdown",
+                        ref: "odagConfig.language",
+                        label: "Language / Dil / 语言",
+                        options: [
+                            { value: "en", label: "English" },
+                            { value: "tr", label: "Türkçe" },
+                            { value: "es", label: "Español" },
+                            { value: "zh", label: "中文 (Chinese)" },
+                            { value: "ar", label: "العربية (Arabic)" }
+                        ],
+                        defaultValue: "en"
+                    },
                     buttonText: {
                         type: "string",
                         ref: "odagConfig.buttonText",
