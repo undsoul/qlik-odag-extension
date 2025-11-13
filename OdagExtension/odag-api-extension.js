@@ -2225,36 +2225,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             // ALWAYS auto-generate new app on page load to ensure fresh data
                             debugLog('📝 Found existing app - will auto-generate with current selections on page load');
 
-                            // Wait for payload builder and generate function to be initialized
-                            setTimeout(async function() {
-                                try {
-                                    const buildResult = await buildPayload(app, odagConfig, layout);
-                                    const currentPayload = buildResult.payload;
-
-                                    // Check if there are any selections in binding fields
-                                    const hasBindingSelections = currentPayload.bindSelectionState &&
-                                        currentPayload.bindSelectionState.some(binding =>
-                                            binding.values && binding.values.length > 0
-                                        );
-
-                                    if (hasBindingSelections) {
-                                        debugLog('🔄 Found binding selections on page load - auto-generating new app');
-
-                                        // Automatically trigger generation with current selections
-                                        const generateFunc = StateManager.get(extensionId, 'generateODAGApp');
-                                        if (generateFunc) {
-                                            debugLog('🚀 Auto-triggering generation on page load to ensure fresh data');
-                                            generateFunc();
-                                        } else {
-                                            console.warn('⚠️ Generate function not found in StateManager');
-                                        }
-                                    } else {
-                                        debugLog('✅ No binding selections yet, waiting for user selections');
-                                    }
-                                } catch (error) {
-                                    console.error('Error during auto-generation on page load:', error);
-                                }
-                            }, 1000);
+                            // Mark that we should auto-generate on page load
+                            StateManager.set(extensionId, 'shouldAutoGenerate', true);
                         }
                     }, 1000);
                 }
@@ -3464,7 +3436,23 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
 
                     // initDynamicView() will set and clear initInProgressKey as needed
-                    return initDynamicView(debugLog);
+                    const initPromise = initDynamicView(debugLog);
+
+                    // Check if we should auto-generate after init completes
+                    initPromise.then(function() {
+                        const shouldAutoGen = StateManager.get(extensionId, 'shouldAutoGenerate');
+                        if (shouldAutoGen) {
+                            debugLog('🚀 Auto-generating ODAG app on page load as requested');
+                            StateManager.delete(extensionId, 'shouldAutoGenerate');
+
+                            // Small delay to ensure everything is initialized
+                            setTimeout(function() {
+                                generateODAGApp();
+                            }, 500);
+                        }
+                    });
+
+                    return initPromise;
                 } else if (restoreDynamicView) {
                     // Check if initialization is still in progress
                     if (window[initInProgressKey]) {
