@@ -2222,18 +2222,87 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             generateNewODAGApp();
                         } else {
                             // We found an existing app
-                            // ALWAYS auto-generate new app on page load to ensure fresh data
-                            debugLog('📝 Found existing app - will auto-generate with current selections on page load');
+                            // IMPORTANT: Do NOT store current selections as baseline here!
+                            // We don't know what selections were used to generate this existing app.
+                            // The baseline should only be set when user actually generates a new app.
+                            if (!lastGeneratedPayload) {
+                                debugLog('📝 Found existing app but no stored payload - baseline will be set when user generates new app');
 
-                            // Wait longer to ensure generateODAGApp is defined, then call it directly
-                            setTimeout(function() {
-                                debugLog('🚀 Auto-triggering ODAG generation on page load');
-                                if (typeof generateODAGApp === 'function') {
-                                    generateODAGApp();
-                                } else {
-                                    console.error('❌ generateODAGApp function not available yet');
+                                // Check if user has binding field selections - if yes, activate refresh button
+                                // This indicates selections may have changed since the app was generated
+                                try {
+                                    const buildResult = await buildPayload(app, odagConfig, layout);
+                                    const currentPayload = buildResult.payload;
+
+                                    // Store current selections to sessionStorage (persist across page navigation)
+                                    const currentSelections = {
+                                        bindSelections: currentPayload.bindSelectionState,
+                                        variables: currentPayload.variableState || []
+                                    };
+                                    StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+                                    debugLog('💾 Stored currentBindSelections on initial paint for cross-page tracking');
+
+                                    // Check if there are any selections in binding fields
+                                    const hasBindingSelections = currentPayload.bindSelectionState &&
+                                        currentPayload.bindSelectionState.some(binding =>
+                                            binding.values && binding.values.length > 0
+                                        );
+
+                                    if (hasBindingSelections) {
+                                        debugLog('⚠️ Found binding selections but no baseline - activating refresh button (top bar hidden)');
+                                        $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
+                                        // Don't show top bar on initial load - it will appear when selections change
+                                    } else {
+                                        debugLog('✅ No binding selections yet, refresh button stays inactive');
+                                    }
+                                } catch (error) {
+                                    console.error('Error checking initial binding selections:', error);
                                 }
-                            }, 2500);
+                            } else {
+                                debugLog('✅ Found existing app and have stored payload from previous generation');
+
+                                // Check if we have stored currentBindSelections from before page navigation
+                                const storedCurrentSelections = StateManager.get(extensionId, 'currentBindSelections', null, currentSelectionsKey);
+                                debugLog('🔄 Retrieved stored currentBindSelections from sessionStorage:', !!storedCurrentSelections);
+
+                                if (storedCurrentSelections) {
+                                    // Compare stored selections with baseline
+                                    const lastState = {
+                                        bindSelections: lastGeneratedPayload.bindSelectionState,
+                                        variables: lastGeneratedPayload.variableState || []
+                                    };
+
+                                    const currentStateStr = JSON.stringify(storedCurrentSelections);
+                                    const lastStateStr = JSON.stringify(lastState);
+                                    const hasChanged = currentStateStr !== lastStateStr;
+
+                                    debugLog('🔍 Comparing stored selections with baseline after page reload - changed:', hasChanged);
+                                    if (hasChanged) {
+                                        debugLog('📊 Stored selections:', storedCurrentSelections.bindSelections);
+                                        debugLog('📊 Baseline selections:', lastGeneratedPayload.bindSelectionState);
+
+                                        // Auto-trigger refresh on page load when selections changed
+                                        debugLog('🔄 Auto-triggering refresh on page load due to selection changes');
+                                        setTimeout(function() {
+                                            const refreshBtn = $('#refresh-btn-' + layout.qInfo.qId);
+                                            if (refreshBtn.length) {
+                                                refreshBtn.click();
+                                                debugLog('✅ Auto-clicked refresh button after detecting stored selection changes');
+                                            }
+                                        }, 1000);
+                                    }
+                                } else {
+                                    // No stored selections - call checkSelectionsChanged to build fresh payload
+                                    debugLog('⚠️ No stored selections - will check fresh selections after function initialization');
+                                    setTimeout(function() {
+                                        const checkFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                                        if (checkFunc) {
+                                            debugLog('🔍 Calling checkSelectionsChanged after page reload with stored payload');
+                                            checkFunc();
+                                        }
+                                    }, 500);
+                                }
+                            }
                         }
                     }, 1000);
                 }
