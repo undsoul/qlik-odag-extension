@@ -2225,8 +2225,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             // ALWAYS auto-generate new app on page load to ensure fresh data
                             debugLog('📝 Found existing app - will auto-generate with current selections on page load');
 
-                            // Mark that we should auto-generate on page load
-                            StateManager.set(extensionId, 'shouldAutoGenerate', true);
+                            // Wait longer to ensure generateODAGApp is defined, then call it directly
+                            setTimeout(function() {
+                                debugLog('🚀 Auto-triggering ODAG generation on page load');
+                                if (typeof generateODAGApp === 'function') {
+                                    generateODAGApp();
+                                } else {
+                                    console.error('❌ generateODAGApp function not available yet');
+                                }
+                            }, 2500);
                         }
                     }, 1000);
                 }
@@ -3436,20 +3443,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
 
                     // initDynamicView() will set and clear initInProgressKey as needed
-                    const initPromise = initDynamicView(debugLog);
-
-                    // Check if we should auto-generate after init completes
-                    setTimeout(function() {
-                        const shouldAutoGen = StateManager.get(extensionId, 'shouldAutoGenerate');
-                        debugLog('🔍 Checking auto-generate flag after init:', shouldAutoGen);
-                        if (shouldAutoGen) {
-                            debugLog('🚀 Auto-generating ODAG app on page load as requested');
-                            StateManager.delete(extensionId, 'shouldAutoGenerate');
-                            generateODAGApp();
-                        }
-                    }, 2000);
-
-                    return initPromise;
+                    return initDynamicView(debugLog);
                 } else if (restoreDynamicView) {
                     // Check if initialization is still in progress
                     if (window[initInProgressKey]) {
