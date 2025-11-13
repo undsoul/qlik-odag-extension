@@ -2249,11 +2249,18 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         );
 
                                     if (hasBindingSelections) {
-                                        debugLog('⚠️ Found binding selections but no baseline - activating refresh button (top bar hidden)');
-                                        $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
-                                        // Don't show top bar on initial load - it will appear when selections change
+                                        debugLog('🔄 Found binding selections on initial load - auto-generating new app with current selections');
+
+                                        // Automatically trigger generation with current selections
+                                        setTimeout(function() {
+                                            const generateFunc = StateManager.get(extensionId, 'generateODAGApp');
+                                            if (generateFunc) {
+                                                debugLog('🚀 Auto-triggering generation on initial load with binding selections');
+                                                generateFunc();
+                                            }
+                                        }, 500);
                                     } else {
-                                        debugLog('✅ No binding selections yet, refresh button stays inactive');
+                                        debugLog('✅ No binding selections yet, waiting for user selections');
                                     }
                                 } catch (error) {
                                     console.error('Error checking initial binding selections:', error);
@@ -2281,14 +2288,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         debugLog('📊 Stored selections:', storedCurrentSelections.bindSelections);
                                         debugLog('📊 Baseline selections:', lastGeneratedPayload.bindSelectionState);
 
-                                        // Activate refresh button and show top bar
-                                        $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
-                                        debugLog('🟡 Added needs-refresh warning state to refresh button after page reload');
-
-                                        // Show top bar with warning
-                                        topBarManuallyClosed = false;
-                                        showTopBar(false, true);
-                                        debugLog('🔔 Showing top bar with refresh warning after detecting stored selection changes');
+                                        // Automatically trigger generation with changed selections
+                                        debugLog('🔄 Auto-generating new app due to selection changes detected on page reload');
+                                        setTimeout(function() {
+                                            const generateFunc = StateManager.get(extensionId, 'generateODAGApp');
+                                            if (generateFunc) {
+                                                debugLog('🚀 Auto-triggering generation after page reload with changed selections');
+                                                generateFunc();
+                                            }
+                                        }, 500);
+                                    } else {
+                                        debugLog('✅ Stored selections match baseline - no auto-generation needed');
                                     }
                                 } else {
                                     // No stored selections - call checkSelectionsChanged to build fresh payload
