@@ -79,12 +79,13 @@ All user-facing messages are now available in multiple languages:
 When users made binding field selections, navigated to another sheet, and returned to the extension, the selections were lost. The extension couldn't detect that selections had changed because they were only stored in memory, which cleared during page navigation.
 
 #### The Solution
-Implemented persistent selection tracking using sessionStorage with stable storage keys:
+Implemented persistent selection tracking using sessionStorage with stable storage keys and automatic app regeneration:
 
 - **Persistent Current Selections**: Extension now stores `currentBindSelections` to sessionStorage whenever selections are checked
 - **Cross-Page Memory**: When you navigate away and return, stored selections are automatically restored
 - **Smart Comparison**: On page reload, extension compares restored selections with baseline (`lastGeneratedPayload`)
-- **Visual Feedback**: If selections changed, refresh button activates and top bar appears with warning
+- **Auto-Trigger Refresh**: If selections changed, extension automatically triggers refresh (as if user clicked the button)
+- **Seamless Experience**: New app generation starts automatically without manual intervention
 - **Clean Lifecycle**: Stored selections are cleared after successful generation (they become the new baseline)
 
 #### What Changed
@@ -98,6 +99,7 @@ Implemented persistent selection tracking using sessionStorage with stable stora
 - Created stable storage key for current selections (using `app.id + odagLinkId`)
 - Store selections continuously to sessionStorage
 - Restore and compare selections after page navigation
+- Auto-trigger refresh button click when selections changed (after 1 second delay)
 - Clear stored selections after successful generation
 
 #### How It Works Now
@@ -105,16 +107,19 @@ Implemented persistent selection tracking using sessionStorage with stable stora
 ```
 1. User makes selections → Stored to sessionStorage
 2. User navigates to another sheet → Selections persist
-3. User returns to extension → Selections restored
-4. Extension compares with baseline → Shows warning if changed
-5. User generates new app → Stored selections cleared (new baseline)
+3. User returns to extension → Selections restored and compared with baseline
+4. Extension detects change → Automatically triggers refresh after 1 second
+5. New app generation starts → Without manual button click
+6. App completes → Old app deleted, new app displayed
+7. Stored selections cleared → Now part of new baseline
 ```
 
 #### Benefits
 
 - ✅ **No Lost Selections**: Selections survive page navigation
-- ✅ **Reliable Detection**: Warning system works across pages
-- ✅ **Better UX**: Users don't lose their context when navigating
+- ✅ **Fully Automatic**: No manual refresh needed - app regenerates automatically
+- ✅ **Seamless Experience**: Users just navigate and the extension handles everything
+- ✅ **Zero Friction**: Navigate away, make changes, come back - new app starts generating
 - ✅ **Stable Tracking**: Uses stable keys that don't change between page loads
 
 ---
@@ -558,7 +563,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 🔄 **Fixed: Cross-Page Selection Tracking**: Selections now persist across page navigation in Dynamic View
 - 💾 **Persistent State**: Current selections stored to sessionStorage with stable keys
 - 🎯 **Smart Comparison**: Automatically compares stored selections with baseline after page reload
-- ⚠️ **Better Warnings**: Refresh button and top bar activate correctly when returning from navigation
+- 🤖 **Auto-Trigger Refresh**: Automatically starts app regeneration when selections changed (no manual click needed)
+- ⚡ **Zero-Click Experience**: Navigate away, make changes, come back - app regenerates automatically
 
 ### v6.0.0
 - ✨ Added variable change detection in Dynamic View
