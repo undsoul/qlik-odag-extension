@@ -2222,25 +2222,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             generateNewODAGApp();
                         } else {
                             // We found an existing app
-                            // IMPORTANT: Do NOT store current selections as baseline here!
-                            // We don't know what selections were used to generate this existing app.
-                            // The baseline should only be set when user actually generates a new app.
-                            if (!lastGeneratedPayload) {
-                                debugLog('📝 Found existing app but no stored payload - baseline will be set when user generates new app');
+                            // ALWAYS auto-generate new app on page load to ensure fresh data
+                            debugLog('📝 Found existing app - will auto-generate with current selections on page load');
 
-                                // Check if user has binding field selections - if yes, activate refresh button
-                                // This indicates selections may have changed since the app was generated
+                            // Wait for payload builder and generate function to be initialized
+                            setTimeout(async function() {
                                 try {
                                     const buildResult = await buildPayload(app, odagConfig, layout);
                                     const currentPayload = buildResult.payload;
-
-                                    // Store current selections to sessionStorage (persist across page navigation)
-                                    const currentSelections = {
-                                        bindSelections: currentPayload.bindSelectionState,
-                                        variables: currentPayload.variableState || []
-                                    };
-                                    StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
-                                    debugLog('💾 Stored currentBindSelections on initial paint for cross-page tracking');
 
                                     // Check if there are any selections in binding fields
                                     const hasBindingSelections = currentPayload.bindSelectionState &&
@@ -2249,69 +2238,23 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         );
 
                                     if (hasBindingSelections) {
-                                        debugLog('🔄 Found binding selections on initial load - auto-generating new app with current selections');
+                                        debugLog('🔄 Found binding selections on page load - auto-generating new app');
 
                                         // Automatically trigger generation with current selections
-                                        setTimeout(function() {
-                                            const generateFunc = StateManager.get(extensionId, 'generateODAGApp');
-                                            if (generateFunc) {
-                                                debugLog('🚀 Auto-triggering generation on initial load with binding selections');
-                                                generateFunc();
-                                            }
-                                        }, 500);
+                                        const generateFunc = StateManager.get(extensionId, 'generateODAGApp');
+                                        if (generateFunc) {
+                                            debugLog('🚀 Auto-triggering generation on page load to ensure fresh data');
+                                            generateFunc();
+                                        } else {
+                                            console.warn('⚠️ Generate function not found in StateManager');
+                                        }
                                     } else {
                                         debugLog('✅ No binding selections yet, waiting for user selections');
                                     }
                                 } catch (error) {
-                                    console.error('Error checking initial binding selections:', error);
+                                    console.error('Error during auto-generation on page load:', error);
                                 }
-                            } else {
-                                debugLog('✅ Found existing app and have stored payload from previous generation');
-
-                                // Check if we have stored currentBindSelections from before page navigation
-                                const storedCurrentSelections = StateManager.get(extensionId, 'currentBindSelections', null, currentSelectionsKey);
-                                debugLog('🔄 Retrieved stored currentBindSelections from sessionStorage:', !!storedCurrentSelections);
-
-                                if (storedCurrentSelections) {
-                                    // Compare stored selections with baseline
-                                    const lastState = {
-                                        bindSelections: lastGeneratedPayload.bindSelectionState,
-                                        variables: lastGeneratedPayload.variableState || []
-                                    };
-
-                                    const currentStateStr = JSON.stringify(storedCurrentSelections);
-                                    const lastStateStr = JSON.stringify(lastState);
-                                    const hasChanged = currentStateStr !== lastStateStr;
-
-                                    debugLog('🔍 Comparing stored selections with baseline after page reload - changed:', hasChanged);
-                                    if (hasChanged) {
-                                        debugLog('📊 Stored selections:', storedCurrentSelections.bindSelections);
-                                        debugLog('📊 Baseline selections:', lastGeneratedPayload.bindSelectionState);
-
-                                        // Automatically trigger generation with changed selections
-                                        debugLog('🔄 Auto-generating new app due to selection changes detected on page reload');
-                                        setTimeout(function() {
-                                            const generateFunc = StateManager.get(extensionId, 'generateODAGApp');
-                                            if (generateFunc) {
-                                                debugLog('🚀 Auto-triggering generation after page reload with changed selections');
-                                                generateFunc();
-                                            }
-                                        }, 500);
-                                    } else {
-                                        debugLog('✅ Stored selections match baseline - no auto-generation needed');
-                                    }
-                                } else {
-                                    // No stored selections - call checkSelectionsChanged to build fresh payload
-                                    debugLog('⚠️ No stored selections - will check fresh selections after function initialization');
-                                    setTimeout(function() {
-                                        const checkFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
-                                        if (checkFunc) {
-                                            debugLog('🔍 Calling checkSelectionsChanged after page reload with stored payload');
-                                            checkFunc();
-                                        }
-                                    }, 500);
-                                }
-                            }
+                            }, 1000);
                         }
                     }, 1000);
                 }
