@@ -3439,18 +3439,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     const initPromise = initDynamicView(debugLog);
 
                     // Check if we should auto-generate after init completes
-                    initPromise.then(function() {
+                    setTimeout(function() {
                         const shouldAutoGen = StateManager.get(extensionId, 'shouldAutoGenerate');
+                        debugLog('🔍 Checking auto-generate flag after init:', shouldAutoGen);
                         if (shouldAutoGen) {
                             debugLog('🚀 Auto-generating ODAG app on page load as requested');
                             StateManager.delete(extensionId, 'shouldAutoGenerate');
-
-                            // Small delay to ensure everything is initialized
-                            setTimeout(function() {
-                                generateODAGApp();
-                            }, 500);
+                            generateODAGApp();
                         }
-                    });
+                    }, 2000);
 
                     return initPromise;
                 } else if (restoreDynamicView) {
