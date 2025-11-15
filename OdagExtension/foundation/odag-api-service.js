@@ -2,10 +2,10 @@
  * ODAG API Service
  * Unified API layer for all ODAG operations (Cloud and On-Premise)
  *
- * @version 3.4.0
+ * @version 8.0.0
  */
 
-define(["jquery"], function($) {
+define(["../utils/http-helper"], function(HTTP) {
     'use strict';
 
     /**
@@ -34,14 +34,14 @@ define(["jquery"], function($) {
         },
 
         /**
-         * Generic AJAX call wrapper with error handling
+         * Generic HTTP call wrapper with error handling (using Fetch API)
          * @param {string} method - HTTP method (GET, POST, DELETE, etc.)
          * @param {string} url - Full URL
          * @param {Object} data - Request payload
          * @param {Object} options - Additional options
          * @returns {Promise} Promise resolving to response data
          */
-        _call: function(method, url, data, options) {
+        _call: async function(method, url, data, options) {
             options = options || {};
             const isCloud = this.isCloud();
 
@@ -59,31 +59,28 @@ define(["jquery"], function($) {
             // Merge with any custom headers from options
             const headers = Object.assign(baseHeaders, options.headers || {});
 
-            return new Promise((resolve, reject) => {
-                $.ajax({
+            try {
+                const response = await HTTP.request({
                     url: url,
-                    type: method,
-                    data: data ? JSON.stringify(data) : undefined,
-                    contentType: 'application/json',
+                    method: method,
+                    data: data,
                     headers: headers,
-                    xhrFields: { withCredentials: true },
                     timeout: options.timeout || this.config.timeout
-                })
-                .done(function(response) {
-                    resolve(response);
-                })
-                .fail(function(jqXHR, textStatus, errorThrown) {
-                    const error = {
-                        status: jqXHR.status,
-                        statusText: textStatus,
-                        message: errorThrown || textStatus,
-                        response: jqXHR.responseJSON || jqXHR.responseText,
-                        url: url,
-                        method: method
-                    };
-                    reject(error);
                 });
-            });
+
+                return response;
+            } catch (error) {
+                // Transform error to match previous format
+                const apiError = {
+                    status: error.status || 0,
+                    statusText: error.statusText || 'Error',
+                    message: error.message,
+                    response: error.response || null,
+                    url: url,
+                    method: method
+                };
+                throw apiError;
+            }
         },
 
         /**

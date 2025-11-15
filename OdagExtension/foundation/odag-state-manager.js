@@ -2,7 +2,7 @@
  * ODAG State Manager
  * Manages extension state without polluting global window namespace
  *
- * @version 6.0.0
+ * @version 8.0.0
  */
 
 define([], function() {
@@ -11,7 +11,7 @@ define([], function() {
     /**
      * State Manager
      * Replaces window[dynamicKey] pattern with proper state management
-     * v6: Enhanced with timers, observers, and better cleanup
+     * v8: Already vanilla JS - no jQuery dependency, uses ES6 Map/Array
      */
     const ODAGStateManager = {
 
@@ -60,7 +60,7 @@ define([], function() {
             }
 
             // If this is a persistent key, try loading from sessionStorage
-            if (this._persistentKeys.indexOf(key) > -1) {
+            if (this._persistentKeys.includes(key)) {
                 try {
                     // Use custom storage key if provided, otherwise use extensionId
                     const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
@@ -102,7 +102,7 @@ define([], function() {
             this._states.get(extensionId).set(key, value);
 
             // Persist to sessionStorage if this is a persistent key
-            if (this._persistentKeys.indexOf(key) > -1) {
+            if (this._persistentKeys.includes(key)) {
                 try {
                     // Use custom storage key if provided, otherwise use extensionId
                     const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
@@ -142,7 +142,7 @@ define([], function() {
          */
         delete: function(extensionId, key, customStorageKey) {
             // Remove from sessionStorage if persistent key
-            if (this._persistentKeys.indexOf(key) > -1) {
+            if (this._persistentKeys.includes(key)) {
                 try {
                     // Use custom storage key if provided, otherwise use extensionId
                     const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
