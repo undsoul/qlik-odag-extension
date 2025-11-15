@@ -1137,7 +1137,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             
             html += '</div>';
 
-            DOM.setHTML(element, html);
+            $element.html(html);
 
             // Calculate row estimation for ODAG validation
             // Use PayloadBuilder module for row estimation
@@ -1206,7 +1206,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // Select all generate buttons (List View may have multiple)
                     const $generateBtn = isDynamicView ?
                         $('#refresh-btn-' + layout.qInfo.qId) :
-                        DOM.get('.odag-generate-btn-compact', element);
+                        $element.find('.odag-generate-btn-compact');
 
                     debugLog('🔍 Validation check:', {
                         isDynamicView: isDynamicView,
@@ -1668,7 +1668,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         debugLog('🗑️ Cleared stored currentBindSelections (now part of baseline)');
 
                         // Remove warning class from refresh button
-                        DOM.removeClass('needs-refresh');
+                        $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
 
                         // Call ODAG API
                         const result = await callODAGAPI(odagConfig.odagLinkId, payload);
@@ -2087,7 +2087,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 '3. Copy ONLY the ID after /sheet/ in the URL\n' +
                                 '   (before /state/analysis)';
 
-                            DOM.setHTML(element, 
+                            $element.html(
                                 '<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 8px; font-family: monospace; white-space: pre-wrap; line-height: 1.6;">' +
                                 errorMsg +
                                 '</div>'
@@ -2256,7 +2256,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                     if (hasBindingSelections) {
                                         debugLog('⚠️ Found binding selections but no baseline - activating refresh button (top bar hidden)');
-                                        DOM.addClass('needs-refresh');
+                                        $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
                                         // Don't show top bar on initial load - it will appear when selections change
                                     } else {
                                         debugLog('✅ No binding selections yet, refresh button stays inactive');
@@ -2364,7 +2364,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                         if (hasChanged) {
                             // State changed - highlight refresh button
-                            DOM.addClass('needs-refresh');
+                            $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
 
                             // Show top bar with warning (always show when state changes)
                             debugLog('🔔 State changed (binding selections or variables) - showing top bar with refresh warning');
@@ -2372,7 +2372,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             showTopBar(false, true); // Show without auto-hide, force show for warning
                         } else {
                             // State same - remove highlight
-                            DOM.removeClass('needs-refresh');
+                            $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
                         }
                     } catch (error) {
                         debugLog('Error checking state changes:', error);
@@ -2437,7 +2437,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 });
 
                 // Handle refresh button click - Generate a NEW app
-                DOM.on('click', function() {
+                $('#refresh-btn-' + layout.qInfo.qId).on('click', function() {
                     debugLog('Refresh clicked - generating new ODAG app...');
 
                     // Reset the manually closed flag - normal behavior resumes after refresh
@@ -2456,7 +2456,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 // Handle cancel button click
                 const cancelFunc = StateManager.get(extensionId, 'cancelGeneration');
                 if (cancelFunc) {
-                    DOM.on('click', cancelFunc);
+                    $('#cancel-btn-' + layout.qInfo.qId).on('click', cancelFunc);
                 }
 
                 // Load the latest ODAG app on initialization
@@ -2476,7 +2476,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     const cancelFunc = StateManager.get(extensionId, 'cancelGeneration');
 
                     if (generateFunc) {
-                        DOM.on('click', function() {
+                        $('#refresh-btn-' + layout.qInfo.qId).off('click').on('click', function() {
                             debugLog('Refresh clicked (restored handler)');
                             const $embedContainer = $('#dynamic-embed-' + layout.qInfo.qId);
                             $embedContainer.css('filter', 'blur(3px)');
@@ -2487,7 +2487,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }
 
                     if (cancelFunc) {
-                        DOM.on('click', cancelFunc);
+                        $('#cancel-btn-' + layout.qInfo.qId).off('click').on('click', cancelFunc);
                     }
 
                     // That's it! Don't make API calls, don't recreate embeds or modify DOM
@@ -2555,7 +2555,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 });
 
                 // Close button handler - hide top bar when clicked
-                DOM.on('click', function(e) {
+                $('#close-topbar-btn-' + layout.qInfo.qId).on('click', function(e) {
                     e.preventDefault();
                     e.stopPropagation();
                     debugLog('❌ Close button clicked - hiding top bar until refresh needed');
@@ -2872,8 +2872,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         }
 
                         if (isLargeView) {
-                            DOM.removeClass('selected');
-                            DOM.addClass('selected');
+                            $('.odag-app-item').removeClass('selected');
+                            $(this).addClass('selected');
 
                             // Build qlik-embed element based on view mode
                             const viewMode = odagConfig.viewMode || 'odagApp';
@@ -3571,7 +3571,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
             // Button click handler (not in dynamic view)
             if (!isDynamicView) {
-                const $generateButtons = DOM.get('.odag-generate-btn-compact', element);
+                const $generateButtons = $element.find('.odag-generate-btn-compact');
                 debugLog('🔘 Attaching click handlers to', $generateButtons.length, 'generate button(s)');
 
                 // Setup generate button handler
@@ -3581,7 +3581,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 EventHandlers.setupSidebarToggleHandler($element, layout);
 
                 // Refresh list button handler
-                DOM.get('.refresh-list-btn').on('click', function(, element) {
+                $element.find('.refresh-list-btn').on('click', function() {
                     const $btn = $(this);
 
                     // Add spinning animation
@@ -3604,7 +3604,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 EventHandlers.setupDeleteAllHandler($element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
 
                 // Mobile dropdown selector handler
-                DOM.get('.mobile-app-selector').on('change', function(, element) {
+                $element.find('.mobile-app-selector').on('change', function() {
                     const selectedAppId = $(this).val();
 
                     if (!selectedAppId || selectedAppId === '') {
@@ -3708,7 +3708,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
             } catch (error) {
                 console.error('ODAG Extension ERROR:', error);
-                DOM.setHTML(element, '<div style="padding: 20px; color: red;">Error: ' + error.message + '</div>');
+                $element.html('<div style="padding: 20px; color: red;">Error: ' + error.message + '</div>');
                 return qlik.Promise.reject(error);
             }
         },
@@ -3732,7 +3732,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             // Remove any document-level event listeners
             const clickHandlerKey = 'clickHandler_' + extensionId;
             if (window[clickHandlerKey]) {
-                DOM.off('click', window[clickHandlerKey]);
+                $(document).off('click', window[clickHandlerKey]);
                 delete window[clickHandlerKey];
             }
 
@@ -3772,7 +3772,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
             // Remove DOM element content
             if ($element) {
-                DOM.empty(element);
+                $element.empty();
             }
         }
     };
