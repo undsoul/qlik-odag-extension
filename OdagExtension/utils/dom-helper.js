@@ -1,0 +1,386 @@
+/**
+ * DOM Helper Utility (Vanilla JS)
+ * Replaces jQuery with modern, secure vanilla JavaScript
+ *
+ * @version 8.0.0
+ * @description Lightweight DOM manipulation without jQuery dependencies
+ */
+
+define([], function() {
+    'use strict';
+
+    /**
+     * DOM Helper - Vanilla JS replacement for jQuery
+     * Provides safe, modern DOM manipulation methods
+     */
+    const DOMHelper = {
+
+        /**
+         * Select single element by selector
+         * Replaces: $('#id') or $('.class')
+         *
+         * @param {string} selector - CSS selector
+         * @returns {Element|null} DOM element or null
+         */
+        get: function(selector) {
+            if (!selector) return null;
+
+            // Optimize for ID selector (most common case)
+            if (selector.startsWith('#')) {
+                return document.getElementById(selector.slice(1));
+            }
+
+            return document.querySelector(selector);
+        },
+
+        /**
+         * Select multiple elements by selector
+         * Replaces: $('.class')
+         *
+         * @param {string} selector - CSS selector
+         * @returns {Array<Element>} Array of DOM elements
+         */
+        getAll: function(selector) {
+            if (!selector) return [];
+
+            return Array.from(document.querySelectorAll(selector));
+        },
+
+        /**
+         * Add CSS class to element
+         * Replaces: $(el).addClass('class')
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} className - Class name to add
+         */
+        addClass: function(element, className) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el && className) {
+                el.classList.add(className);
+            }
+        },
+
+        /**
+         * Remove CSS class from element
+         * Replaces: $(el).removeClass('class')
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} className - Class name to remove
+         */
+        removeClass: function(element, className) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el && className) {
+                el.classList.remove(className);
+            }
+        },
+
+        /**
+         * Toggle CSS class on element
+         * Replaces: $(el).toggleClass('class')
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} className - Class name to toggle
+         */
+        toggleClass: function(element, className) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el && className) {
+                el.classList.toggle(className);
+            }
+        },
+
+        /**
+         * Check if element has class
+         * Replaces: $(el).hasClass('class')
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} className - Class name to check
+         * @returns {boolean} True if element has class
+         */
+        hasClass: function(element, className) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            return el ? el.classList.contains(className) : false;
+        },
+
+        /**
+         * Set HTML content (SAFE - requires DOMPurify)
+         * Replaces: $(el).html(content)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} html - HTML content
+         * @param {boolean} sanitize - Whether to sanitize (default: true)
+         */
+        setHTML: function(element, html, sanitize) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (!el) return;
+
+            // Default to sanitization for security
+            if (sanitize !== false && window.DOMPurify) {
+                el.innerHTML = window.DOMPurify.sanitize(html);
+            } else {
+                // Fallback: use textContent for safety if no DOMPurify
+                console.warn('[DOMHelper] Setting HTML without sanitization - security risk!');
+                el.innerHTML = html;
+            }
+        },
+
+        /**
+         * Get HTML content
+         * Replaces: $(el).html()
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @returns {string} HTML content
+         */
+        getHTML: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            return el ? el.innerHTML : '';
+        },
+
+        /**
+         * Set text content (SAFE - no XSS risk)
+         * Replaces: $(el).text(content)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} text - Text content
+         */
+        setText: function(element, text) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el) {
+                el.textContent = text;
+            }
+        },
+
+        /**
+         * Get text content
+         * Replaces: $(el).text()
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @returns {string} Text content
+         */
+        getText: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            return el ? el.textContent : '';
+        },
+
+        /**
+         * Add event listener
+         * Replaces: $(el).on(event, handler)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} event - Event name
+         * @param {Function} handler - Event handler
+         */
+        on: function(element, event, handler) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el && event && handler) {
+                el.addEventListener(event, handler);
+            }
+        },
+
+        /**
+         * Remove event listener
+         * Replaces: $(el).off(event, handler)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} event - Event name
+         * @param {Function} handler - Event handler
+         */
+        off: function(element, event, handler) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el && event && handler) {
+                el.removeEventListener(event, handler);
+            }
+        },
+
+        /**
+         * Trigger click event
+         * Replaces: $(el).click()
+         *
+         * @param {Element|string} element - DOM element or selector
+         */
+        click: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el) {
+                el.click();
+            }
+        },
+
+        /**
+         * Show element
+         * Replaces: $(el).show()
+         *
+         * @param {Element|string} element - DOM element or selector
+         */
+        show: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el) {
+                el.style.display = '';
+            }
+        },
+
+        /**
+         * Hide element
+         * Replaces: $(el).hide()
+         *
+         * @param {Element|string} element - DOM element or selector
+         */
+        hide: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el) {
+                el.style.display = 'none';
+            }
+        },
+
+        /**
+         * Remove element from DOM
+         * Replaces: $(el).remove()
+         *
+         * @param {Element|string} element - DOM element or selector
+         */
+        remove: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el && el.parentNode) {
+                el.parentNode.removeChild(el);
+            }
+        },
+
+        /**
+         * Empty element (remove all children)
+         * Replaces: $(el).empty()
+         *
+         * @param {Element|string} element - DOM element or selector
+         */
+        empty: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el) {
+                el.innerHTML = '';
+            }
+        },
+
+        /**
+         * Append HTML to element
+         * Replaces: $(el).append(html)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} html - HTML to append
+         * @param {boolean} sanitize - Whether to sanitize (default: true)
+         */
+        append: function(element, html, sanitize) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (!el) return;
+
+            const content = (sanitize !== false && window.DOMPurify)
+                ? window.DOMPurify.sanitize(html)
+                : html;
+
+            el.insertAdjacentHTML('beforeend', content);
+        },
+
+        /**
+         * Get attribute value
+         * Replaces: $(el).attr(name)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} name - Attribute name
+         * @returns {string|null} Attribute value
+         */
+        getAttr: function(element, name) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            return el ? el.getAttribute(name) : null;
+        },
+
+        /**
+         * Set attribute value
+         * Replaces: $(el).attr(name, value)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} name - Attribute name
+         * @param {string} value - Attribute value
+         */
+        setAttr: function(element, name, value) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el && name) {
+                el.setAttribute(name, value);
+            }
+        },
+
+        /**
+         * Remove attribute
+         * Replaces: $(el).removeAttr(name)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} name - Attribute name
+         */
+        removeAttr: function(element, name) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el && name) {
+                el.removeAttribute(name);
+            }
+        },
+
+        /**
+         * Check if element exists in DOM
+         * Replaces: $(el).length > 0
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @returns {boolean} True if element exists
+         */
+        exists: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            return el !== null && el !== undefined;
+        },
+
+        /**
+         * Get or set CSS property
+         * Replaces: $(el).css(prop, value)
+         *
+         * @param {Element|string} element - DOM element or selector
+         * @param {string} property - CSS property name
+         * @param {string} value - CSS value (optional, for setter)
+         * @returns {string|undefined} CSS value if getter
+         */
+        css: function(element, property, value) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (!el) return;
+
+            // Setter
+            if (value !== undefined) {
+                el.style[property] = value;
+            } else {
+                // Getter
+                return window.getComputedStyle(el)[property];
+            }
+        },
+
+        /**
+         * Create element with optional attributes and content
+         *
+         * @param {string} tag - HTML tag name
+         * @param {Object} attrs - Attributes object (optional)
+         * @param {string} content - Text content (optional)
+         * @returns {Element} Created element
+         */
+        create: function(tag, attrs, content) {
+            const el = document.createElement(tag);
+
+            // Set attributes
+            if (attrs) {
+                Object.keys(attrs).forEach(function(key) {
+                    if (key === 'class') {
+                        el.className = attrs[key];
+                    } else {
+                        el.setAttribute(key, attrs[key]);
+                    }
+                });
+            }
+
+            // Set content
+            if (content) {
+                el.textContent = content;
+            }
+
+            return el;
+        }
+    };
+
+    return DOMHelper;
+});
