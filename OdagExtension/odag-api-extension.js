@@ -1407,14 +1407,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         headers['X-Qlik-XrfKey'] = xrfkey;
                     }
 
-                    $.ajax({
-                        url: apiUrl,
-                        type: 'GET',
-                        headers: headers,
-                        xhrFields: {
-                            withCredentials: true
-                        },
-                        success: function(result) {
+                    HTTP.get(apiUrl, { headers: headers })
+                        .then(function(result) {
                             if (result && Array.isArray(result) && result.length > 0) {
                                 // Filter out the app we want to keep
                                 const appsToDelete = result.filter(function(request) {
@@ -1451,12 +1445,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             } else {
                                 debugLog('No old apps to delete');
                             }
-                        },
-                        error: function(xhr) {
-                            console.error('Failed to get ODAG apps list for cleanup:', xhr.responseText);
+                        })
+                        .catch(function(error) {
+                            console.error('Failed to get ODAG apps list for cleanup:', error.message);
                             // Not critical - just log and continue
-                        }
-                    });
+                        });
                 };
 
                 let previousRequestId = null; // Track the previous app to delete later
@@ -1504,9 +1497,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
                         const existingApps = await new Promise(function(resolve, reject) {
-                            $.ajax({
-                                url: apiUrl,
-                                type: 'GET',
+                            HTTP.get(apiUrl, {
                                 headers: isCloud ? {
                                     'Accept': 'application/json',
                                     'Content-Type': 'application/json'
@@ -1514,14 +1505,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     'Accept': 'application/json',
                                     'Content-Type': 'application/json',
                                     'X-Qlik-XrfKey': xrfkey
-                                },
-                                xhrFields: { withCredentials: true },
-                                success: function(result) {
-                                    resolve(result || []);
-                                },
-                                error: function() {
-                                    resolve([]); // If fetch fails, continue with empty array
                                 }
+                            }).then(function(result) {
+                                resolve(result || []);
+                            }).catch(function() {
+                                resolve([]); // If fetch fails, continue with empty array
                             });
                         });
 
@@ -1675,54 +1663,47 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     const statusUrl = (isCloud
                                         ? tenantUrl + '/api/v1/odagrequests/'
                                         : tenantUrl + '/api/odag/v1/requests/') + odagData.id;
-                                    $.ajax({
-                                        url: statusUrl,
-                                        type: 'GET',
-                                        headers: {'Accept': 'application/json'},
-                                        xhrFields: {withCredentials: true},
-                                        success: function(newStatus) {
-                                            if (newStatus && newStatus.state === 'succeeded') {
-                                                clearInterval(deleteCheckInterval);
+                                    HTTP.get(statusUrl, {
+                                        headers: {'Accept': 'application/json'}
+                                    }).then(function(newStatus) {
+                                        if (newStatus && newStatus.state === 'succeeded') {
+                                            clearInterval(deleteCheckInterval);
 
-                                                // Delete all old apps
-                                                oldRequestIds.forEach(function(oldRequestId) {
-                                                    // Skip if it's the new app or already deleted
-                                                    if (oldRequestId === odagData.id || deletedApps.has(oldRequestId)) {
-                                                        return;
+                                            // Delete all old apps
+                                            oldRequestIds.forEach(function(oldRequestId) {
+                                                // Skip if it's the new app or already deleted
+                                                if (oldRequestId === odagData.id || deletedApps.has(oldRequestId)) {
+                                                    return;
+                                                }
+
+                                                // Mark as deleted before making the request
+                                                deletedApps.add(oldRequestId);
+
+                                                const isCloud = window.qlikEnvironment === 'cloud';
+                                                const xrfkey = CONSTANTS.API.XRF_KEY;
+                                                const deleteHeaders = isCloud
+                                                    ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
+                                                    : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
+
+                                                HTTP.request({
+                                                    url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + oldRequestId + '/app?xrfkey=' + xrfkey,
+                                                    method: 'DELETE',
+                                                    headers: deleteHeaders
+                                                }).then(function() {
+                                                    debugLog('Successfully deleted old app:', oldRequestId);
+                                                }).catch(function(error) {
+                                                    if (error.status === 404) {
+                                                        debugLog('App already deleted:', oldRequestId);
+                                                    } else {
+                                                        console.error('Failed to delete old app:', error.message);
+                                                        // Remove from deleted set if it really failed
+                                                        deletedApps.delete(oldRequestId);
                                                     }
-
-                                                    // Mark as deleted before making the request
-                                                    deletedApps.add(oldRequestId);
-
-                                                    const isCloud = window.qlikEnvironment === 'cloud';
-                                                    const xrfkey = CONSTANTS.API.XRF_KEY;
-                                                    const deleteHeaders = isCloud
-                                                        ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
-                                                        : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
-
-                                                    $.ajax({
-                                                        url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + oldRequestId + '/app?xrfkey=' + xrfkey,
-                                                        type: 'DELETE',
-                                                        headers: deleteHeaders,
-                                                        xhrFields: {
-                                                            withCredentials: true
-                                                        },
-                                                        success: function() {
-                                                            debugLog('Successfully deleted old app:', oldRequestId);
-                                                        },
-                                                        error: function(xhr) {
-                                                            if (xhr.status === 404) {
-                                                                debugLog('App already deleted:', oldRequestId);
-                                                            } else {
-                                                                console.error('Failed to delete old app:', xhr.responseText);
-                                                                // Remove from deleted set if it really failed
-                                                                deletedApps.delete(oldRequestId);
-                                                            }
-                                                        }
-                                                    });
                                                 });
-                                            }
+                                            });
                                         }
+                                    }).catch(function(error) {
+                                        // Silently ignore polling errors - will retry on next interval
                                     });
                                 }, 3000);
                             }
@@ -1768,17 +1749,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
                     : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
-                    $.ajax({
-                        url: apiUrl,
-                        type: 'GET',
+                    HTTP.get(apiUrl, {
                         headers: {
                             'Accept': 'application/json',
                             'Content-Type': 'application/json'
-                        },
-                        xhrFields: {
-                            withCredentials: true
-                        },
-                        success: function(result) {
+                        }
+                    }).then(function(result) {
                             debugLog('loadLatestODAGApp received response:', {
                                 resultLength: result ? result.length : 0,
                                 currentRequestId: currentRequestId,
@@ -1938,9 +1914,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     checkStatusInterval = null;
                                 }
                             }
-                        },
-                        error: function(xhr) {
-                            console.error('Failed to load ODAG requests:', xhr.responseText);
+                        }).catch(function(error) {
+                            console.error('Failed to load ODAG requests:', error.message);
                             $('#dynamic-status-' + layout.qInfo.qId).html(
                                 getStatusHTML('error', messages.errors.errorLoadingApps, false)
                             );
@@ -1950,8 +1925,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 clearInterval(checkStatusInterval);
                                 checkStatusInterval = null;
                             }
-                        }
-                    });
+                        });
                 };
 
                 const loadDynamicEmbed = function(appId, appName) {
@@ -3119,12 +3093,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id + '&' + cacheBuster;
 
                         await new Promise(function(resolve, reject) {
-                            $.ajax({
-                                url: bindingsUrl,
-                                type: 'POST',
-                                data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
-                                contentType: 'application/json',
-                                cache: false, // Disable jQuery caching
+                            HTTP.post(bindingsUrl, {linkList: [odagConfig.odagLinkId]}, {
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'Accept': '*/*',
@@ -3133,46 +3102,43 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     'Pragma': 'no-cache',
                                     'Expires': '0'
                                 },
-                                xhrFields: {withCredentials: true},
-                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2, // Longer timeout for bindings
-                                success: function(response) {
-                                    debugLog('🔍 Cloud bindings response:', response);
+                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2 // Longer timeout for bindings
+                            }).then(function(response) {
+                                debugLog('🔍 Cloud bindings response:', response);
 
-                                    if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                                        const linkData = response[0].link;
-                                        const bindings = linkData.bindings;
-                                        window[bindingsCacheKey] = bindings;
+                                if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                                    const linkData = response[0].link;
+                                    const bindings = linkData.bindings;
+                                    window[bindingsCacheKey] = bindings;
 
-                                        // Cache row estimation config from ODAG link
-                                        const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+                                    // Cache row estimation config from ODAG link
+                                    const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
 
-                                        // Extract curRowEstHighBound from properties.rowEstRange[0].highBound
-                                        let curRowEstHighBound = linkData.curRowEstHighBound;
-                                        if (!curRowEstHighBound && linkData.properties && linkData.properties.rowEstRange &&
-                                            linkData.properties.rowEstRange.length > 0) {
-                                            curRowEstHighBound = linkData.properties.rowEstRange[0].highBound;
-                                        }
-
-                                        window[rowEstCacheKey] = {
-                                            rowEstExpr: linkData.rowEstExpr,
-                                            curRowEstHighBound: curRowEstHighBound
-                                        };
-
-                                        debugLog('✅ Cloud bindings cached for generation:', bindings.length, 'bindings');
-                                        debugLog('✅ Bindings:', JSON.stringify(bindings, null, 2));
-                                        debugLog('✅ Row estimation config:', window[rowEstCacheKey]);
-                                        resolve();
-                                    } else {
-                                        console.error('❌ Unexpected Cloud bindings response format');
-                                        window[bindingsCacheKey] = [];
-                                        resolve();
+                                    // Extract curRowEstHighBound from properties.rowEstRange[0].highBound
+                                    let curRowEstHighBound = linkData.curRowEstHighBound;
+                                    if (!curRowEstHighBound && linkData.properties && linkData.properties.rowEstRange &&
+                                        linkData.properties.rowEstRange.length > 0) {
+                                        curRowEstHighBound = linkData.properties.rowEstRange[0].highBound;
                                     }
-                                },
-                                error: function(xhr, status, error) {
-                                    console.error('❌ Failed to fetch Cloud bindings:', xhr.status, error);
+
+                                    window[rowEstCacheKey] = {
+                                        rowEstExpr: linkData.rowEstExpr,
+                                        curRowEstHighBound: curRowEstHighBound
+                                    };
+
+                                    debugLog('✅ Cloud bindings cached for generation:', bindings.length, 'bindings');
+                                    debugLog('✅ Bindings:', JSON.stringify(bindings, null, 2));
+                                    debugLog('✅ Row estimation config:', window[rowEstCacheKey]);
+                                    resolve();
+                                } else {
+                                    console.error('❌ Unexpected Cloud bindings response format');
                                     window[bindingsCacheKey] = [];
-                                    reject(new Error('Failed to fetch Cloud bindings: ' + error));
+                                    resolve();
                                 }
+                            }).catch(function(error) {
+                                console.error('❌ Failed to fetch Cloud bindings:', error.status, error.message);
+                                window[bindingsCacheKey] = [];
+                                reject(new Error('Failed to fetch Cloud bindings: ' + error.message));
                             });
                         });
                     } else if (!isCloud && !window[bindingsCacheKey]) {
@@ -3185,10 +3151,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey + '&' + cacheBuster;
 
                         await new Promise(function(resolve, reject) {
-                            $.ajax({
-                                url: linkDetailsUrl,
-                                type: 'GET',
-                                cache: false, // Disable jQuery caching
+                            HTTP.get(linkDetailsUrl, {
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'Accept': 'application/json',
@@ -3197,9 +3160,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     'Pragma': 'no-cache',
                                     'Expires': '0'
                                 },
-                                xhrFields: {withCredentials: true},
-                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2, // Longer timeout for link details
-                                success: function(linkDetails) {
+                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2 // Longer timeout for link details
+                            }).then(function(linkDetails) {
                                     debugLog('🔍 FULL On-Premise link details response:', linkDetails);
 
                                     // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
@@ -3252,13 +3214,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         window[bindingsCacheKey] = [];
                                         resolve();
                                     }
-                                },
-                                error: function(xhr, status, error) {
-                                    console.error('❌ Failed to fetch ODAG link details for bindings:', xhr.status, error);
+                                }).catch(function(error) {
+                                    console.error('❌ Failed to fetch ODAG link details for bindings:', error.status, error.message);
                                     window[bindingsCacheKey] = [];
-                                    reject(new Error('Failed to fetch bindings: ' + error));
-                                }
-                            });
+                                    reject(new Error('Failed to fetch bindings: ' + error.message));
+                                });
                         });
                     }
 
