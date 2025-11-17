@@ -373,12 +373,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 const cacheBuster = '_=' + Date.now();
                 const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id + '&' + cacheBuster;
 
-                $.ajax({
-                    url: bindingsUrl,
-                    type: 'POST',
-                    data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
-                    contentType: 'application/json',
-                    cache: false, // Disable jQuery caching
+                HTTP.post(bindingsUrl, {linkList: [odagConfig.odagLinkId]}, {
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': '*/*',
@@ -386,16 +381,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         'Cache-Control': 'no-cache, no-store, must-revalidate',
                         'Pragma': 'no-cache',
                         'Expires': '0'
-                    },
-                    xhrFields: {withCredentials: true},
-                    success: function(response) {
-                        debugLog('🔍 [PAINT] Cloud bindings response:', response);
+                    }
+                }).then(function(response) {
+                    debugLog('🔍 [PAINT] Cloud bindings response:', response);
 
-                        // Cloud response format: [{link: {bindings: [...], rowEstExpr, curRowEstHighBound}}]
-                        if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                            const linkData = response[0].link;
-                            const bindings = linkData.bindings;
-                            window[bindingsCacheKey] = bindings;
+                    // Cloud response format: [{link: {bindings: [...], rowEstExpr, curRowEstHighBound}}]
+                    if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                        const linkData = response[0].link;
+                        const bindings = linkData.bindings;
+                        window[bindingsCacheKey] = bindings;
 
                             // Cache full link data (including properties like genAppLimit)
                             const linkDataCacheKey = 'odagLinkData_' + odagConfig.odagLinkId;
@@ -479,10 +473,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         }
                         // Clear fetching flag
                         delete window[bindingsFetchingKey];
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('❌ [PAINT] Failed to fetch Cloud ODAG bindings:', xhr.status, error);
-                        console.error('[PAINT] Response:', xhr.responseText);
+                    }).catch(function(error) {
+                        console.error('❌ [PAINT] Failed to fetch Cloud ODAG bindings:', error.status, error.message);
+                        console.error('[PAINT] Response:', error.response);
                         window[bindingsCacheKey] = [];
                         // Clear fetching flag
                         delete window[bindingsFetchingKey];
@@ -499,10 +492,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 const cacheBuster = '_=' + Date.now();
                 const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey + '&' + cacheBuster;
 
-                $.ajax({
-                    url: linkDetailsUrl,
-                    type: 'GET',
-                    cache: false, // Disable jQuery caching
+                HTTP.get(linkDetailsUrl, {
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
@@ -511,27 +501,26 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         'Pragma': 'no-cache',
                         'Expires': '0'
                     },
-                    xhrFields: {withCredentials: true},
-                    timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS,
-                    success: function(linkDetails) {
-                        debugLog('🔍 [PAINT] FULL On-Premise link details response:', linkDetails);
+                    timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS
+                }).then(function(linkDetails) {
+                    debugLog('🔍 [PAINT] FULL On-Premise link details response:', linkDetails);
 
-                        // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
-                        // Bindings are inside objectDef, not at top level
-                        let bindings = null;
+                    // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
+                    // Bindings are inside objectDef, not at top level
+                    let bindings = null;
 
-                        if (linkDetails && linkDetails.objectDef && linkDetails.objectDef.bindings) {
-                            bindings = linkDetails.objectDef.bindings;
-                        } else if (linkDetails && linkDetails.bindings) {
-                            bindings = linkDetails.bindings;
-                        }
+                    if (linkDetails && linkDetails.objectDef && linkDetails.objectDef.bindings) {
+                        bindings = linkDetails.objectDef.bindings;
+                    } else if (linkDetails && linkDetails.bindings) {
+                        bindings = linkDetails.bindings;
+                    }
 
-                        debugLog('🔍 [PAINT] Extracted bindings:', bindings);
+                    debugLog('🔍 [PAINT] Extracted bindings:', bindings);
 
-                        if (bindings && Array.isArray(bindings) && bindings.length > 0) {
-                            window[bindingsCacheKey] = bindings;
-                            debugLog('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
-                            debugLog('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
+                    if (bindings && Array.isArray(bindings) && bindings.length > 0) {
+                        window[bindingsCacheKey] = bindings;
+                        debugLog('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
+                        debugLog('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
 
                             // Cache full link data (including properties like genAppLimit) for On-Premise
                             const linkDataCacheKey = 'odagLinkData_' + odagConfig.odagLinkId;
@@ -607,9 +596,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         }
                         // Clear fetching flag
                         delete window[bindingsFetchingKey];
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('❌ Failed to fetch ODAG link details for bindings:', xhr.status, error);
+                    }).catch(function(error) {
+                        console.error('❌ Failed to fetch ODAG link details for bindings:', error.status, error.message);
                         window[bindingsCacheKey] = []; // Empty array to avoid repeated fetches
                         // Clear fetching flag
                         delete window[bindingsFetchingKey];
@@ -675,17 +663,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
                     : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
-                $.ajax({
-                    url: apiUrl,
-                    type: 'GET',
+                HTTP.get(apiUrl, {
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json'
-                    },
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function(result) {
+                    }
+                }).then(function(result) {
                         if (result && Array.isArray(result) && result.length > 1) {
                             // Sort by date to find latest
                             result.sort(function(a, b) {
@@ -709,20 +692,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                     : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
 
-                                const deletePromise = $.ajax({
+                                const deletePromise = HTTP.request({
                                     url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + app.id + '/app?xrfkey=' + xrfkey,
-                                    type: 'DELETE',
-                                    headers: deleteHeaders,
-                                    xhrFields: {
-                                        withCredentials: true
-                                    },
-                                    success: function() {
-                                        debugLog('ODAG Extension: Deleted old app:', app.generatedAppName || app.id);
-                                    },
-                                    error: function(xhr) {
-                                        if (xhr.status !== 404) {
-                                            console.error('ODAG Extension: Failed to delete app:', app.id, xhr.status);
-                                        }
+                                    method: 'DELETE',
+                                    headers: deleteHeaders
+                                }).then(function() {
+                                    debugLog('ODAG Extension: Deleted old app:', app.generatedAppName || app.id);
+                                }).catch(function(error) {
+                                    if (error.status !== 404) {
+                                        console.error('ODAG Extension: Failed to delete app:', app.id, error.status);
                                     }
                                 });
 
@@ -763,11 +741,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         } else {
                             debugLog('ODAG Extension: Only one or zero apps exist, no cleanup needed');
                         }
-                    },
-                    error: function(xhr) {
-                        console.error('ODAG Extension: Failed to fetch apps for cleanup:', xhr.responseText);
-                    }
-                });
+                    }).catch(function(error) {
+                        console.error('ODAG Extension: Failed to fetch apps for cleanup:', error.message);
+                    });
             }
 
             // Store flag for view mode switch globally (will be checked after loadExistingRequests is defined)
