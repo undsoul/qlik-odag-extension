@@ -503,7 +503,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         // Clear fetching flag
                         delete window[bindingsFetchingKey];
                     });
-                });
             } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
                 // Set fetching flag to prevent duplicate requests
                 window[bindingsFetchingKey] = true;
