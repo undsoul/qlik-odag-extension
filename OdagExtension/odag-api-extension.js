@@ -3704,7 +3704,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             }
 
             return qlik.Promise.resolve();
-
             } catch (error) {
                 console.error('ODAG Extension ERROR:', error);
                 DOM.setHTML(element, '<div style="padding: 20px; color: red;">Error: ' + error.message + '</div>');
