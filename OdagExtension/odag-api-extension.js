@@ -623,8 +623,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         window[bindingsCacheKey] = []; // Empty array to avoid repeated fetches
                         // Clear fetching flag
                         delete window[bindingsFetchingKey];
-                    }
-                });
+                    });
             }
 
             // Check if extension is large enough for iframe view
