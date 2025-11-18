@@ -113,6 +113,29 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             // Helper function to get cookie value (use PayloadBuilder module)
             const getCookie = PayloadBuilder.getCookie;
 
+            // Helper functions for common DOM operations in Dynamic View
+            const updateDynamicStatus = function(content) {
+                const el = DOM.get('#dynamic-status-' + layout.qInfo.qId);
+                if (el) DOM.setHTML(el, content);
+            };
+
+            const showCancelButton = function() {
+                const el = DOM.get('#cancel-btn-' + layout.qInfo.qId);
+                if (el) {
+                    DOM.show(el);
+                    el.style.display = 'flex';
+                }
+            };
+
+            const hideCancelButton = function() {
+                const el = DOM.get('#cancel-btn-' + layout.qInfo.qId);
+                if (el) DOM.hide(el);
+            };
+
+            const getDynamicEmbedContainer = function() {
+                return DOM.get('#dynamic-embed-' + layout.qInfo.qId);
+            };
+
             // ========== PERFORMANCE OPTIMIZATIONS ==========
 
             // 1. Paint Debouncing - Prevent excessive re-renders
@@ -1257,68 +1280,75 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     } else if (appLimitReached) {
                         // BLOCK: App limit reached
                         if (isDynamicView) {
-                            $generateBtn.hide();
+                            if (generateBtn) DOM.hide(generateBtn);
                         } else {
-                            $generateBtn.prop('disabled', true).css({
-                                'opacity': '0.5',
-                                'cursor': 'not-allowed',
-                                'pointer-events': 'none'
-                            });
+                            if (generateBtn) {
+                                generateBtn.disabled = true;
+                                generateBtn.style.opacity = '0.5';
+                                generateBtn.style.cursor = 'not-allowed';
+                                generateBtn.style.pointerEvents = 'none';
+                            }
                         }
 
-                        $statusDiv.show().css({
-                            'background': '#fff3cd',
-                            'border': '1px solid #ffc107',
-                            'color': '#856404',
-                            'padding': '12px',
-                            'line-height': '1.5'
-                        }).html('⚠️ <strong>' + messages.validation.appLimitReached + ' (' + (window.odagGeneratedApps ? window.odagGeneratedApps.length : 0) + '/' + appLimit + ')</strong>');
+                        if (statusDiv) {
+                            DOM.show(statusDiv);
+                            statusDiv.style.background = '#fff3cd';
+                            statusDiv.style.border = '1px solid #ffc107';
+                            statusDiv.style.color = '#856404';
+                            statusDiv.style.padding = '12px';
+                            statusDiv.style.lineHeight = '1.5';
+                            DOM.setHTML(statusDiv, '⚠️ <strong>' + messages.validation.appLimitReached + ' (' + (window.odagGeneratedApps ? window.odagGeneratedApps.length : 0) + '/' + appLimit + ')</strong>');
+                        }
                     } else if (!rowEstResult.canGenerate) {
                         // BLOCK: Hide/disable button and show error
                         if (isDynamicView) {
                             // In Dynamic View: HIDE Refresh button when validation fails
-                            $generateBtn.hide();
+                            if (generateBtn) DOM.hide(generateBtn);
                         } else {
                             // In List View: Disable Generate button (gray it out)
-                            $generateBtn.prop('disabled', true).css({
-                                'opacity': '0.5',
-                                'cursor': 'not-allowed',
-                                'pointer-events': 'none'
-                            });
+                            if (generateBtn) {
+                                generateBtn.disabled = true;
+                                generateBtn.style.opacity = '0.5';
+                                generateBtn.style.cursor = 'not-allowed';
+                                generateBtn.style.pointerEvents = 'none';
+                            }
                         }
 
-                        $statusDiv.show().css({
-                            'background': '#ffebee',
-                            'border': '1px solid #ef5350',
-                            'color': '#c62828'
-                        }).html('⚠️ <strong>Cannot generate:</strong> Current selections result in ' +
-                                rowEstResult.actualRowEst + ' rows, exceeding the limit of ' +
-                                rowEstResult.curRowEstHighBound + ' rows. Please refine your selections.');
+                        if (statusDiv) {
+                            DOM.show(statusDiv);
+                            statusDiv.style.background = '#ffebee';
+                            statusDiv.style.border = '1px solid #ef5350';
+                            statusDiv.style.color = '#c62828';
+                            DOM.setHTML(statusDiv, '⚠️ <strong>Cannot generate:</strong> Current selections result in ' +
+                                    rowEstResult.actualRowEst + ' rows, exceeding the limit of ' +
+                                    rowEstResult.curRowEstHighBound + ' rows. Please refine your selections.');
+                        }
 
                         debugLog('🚫 ODAG validation FAILED:', rowEstResult);
                     } else {
                         // ALLOW: Show/enable button and HIDE status message
                         if (isDynamicView) {
                             // In Dynamic View: SHOW Refresh button when validation passes
-                            $generateBtn.show();
+                            if (generateBtn) DOM.show(generateBtn);
 
                             // Add "needs-refresh" warning state to indicate selections changed
                             // This highlights the button in orange/yellow to prompt user to refresh
-                            if (!$generateBtn.hasClass('needs-refresh')) {
-                                $generateBtn.addClass('needs-refresh');
+                            if (generateBtn && !generateBtn.classList.contains('needs-refresh')) {
+                                DOM.addClass(generateBtn, 'needs-refresh');
                                 debugLog('🟡 Added needs-refresh warning state to refresh button');
                             }
                         } else {
                             // In List View: Enable Generate button
-                            $generateBtn.prop('disabled', false).css({
-                                'opacity': '1',
-                                'cursor': 'pointer',
-                                'pointer-events': 'auto'
-                            });
+                            if (generateBtn) {
+                                generateBtn.disabled = false;
+                                generateBtn.style.opacity = '1';
+                                generateBtn.style.cursor = 'pointer';
+                                generateBtn.style.pointerEvents = 'auto';
+                            }
                         }
 
                         // Hide validation status when validation passes - no need to show success message
-                        $statusDiv.hide();
+                        if (statusDiv) DOM.hide(statusDiv);
 
                         debugLog('✅ ODAG validation PASSED:', rowEstResult);
                     }
@@ -1465,7 +1495,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }
 
                     isGenerating = true;
-                    $('#dynamic-status-' + layout.qInfo.qId).html(
+                    updateDynamicStatus(
                         getStatusHTML('generating', messages.progress.generatingApp, true)
                     );
 
@@ -1476,15 +1506,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }
 
                     // Show cancel button
-                    $('#cancel-btn-' + layout.qInfo.qId).show().css('display', 'flex');
+                    showCancelButton();
 
                     // Safety timeout: Clear loading state after 60 seconds if stuck
                     const safetyTimeoutId = setTimeout(function() {
                         if (isGenerating) {
                             debugLog('⏱️ Safety timeout: Clearing stuck loading state after 60s');
                             isGenerating = false;
-                            $('#cancel-btn-' + layout.qInfo.qId).hide();
-                            $('#dynamic-status-' + layout.qInfo.qId).html(
+                            hideCancelButton();
+                            updateDynamicStatus(
                                 getStatusHTML('error', messages.errors.generationTimeout)
                             );
                         }
@@ -1572,11 +1602,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             if (missingRequiredFields.length > 0) {
                                 debugLog('❌ [Dynamic View] Missing required selections in fields:', missingRequiredFields);
                                 isGenerating = false;
-                                $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                hideCancelButton();
 
                                 // Short message for dynamic view status bar
                                 const fieldNames = missingRequiredFields.join(', ');
-                                $('#dynamic-status-' + layout.qInfo.qId).html(
+                                updateDynamicStatus(
                                     getStatusHTML('error', 'Select: ' + fieldNames)
                                 );
 
@@ -1619,7 +1649,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         // Check if generation is allowed based on row estimation
                         if (!rowEstResult.canGenerate) {
                             isGenerating = false;
-                            $('#cancel-btn-' + layout.qInfo.qId).hide();
+                            hideCancelButton();
                             alert(rowEstResult.message);
                             return;
                         }
@@ -1719,10 +1749,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 loadLatestODAGApp();
                             }, 1000));
                         } else {
-                            $('#dynamic-status-' + layout.qInfo.qId).html(
+                            updateDynamicStatus(
                                 getStatusHTML('failed', 'Failed to generate app', false)
                             );
-                            $('#cancel-btn-' + layout.qInfo.qId).hide();
+                            hideCancelButton();
                             console.error('Failed to generate ODAG app:', result.error);
 
                             // Show user-friendly error message with alert for visibility
@@ -1732,10 +1762,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         }
                     } catch (error) {
                         console.error('ODAG Generation Error:', error);
-                        $('#dynamic-status-' + layout.qInfo.qId).html(
+                        updateDynamicStatus(
                             getStatusHTML('error', 'Error: ' + error.message, false)
                         );
-                        $('#cancel-btn-' + layout.qInfo.qId).hide();
+                        hideCancelButton();
                     } finally {
                         // Always clear loading state and safety timeout
                         isGenerating = false;
@@ -1824,7 +1854,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         }
 
                                         // Hide cancel button
-                                        $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                        hideCancelButton();
 
                                         // Clear current request ID since we found it
                                         currentRequestId = null;
@@ -1852,7 +1882,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         }
 
                                         // Update status indicator
-                                        $('#dynamic-status-' + layout.qInfo.qId).html(
+                                        updateDynamicStatus(
                                             getStatusHTML('succeeded', latestAppName, false)
                                         );
 
@@ -1901,13 +1931,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                     if (pendingApp) {
                                         const stateName = pendingApp.state.charAt(0).toUpperCase() + pendingApp.state.slice(1);
-                                        $('#dynamic-status-' + layout.qInfo.qId).html(
+                                        updateDynamicStatus(
                                             getStatusHTML(pendingApp.state, stateName + ': ' + (pendingApp.generatedAppName || 'New App'), true)
                                         );
                                     }
                                 }
                             } else {
-                                $('#dynamic-status-' + layout.qInfo.qId).html(
+                                updateDynamicStatus(
                                     getStatusHTML('none', messages.status.noApps, false)
                                 );
 
@@ -1919,7 +1949,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             }
                         }).catch(function(error) {
                             console.error('Failed to load ODAG requests:', error.message);
-                            $('#dynamic-status-' + layout.qInfo.qId).html(
+                            updateDynamicStatus(
                                 getStatusHTML('error', messages.errors.errorLoadingApps, false)
                             );
 
@@ -1932,12 +1962,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 };
 
                 const loadDynamicEmbed = function(appId, appName) {
-                    const $container = $('#dynamic-embed-' + layout.qInfo.qId);
+                    const container = getDynamicEmbedContainer();
                     const allowInteractions = odagConfig.allowInteractions !== false;
                     const hostName = window.location.hostname;
 
                     if (!appId) {
-                        $container.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No app available</div>');
+                        if (container) DOM.setHTML(container, '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No app available</div>');
                         return;
                     }
 
@@ -1954,7 +1984,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     });
 
                     // Check if existing embed already matches what we want
-                    const existingEmbed = $container.find('qlik-embed')[0];
+                    const existingEmbed = container ? DOM.get('qlik-embed', container) : null;
                     let needsUpdate = !existingEmbed;
 
                     if (existingEmbed) {
@@ -1990,9 +2020,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         if (!needsUpdate) {
                             debugLog('Dynamic View: Embed already correct, skipping recreation to prevent flash');
                             // Just update the visual state
-                            $container.css('filter', 'none');
-                            $container.css('pointer-events', 'auto');
-                            $container.css('opacity', '1');
+                            if (container) {
+                                container.style.filter = 'none';
+                                container.style.pointerEvents = 'auto';
+                                container.style.opacity = '1';
+                            }
                             return;
                         }
                     }
@@ -2012,7 +2044,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }
 
                     // Clear container completely
-                    $container.empty();
+                    if (container) container.innerHTML = '';
 
                     // Generate unique key for refresh - include app ID to force new instance
                     const embedKey = 'dynamic-' + appId + '-' + Date.now();
@@ -2093,7 +2125,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     embedHtml += embedElement;
                     embedHtml += '</div>';
 
-                    $container.html(embedHtml);
+                    if (container) DOM.setHTML(container, embedHtml);
 
                     // Clear init-in-progress flag after a small delay to ensure qlik-embed element is recognized
                     setTimeout(function() {
@@ -2109,16 +2141,18 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     });
 
                     // Force refresh of the qlik-embed component
-                    const newEmbed = $container.find('qlik-embed')[0];
+                    const newEmbed = container ? DOM.get('qlik-embed', container) : null;
                     if (newEmbed) {
                         // Dispatch refresh event to force update
                         newEmbed.dispatchEvent(new CustomEvent('refresh'));
                     }
 
                     // Remove blur overlay - app is ready
-                    $container.css('filter', 'none');
-                    $container.css('pointer-events', 'auto');
-                    $container.css('opacity', '1');
+                    if (container) {
+                        container.style.filter = 'none';
+                        container.style.pointerEvents = 'auto';
+                        container.style.opacity = '1';
+                    }
 
                     // Load qlik-embed script if not already loaded
                     if (!window.qlikEmbedLoaded) {
@@ -2133,7 +2167,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 };
 
                 // Initial load - Delete all existing apps, then generate a new one
-                $('#dynamic-status-' + layout.qInfo.qId).html(
+                updateDynamicStatus(
                     getStatusHTML('loading', messages.info.initializing, true)
                 );
 
@@ -2243,8 +2277,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         // Auto-trigger refresh on page load when selections changed
                                         debugLog('🔄 Auto-triggering refresh on page load due to selection changes');
                                         setTimeout(function() {
-                                            const refreshBtn = $('#refresh-btn-' + layout.qInfo.qId);
-                                            if (refreshBtn.length) {
+                                            const refreshBtn = DOM.get('#refresh-btn-' + layout.qInfo.qId);
+                                            if (refreshBtn) {
                                                 refreshBtn.click();
                                                 debugLog('✅ Auto-clicked refresh button after detecting stored selection changes');
                                             }
@@ -2367,10 +2401,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         ApiService.cancelRequest(currentRequestId)
                             .then(function() {
                                 debugLog('Generation cancelled');
-                                $('#dynamic-status-' + layout.qInfo.qId).html(
+                                updateDynamicStatus(
                                     getStatusHTML('none', 'Generation cancelled', false)
                                 );
-                                $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                hideCancelButton();
                                 isGenerating = false;
                                 currentRequestId = null;
 
@@ -2380,10 +2414,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             .catch(function(error) {
                                 console.error('Failed to cancel:', error.responseText || error.message);
                                 // Even if cancel fails, reset the UI
-                                $('#dynamic-status-' + layout.qInfo.qId).html(
+                                updateDynamicStatus(
                                     getStatusHTML('error', messages.errors.cancelFailed, false)
                                 );
-                                $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                hideCancelButton();
                                 isGenerating = false;
                             });
                     }
@@ -2397,10 +2431,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     topBarManuallyClosed = false;
 
                     // Add blur overlay to the embed
-                    const $embedContainer = $('#dynamic-embed-' + layout.qInfo.qId);
-                    $embedContainer.css('filter', 'blur(3px)');
-                    $embedContainer.css('pointer-events', 'none');
-                    $embedContainer.css('opacity', '0.6');
+                    const embedContainer = getDynamicEmbedContainer();
+                    if (embedContainer) {
+                        embedContainer.style.filter = 'blur(3px)';
+                        embedContainer.style.pointerEvents = 'none';
+                        embedContainer.style.opacity = '0.6';
+                    }
 
                     const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
                     if (generateFunc) generateFunc();
@@ -2431,10 +2467,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     if (generateFunc) {
                         DOM.on('click', function() {
                             debugLog('Refresh clicked (restored handler)');
-                            const $embedContainer = $('#dynamic-embed-' + layout.qInfo.qId);
-                            $embedContainer.css('filter', 'blur(3px)');
-                            $embedContainer.css('pointer-events', 'none');
-                            $embedContainer.css('opacity', '0.6');
+                            const embedContainer = getDynamicEmbedContainer();
+                            if (embedContainer) {
+                                embedContainer.style.filter = 'blur(3px)';
+                                embedContainer.style.pointerEvents = 'none';
+                                embedContainer.style.opacity = '0.6';
+                            }
                             generateFunc();
                         });
                     }
@@ -2454,13 +2492,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 let lastSelectionState = null;
                 let isTopBarVisible = true; // Track visibility state
                 let topBarManuallyClosed = false; // Track if user explicitly closed the top bar
-                const $topBar = $('#dynamic-top-bar-' + layout.qInfo.qId);
+                const topBar = DOM.get('#dynamic-top-bar-' + layout.qInfo.qId);
 
                 const hideTopBar = function() {
-                    $topBar.css({
-                        'transform': 'translateY(-100%)',
-                        'opacity': '0'
-                    });
+                    if (topBar) {
+                        topBar.style.transform = 'translateY(-100%)';
+                        topBar.style.opacity = '0';
+                    }
                     isTopBarVisible = false;
                 };
 
@@ -2471,10 +2509,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         return;
                     }
 
-                    $topBar.css({
-                        'transform': 'translateY(0)',
-                        'opacity': '1'
-                    });
+                    if (topBar) {
+                        topBar.style.transform = 'translateY(0)';
+                        topBar.style.opacity = '1';
+                    }
                     isTopBarVisible = true;
 
                     // Clear existing timer
@@ -2641,20 +2679,20 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             };            
             // Update apps list display
             updateAppsList = function(qId) {
-                const $listContainer = $('#apps-list-' + qId);
-                const $appCount = $('#app-count-' + qId);
-                const elementHeight = $element.height();
+                const listContainer = DOM.get('#apps-list-' + qId);
+                const appCountEl = DOM.get('#app-count-' + qId);
+                const elementHeight = element.offsetHeight;
                 const isLargeView = elementHeight > 400;
 
                 // Update app count (localized)
                 const appCount = window.odagGeneratedApps.length;
-                $appCount.text(appCount + ' ' + messages.info.appCount);
+                if (appCountEl) appCountEl.textContent = appCount + ' ' + messages.info.appCount;
 
                 // Update mobile dropdown if it exists
-                const $mobileSelector = $('#mobile-app-selector-' + qId);
-                if ($mobileSelector.length > 0) {
+                const mobileSelector = DOM.get('#mobile-app-selector-' + qId);
+                if (mobileSelector) {
                     if (appCount === 0) {
-                        $mobileSelector.html('<option value="">' + messages.status.noApps + '</option>');
+                        DOM.setHTML(mobileSelector, '<option value="">' + messages.status.noApps + '</option>');
                     } else {
                         let dropdownHtml = '<option value="">' + messages.info.selectApp + '</option>';
                         window.odagGeneratedApps.forEach(function(app, index) {
@@ -2678,12 +2716,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 dropdownHtml += '<option value="" disabled>' + app.name + ' (Generating...)</option>';
                             }
                         });
-                        $mobileSelector.html(dropdownHtml);
+                        DOM.setHTML(mobileSelector, dropdownHtml);
                     }
                 }
 
                 if (appCount === 0) {
-                    $listContainer.html('<div class="list-empty">No apps generated yet</div>');
+                    if (listContainer) DOM.setHTML(listContainer, '<div class="list-empty">No apps generated yet</div>');
                     return;
                 }
 
@@ -2768,14 +2806,20 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     listHtml += '</div>';
                 });
 
-                $listContainer.html(listHtml);
-                
-                // Bind events
-                $listContainer.find('.odag-app-item').off('click').on('click', function(e) {
-                    // Don't trigger if clicking on menu button or menu items (or their children)
-                    if (!$(e.target).closest('.app-menu-btn').length && !$(e.target).closest('.menu-item').length) {
-                        const appId = $(this).data('app-id');
-                        const appIndex = $(this).data('app-index');
+                if (listContainer) DOM.setHTML(listContainer, listHtml);
+
+                // Bind events - using vanilla JS
+                const appItems = listContainer ? listContainer.querySelectorAll('.odag-app-item') : [];
+                appItems.forEach(function(item) {
+                    // Remove existing listeners
+                    const newItem = item.cloneNode(true);
+                    item.parentNode.replaceChild(newItem, item);
+
+                    newItem.addEventListener('click', function(e) {
+                        // Don't trigger if clicking on menu button or menu items (or their children)
+                        if (!e.target.closest('.app-menu-btn') && !e.target.closest('.menu-item')) {
+                            const appId = newItem.getAttribute('data-app-id');
+                            const appIndex = newItem.getAttribute('data-app-index');
                         const appData = window.odagGeneratedApps[appIndex];
 
                         debugLog('App clicked:', {
@@ -2863,7 +2907,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         '3. Copy ONLY the ID after /sheet/ in the URL\n' +
                                         '   (before /state/analysis)';
 
-                                    $listContainer.html(
+                                    if (listContainer) DOM.setHTML(listContainer,
                                         '<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 8px; font-family: monospace; white-space: pre-wrap; line-height: 1.6;">' +
                                         errorMsg +
                                         '</div>'
@@ -2932,10 +2976,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             }
 
                             // Replace placeholder with qlik-embed
-                            const $container = $('#iframe-container-' + qId);
+                            const iframeContainer = DOM.get('#iframe-container-' + qId);
 
                             // Check if existing embed matches what we want to create
-                            const existingEmbed = $container.find('qlik-embed')[0];
+                            const existingEmbed = iframeContainer ? DOM.get('qlik-embed', iframeContainer) : null;
                             let needsUpdate = !existingEmbed;
 
                             if (existingEmbed) {
@@ -2995,15 +3039,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 }
 
                                 // Clear the container completely (this also removes any remaining embeds)
-                                $container.empty();
+                                if (iframeContainer) iframeContainer.innerHTML = '';
 
                                 // Add a small delay to ensure proper cleanup
                                 setTimeout(function() {
                                     // Ensure container is visible
-                                    $container.show();
+                                    if (iframeContainer) DOM.show(iframeContainer);
 
                                     // Show loading animation first
-                                    $container.html(getLoadingPlaceholder(messages.progress.loadingApp));
+                                    if (iframeContainer) DOM.setHTML(iframeContainer, getLoadingPlaceholder(messages.progress.loadingApp));
 
                                     // Create a wrapper div to contain the qlik-embed properly with relative positioning
                                     setTimeout(function() {
@@ -3012,18 +3056,18 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         embedHtml += '</div>';
 
                                         debugLog('LIST VIEW - Setting container HTML');
-                                        $container.html(embedHtml);
+                                        if (iframeContainer) DOM.setHTML(iframeContainer, embedHtml);
 
                                         debugLog('Created new qlik-embed element:', {
                                             appId: embedAppId,
                                             viewMode: viewMode,
                                             sheetId: odagConfig.templateSheetId || 'N/A',
-                                            container: $container.attr('id'),
+                                            container: iframeContainer ? iframeContainer.id : 'N/A',
                                             embedKey: embedKey
                                         });
 
                                         // Force a re-render of the web component
-                                        const newEmbed = $container.find('qlik-embed')[0];
+                                        const newEmbed = iframeContainer ? DOM.get('qlik-embed', iframeContainer) : null;
                                         if (newEmbed) {
                                             // Trigger a custom event to force refresh if needed
                                             newEmbed.dispatchEvent(new CustomEvent('refresh'));
@@ -3052,10 +3096,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         }
                     }
                 });
-                
+                });
+
                 // Setup all app item action handlers using EventHandlers module
-                EventHandlers.setupAppMenuHandler($listContainer);
-                EventHandlers.setupAppItemHandlers($listContainer, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
+                if (listContainer) {
+                    EventHandlers.setupAppMenuHandler(listContainer);
+                    EventHandlers.setupAppItemHandlers(listContainer, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
+                }
             };
 
             // Set updateAppsList on ViewManager context now that it's defined
@@ -3076,9 +3123,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     return;
                 }
 
-                const $button = $('.odag-generate-btn-compact');
-                console.log('🔘 Found', $button.length, 'generate button(s) to disable');
-                $button.addClass('loading').prop('disabled', true);
+                const buttons = element.querySelectorAll('.odag-generate-btn-compact');
+                console.log('🔘 Found', buttons.length, 'generate button(s) to disable');
+                buttons.forEach(function(button) {
+                    DOM.addClass(button, 'loading');
+                    button.disabled = true;
+                });
 
                 try {
                     // Ensure bindings are loaded before generating (both Cloud and On-Premise)
@@ -3286,7 +3336,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         // If there are missing required fields, alert user
                         if (missingRequiredFields.length > 0) {
                             debugLog('❌ Missing required selections in fields:', missingRequiredFields);
-                            $button.removeClass('loading').prop('disabled', false);
+                            buttons.forEach(function(btn) {
+                                DOM.removeClass(btn, 'loading');
+                                btn.disabled = false;
+                            });
 
                             // Build clear, informative warning message with dynamic prefixes
                             const fieldListBullets = missingFieldDetails.map(detail => {
@@ -3336,7 +3389,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                     // Check if generation is allowed based on row estimation
                     if (!rowEstResult.canGenerate) {
-                        $button.removeClass('loading').prop('disabled', false);
+                        buttons.forEach(function(btn) {
+                            DOM.removeClass(btn, 'loading');
+                            btn.disabled = false;
+                        });
                         alert(rowEstResult.message);
                         return;
                     }
@@ -3420,7 +3476,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     console.error('ODAG Generation Error:', error);
                     showNotification('Error: ' + error.message, 'error');
                 } finally {
-                    $button.removeClass('loading').prop('disabled', false);
+                    buttons.forEach(function(btn) {
+                        DOM.removeClass(btn, 'loading');
+                        btn.disabled = false;
+                    });
                 }
             };
             
@@ -3517,34 +3576,37 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 EventHandlers.setupGenerateHandler($generateButtons, generateODAGApp, odagConfig);
 
                 // Setup sidebar toggle handler
-                EventHandlers.setupSidebarToggleHandler($element, layout);
+                EventHandlers.setupSidebarToggleHandler(element, layout);
 
                 // Refresh list button handler
-                DOM.get('.refresh-list-btn').on('click', function(, element) {
-                    const $btn = $(this);
+                const refreshBtn = DOM.get('.refresh-list-btn', element);
+                if (refreshBtn) {
+                    DOM.on(refreshBtn, 'click', function() {
+                        // Add spinning animation
+                        refreshBtn.style.transform = 'rotate(360deg)';
+                        setTimeout(function() {
+                            refreshBtn.style.transform = 'rotate(0deg)';
+                        }, 600);
 
-                    // Add spinning animation
-                    $btn.css('transform', 'rotate(360deg)');
-                    setTimeout(function() {
-                        $btn.css('transform', 'rotate(0deg)');
-                    }, 600);
-
-                    // Reload the apps list
-                    loadExistingRequests().then(function() {
-                        updateAppsList(layout.qInfo.qId);
-                        showNotification('App list refreshed', 'info');
-                    }).catch(function(error) {
-                        debugLog('Error refreshing apps list:', error);
-                        showNotification('Failed to refresh app list', 'error');
+                        // Reload the apps list
+                        loadExistingRequests().then(function() {
+                            updateAppsList(layout.qInfo.qId);
+                            showNotification('App list refreshed', 'info');
+                        }).catch(function(error) {
+                            debugLog('Error refreshing apps list:', error);
+                            showNotification('Failed to refresh app list', 'error');
+                        });
                     });
-                });
+                }
 
                 // Setup delete all button handler
-                EventHandlers.setupDeleteAllHandler($element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
+                EventHandlers.setupDeleteAllHandler(element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
 
                 // Mobile dropdown selector handler
-                DOM.get('.mobile-app-selector').on('change', function(, element) {
-                    const selectedAppId = $(this).val();
+                const mobileSel = DOM.get('.mobile-app-selector', element);
+                if (mobileSel) {
+                    DOM.on(mobileSel, 'change', function() {
+                        const selectedAppId = mobileSel.value;
 
                     if (!selectedAppId || selectedAppId === '') {
                         debugLog('No app selected from mobile dropdown');
@@ -3564,8 +3626,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     debugLog('Mobile dropdown: Selected app', selectedApp.name);
 
                     // Clear existing iframe
-                    const $iframeContainer = $('#iframe-container-' + layout.qInfo.qId);
-                    $iframeContainer.empty();
+                    const mobileIframeContainer = DOM.get('#iframe-container-' + layout.qInfo.qId);
+                    if (mobileIframeContainer) mobileIframeContainer.innerHTML = '';
 
                     // Mobile always uses classic/app mode (full app overview, no sheet ID)
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
@@ -3599,7 +3661,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // Add a small delay to ensure proper cleanup before creating new embed
                     setTimeout(function() {
                         // Ensure container is visible
-                        $iframeContainer.show();
+                        if (mobileIframeContainer) DOM.show(mobileIframeContainer);
 
                         // Wrap embed in a container div for proper positioning
                         const embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">' +
@@ -3607,7 +3669,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             '</div>';
 
                         debugLog('Mobile: Setting embed HTML');
-                        $iframeContainer.html(embedHtml);
+                        if (mobileIframeContainer) DOM.setHTML(mobileIframeContainer, embedHtml);
                     }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
                 });
             }
