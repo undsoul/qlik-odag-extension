@@ -1177,16 +1177,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }
 
                     const rowEstResult = await calculateRowEstimation(app, odagConfig.odagLinkId);
-                    const $statusDiv = $('#validation-status-' + layout.qInfo.qId);
+                    const statusDiv = DOM.get('#validation-status-' + layout.qInfo.qId);
 
                     // Select all generate buttons (List View may have multiple)
-                    const $generateBtn = isDynamicView ?
-                        $('#refresh-btn-' + layout.qInfo.qId) :
+                    const generateBtn = isDynamicView ?
+                        DOM.get('#refresh-btn-' + layout.qInfo.qId) :
                         DOM.get('.odag-generate-btn-compact', element);
 
                     debugLog('🔍 Validation check:', {
                         isDynamicView: isDynamicView,
-                        buttonCount: $generateBtn.length,
+                        buttonCount: generateBtn ? 1 : 0,
                         bindingValidationPassed: bindingValidationPassed,
                         rowEstResult: rowEstResult
                     });
@@ -1195,24 +1195,27 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     if (!bindingValidationPassed) {
                         // BLOCK: Binding validation failed
                         if (isDynamicView) {
-                            $generateBtn.hide();
+                            if (generateBtn) DOM.hide(generateBtn);
                         } else {
-                            $generateBtn.prop('disabled', true).css({
-                                'opacity': '0.5',
-                                'cursor': 'not-allowed',
-                                'pointer-events': 'none'
-                            });
+                            if (generateBtn) {
+                                generateBtn.disabled = true;
+                                generateBtn.style.opacity = '0.5';
+                                generateBtn.style.cursor = 'not-allowed';
+                                generateBtn.style.pointerEvents = 'none';
+                            }
                         }
 
                         // Show message in status div - SHORT for dynamic view, FULL for list view
                         const messageToShow = isDynamicView ? bindingErrorMessageShort : bindingErrorMessageFull;
-                        $statusDiv.show().css({
-                            'background': '#fff3cd',
-                            'border': '1px solid #ffc107',
-                            'color': '#856404',
-                            'padding': '12px',
-                            'line-height': '1.5'
-                        }).html(messageToShow);
+                        if (statusDiv) {
+                            DOM.show(statusDiv);
+                            statusDiv.style.background = '#fff3cd';
+                            statusDiv.style.border = '1px solid #ffc107';
+                            statusDiv.style.color = '#856404';
+                            statusDiv.style.padding = '12px';
+                            statusDiv.style.lineHeight = '1.5';
+                            DOM.setHTML(statusDiv, messageToShow);
+                        }
 
                         debugLog('🚫 ODAG binding validation FAILED:', bindingErrorMessageShort);
                     }
