@@ -3671,6 +3671,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
                 });
             }
+        }  // Close if (!isDynamicView) from line 3569
 
             // Check for selection changes on every paint (for Dynamic View)
             // This ensures we catch selection changes made on other pages
