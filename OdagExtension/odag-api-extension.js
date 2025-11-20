@@ -2422,28 +2422,32 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 });
 
                 // Handle refresh button click - Generate a NEW app
-                DOM.on('click', function() {
-                    debugLog('Refresh clicked - generating new ODAG app...');
+                const refreshBtn = DOM.get('#refresh-btn-' + layout.qInfo.qId);
+                if (refreshBtn) {
+                    DOM.on(refreshBtn, 'click', function() {
+                        debugLog('Refresh clicked - generating new ODAG app...');
 
-                    // Reset the manually closed flag - normal behavior resumes after refresh
-                    topBarManuallyClosed = false;
+                        // Reset the manually closed flag - normal behavior resumes after refresh
+                        topBarManuallyClosed = false;
 
-                    // Add blur overlay to the embed
-                    const embedContainer = getDynamicEmbedContainer();
-                    if (embedContainer) {
-                        embedContainer.style.filter = 'blur(3px)';
-                        embedContainer.style.pointerEvents = 'none';
-                        embedContainer.style.opacity = '0.6';
-                    }
+                        // Add blur overlay to the embed
+                        const embedContainer = getDynamicEmbedContainer();
+                        if (embedContainer) {
+                            embedContainer.style.filter = 'blur(3px)';
+                            embedContainer.style.pointerEvents = 'none';
+                            embedContainer.style.opacity = '0.6';
+                        }
 
-                    const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
-                    if (generateFunc) generateFunc();
-                });
+                        const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
+                        if (generateFunc) generateFunc();
+                    });
+                }
 
                 // Handle cancel button click
+                const cancelBtn = DOM.get('#cancel-btn-' + layout.qInfo.qId);
                 const cancelFunc = StateManager.get(extensionId, 'cancelGeneration');
-                if (cancelFunc) {
-                    DOM.on('click', cancelFunc);
+                if (cancelBtn && cancelFunc) {
+                    DOM.on(cancelBtn, 'click', cancelFunc);
                 }
 
                 // Load the latest ODAG app on initialization
@@ -2461,9 +2465,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // Re-attach button click handlers (they get lost when HTML is recreated)
                     const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
                     const cancelFunc = StateManager.get(extensionId, 'cancelGeneration');
+                    const refreshBtnRestored = DOM.get('#refresh-btn-' + layout.qInfo.qId);
+                    const cancelBtnRestored = DOM.get('#cancel-btn-' + layout.qInfo.qId);
 
-                    if (generateFunc) {
-                        DOM.on('click', function() {
+                    if (refreshBtnRestored && generateFunc) {
+                        DOM.on(refreshBtnRestored, 'click', function() {
                             debugLog('Refresh clicked (restored handler)');
                             const embedContainer = getDynamicEmbedContainer();
                             if (embedContainer) {
@@ -2475,8 +2481,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         });
                     }
 
-                    if (cancelFunc) {
-                        DOM.on('click', cancelFunc);
+                    if (cancelBtnRestored && cancelFunc) {
+                        DOM.on(cancelBtnRestored, 'click', cancelFunc);
                     }
 
                     // That's it! Don't make API calls, don't recreate embeds or modify DOM
@@ -2544,23 +2550,26 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 });
 
                 // Close button handler - hide top bar when clicked
-                DOM.on('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    debugLog('❌ Close button clicked - hiding top bar until refresh needed');
+                const closeTopbarBtn = DOM.get('#close-topbar-btn-' + layout.qInfo.qId);
+                if (closeTopbarBtn) {
+                    DOM.on(closeTopbarBtn, 'click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        debugLog('❌ Close button clicked - hiding top bar until refresh needed');
 
-                    // Set flag to keep bar hidden until selections change
-                    topBarManuallyClosed = true;
+                        // Set flag to keep bar hidden until selections change
+                        topBarManuallyClosed = true;
 
-                    // Clear any pending auto-hide timer
-                    if (hideTimer) {
-                        clearTimeout(hideTimer);
-                        hideTimer = null;
-                    }
+                        // Clear any pending auto-hide timer
+                        if (hideTimer) {
+                            clearTimeout(hideTimer);
+                            hideTimer = null;
+                        }
 
-                    // Hide the top bar immediately
-                    hideTopBar();
-                });
+                        // Hide the top bar immediately
+                        hideTopBar();
+                    });
+                }
             }
 
             // Keep track of generated apps (not for dynamic view)
