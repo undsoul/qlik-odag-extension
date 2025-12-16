@@ -844,6 +844,17 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         if (checkSelectionsFunc) {
                             debugLog('✅ checkSelectionsFunc found, calling it...');
                             checkSelectionsFunc();
+
+                            // CRITICAL: Re-bind selection listener in case it was lost during page navigation
+                            const listenerKey = 'selectionListener_' + layout.qInfo.qId;
+                            if (!window[listenerKey]) {
+                                debugLog('🔄 Re-binding selectionState listener after page navigation...');
+                                app.selectionState().OnData.bind(function() {
+                                    debugLog('Selection state changed (re-bound listener) - checking...');
+                                    checkSelectionsFunc();
+                                });
+                                window[listenerKey] = true;
+                            }
                         } else {
                             debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
                         }
@@ -2369,10 +2380,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Listen for selection changes using selection state subscription
                 // This also triggers when variables change (Qlik treats variable changes as selection changes)
+                const listenerKey = 'selectionListener_' + layout.qInfo.qId;
                 app.selectionState().OnData.bind(function() {
                     debugLog('Selection state changed (includes variable changes) - checking...');
                     checkSelectionsChanged();
                 });
+                window[listenerKey] = true;
+                debugLog('✅ Selection listener bound and marked in window.' + listenerKey);
 
                 // Store generateNewODAGApp function in StateManager for restoreDynamicView to access
                 StateManager.set(extensionId, 'generateNewODAGApp', function() {
@@ -3690,6 +3704,17 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 if (checkSelectionsFunc) {
                     debugLog('✅ checkSelectionsFunc found, calling it...');
                     checkSelectionsFunc();
+
+                    // CRITICAL: Re-bind selection listener in case it was lost during page navigation
+                    const listenerKey = 'selectionListener_' + layout.qInfo.qId;
+                    if (!window[listenerKey]) {
+                        debugLog('🔄 Re-binding selectionState listener at end of paint...');
+                        app.selectionState().OnData.bind(function() {
+                            debugLog('Selection state changed (re-bound listener) - checking...');
+                            checkSelectionsFunc();
+                        });
+                        window[listenerKey] = true;
+                    }
                 } else {
                     debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
                 }
