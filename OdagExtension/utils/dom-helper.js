@@ -38,12 +38,20 @@ define([], function() {
          * Replaces: $('.class')
          *
          * @param {string} selector - CSS selector
+         * @param {Element|string} context - Optional context element or selector to search within
          * @returns {Array<Element>} Array of DOM elements
          */
-        getAll: function(selector) {
+        getAll: function(selector, context) {
             if (!selector) return [];
 
-            return Array.from(document.querySelectorAll(selector));
+            // If context is provided, use it; otherwise use document
+            let searchContext = document;
+            if (context) {
+                searchContext = typeof context === 'string' ? this.get(context) : context;
+                if (!searchContext) return [];
+            }
+
+            return Array.from(searchContext.querySelectorAll(selector));
         },
 
         /**
@@ -227,6 +235,20 @@ define([], function() {
             const el = typeof element === 'string' ? this.get(element) : element;
             if (el) {
                 el.style.display = 'none';
+            }
+        },
+
+        /**
+         * Toggle element visibility
+         * Replaces: $(el).toggle()
+         *
+         * @param {Element|string} element - DOM element or selector
+         */
+        toggle: function(element) {
+            const el = typeof element === 'string' ? this.get(element) : element;
+            if (el) {
+                const currentDisplay = window.getComputedStyle(el).display;
+                el.style.display = (currentDisplay === 'none') ? '' : 'none';
             }
         },
 
