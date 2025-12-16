@@ -848,12 +848,17 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             // CRITICAL: Re-bind selection listener in case it was lost during page navigation
                             const listenerKey = 'selectionListener_' + layout.qInfo.qId;
                             if (!window[listenerKey]) {
-                                debugLog('🔄 Re-binding selectionState listener after page navigation...');
-                                app.selectionState().OnData.bind(function() {
-                                    debugLog('Selection state changed (re-bound listener) - checking...');
-                                    checkSelectionsFunc();
-                                });
-                                window[listenerKey] = true;
+                                try {
+                                    debugLog('🔄 Re-binding selectionState listener after page navigation...');
+                                    app.selectionState().OnData.bind(function() {
+                                        debugLog('Selection state changed (re-bound listener) - checking...');
+                                        checkSelectionsFunc();
+                                    });
+                                    window[listenerKey] = true;
+                                } catch (error) {
+                                    debugLog('⚠️ Failed to bind selectionState listener (error code:', error.code || error, ')');
+                                    // Don't mark as bound so it will retry on next paint
+                                }
                             }
                         } else {
                             debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
@@ -2381,12 +2386,18 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 // Listen for selection changes using selection state subscription
                 // This also triggers when variables change (Qlik treats variable changes as selection changes)
                 const listenerKey = 'selectionListener_' + layout.qInfo.qId;
-                app.selectionState().OnData.bind(function() {
-                    debugLog('Selection state changed (includes variable changes) - checking...');
-                    checkSelectionsChanged();
-                });
-                window[listenerKey] = true;
-                debugLog('✅ Selection listener bound and marked in window.' + listenerKey);
+                try {
+                    app.selectionState().OnData.bind(function() {
+                        debugLog('Selection state changed (includes variable changes) - checking...');
+                        checkSelectionsChanged();
+                    });
+                    window[listenerKey] = true;
+                    debugLog('✅ Selection listener bound and marked in window.' + listenerKey);
+                } catch (error) {
+                    console.error('⚠️ Failed to bind selectionState listener on initialization (error code:', error.code || error, ')');
+                    console.error('This is usually due to WebSocket connection issues or session expiry.');
+                    // Don't mark as bound so it will retry on next paint
+                }
 
                 // Store generateNewODAGApp function in StateManager for restoreDynamicView to access
                 StateManager.set(extensionId, 'generateNewODAGApp', function() {
@@ -3708,12 +3719,17 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // CRITICAL: Re-bind selection listener in case it was lost during page navigation
                     const listenerKey = 'selectionListener_' + layout.qInfo.qId;
                     if (!window[listenerKey]) {
-                        debugLog('🔄 Re-binding selectionState listener at end of paint...');
-                        app.selectionState().OnData.bind(function() {
-                            debugLog('Selection state changed (re-bound listener) - checking...');
-                            checkSelectionsFunc();
-                        });
-                        window[listenerKey] = true;
+                        try {
+                            debugLog('🔄 Re-binding selectionState listener at end of paint...');
+                            app.selectionState().OnData.bind(function() {
+                                debugLog('Selection state changed (re-bound listener) - checking...');
+                                checkSelectionsFunc();
+                            });
+                            window[listenerKey] = true;
+                        } catch (error) {
+                            debugLog('⚠️ Failed to bind selectionState listener (error code:', error.code || error, ')');
+                            // Don't mark as bound so it will retry on next paint
+                        }
                     }
                 } else {
                     debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
