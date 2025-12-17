@@ -2253,41 +2253,38 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             generateNewODAGApp();
                         } else {
                             // We found an existing app
-                            // IMPORTANT: Do NOT store current selections as baseline here!
-                            // We don't know what selections were used to generate this existing app.
-                            // The baseline should only be set when user actually generates a new app.
+                            // When no stored baseline exists, set current selections as baseline
+                            // This enables change detection from the current state going forward
                             if (!lastGeneratedPayload) {
-                                debugLog('📝 Found existing app but no stored payload - baseline will be set when user generates new app');
+                                debugLog('📝 Found existing app but no stored payload - setting current selections as baseline');
 
-                                // Check if user has binding field selections - if yes, activate refresh button
-                                // This indicates selections may have changed since the app was generated
                                 try {
                                     const buildResult = await buildPayload(app, odagConfig, layout);
                                     const currentPayload = buildResult.payload;
 
+                                    // Get current variable values to include in baseline
+                                    const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+
+                                    // Set current selections as baseline for change detection
+                                    lastGeneratedPayload = currentPayload;
+                                    lastGeneratedPayload.variableState = currentVariableValues;
+                                    StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
+                                    debugLog('💾 Set current selections as baseline for change detection');
+                                    debugLog('📊 Baseline bindSelectionState:', lastGeneratedPayload.bindSelectionState);
+                                    debugLog('📊 Baseline variableState:', lastGeneratedPayload.variableState);
+
                                     // Store current selections to sessionStorage (persist across page navigation)
                                     const currentSelections = {
                                         bindSelections: currentPayload.bindSelectionState,
-                                        variables: currentPayload.variableState || []
+                                        variables: currentVariableValues
                                     };
                                     StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
                                     debugLog('💾 Stored currentBindSelections on initial paint for cross-page tracking');
 
-                                    // Check if there are any selections in binding fields
-                                    const hasBindingSelections = currentPayload.bindSelectionState &&
-                                        currentPayload.bindSelectionState.some(binding =>
-                                            binding.values && binding.values.length > 0
-                                        );
-
-                                    if (hasBindingSelections) {
-                                        debugLog('⚠️ Found binding selections but no baseline - activating refresh button (top bar hidden)');
-                                        DOM.addClass('needs-refresh');
-                                        // Don't show top bar on initial load - it will appear when selections change
-                                    } else {
-                                        debugLog('✅ No binding selections yet, refresh button stays inactive');
-                                    }
+                                    // Now any future selection changes will be detected relative to this baseline
+                                    debugLog('✅ Change detection enabled - any selection/variable changes will now trigger refresh warning');
                                 } catch (error) {
-                                    console.error('Error checking initial binding selections:', error);
+                                    console.error('Error setting initial baseline:', error);
                                 }
                             } else {
                                 debugLog('✅ Found existing app and have stored payload from previous generation');
@@ -2371,10 +2368,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         const buildResult = await buildPayload(app, odagConfig, layout);
                         const currentPayload = buildResult.payload;
 
+                        // Get current variable values directly (buildPayload doesn't include variableState)
+                        const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+
                         // Store current selections to sessionStorage (persist across page navigation)
                         const currentSelections = {
                             bindSelections: currentPayload.bindSelectionState,
-                            variables: currentPayload.variableState || []
+                            variables: currentVariableValues
                         };
                         StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
                         debugLog('💾 Stored currentBindSelections to sessionStorage for cross-page tracking');
@@ -2395,6 +2395,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         if (hasChanged) {
                             debugLog('📊 Current binding selections:', currentPayload.bindSelectionState);
                             debugLog('📊 Last binding selections:', lastGeneratedPayload.bindSelectionState);
+                            debugLog('📊 Current variable values:', currentVariableValues);
+                            debugLog('📊 Last variable values:', lastGeneratedPayload.variableState);
 
                             // State changed - highlight refresh button
                             DOM.addClass('needs-refresh');
