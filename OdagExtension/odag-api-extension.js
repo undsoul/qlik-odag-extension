@@ -860,6 +860,30 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     // Don't mark as bound so it will retry on next paint
                                 }
                             }
+
+                            // CRITICAL: Re-bind variable listeners for mapped variables
+                            const variableListenerKey = 'variableListeners_' + layout.qInfo.qId;
+                            if (!window[variableListenerKey] && odagConfig.variableMappings && odagConfig.variableMappings.length > 0) {
+                                debugLog('🔄 Re-binding variable listeners after page navigation...');
+                                window[variableListenerKey] = [];
+                                odagConfig.variableMappings.forEach(function(mapping) {
+                                    if (mapping.variableName) {
+                                        app.variable.getByName(mapping.variableName).then(function(variable) {
+                                            if (variable) {
+                                                try {
+                                                    variable.OnChanged.bind(function() {
+                                                        debugLog('📊 Variable changed (re-bound):', mapping.variableName);
+                                                        checkSelectionsFunc();
+                                                    });
+                                                    window[variableListenerKey].push(mapping.variableName);
+                                                } catch (e) {
+                                                    debugLog('⚠️ Failed to re-bind variable listener:', mapping.variableName);
+                                                }
+                                            }
+                                        }).catch(function() {});
+                                    }
+                                });
+                            }
                         } else {
                             debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
                         }
@@ -2399,6 +2423,36 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // Don't mark as bound so it will retry on next paint
                 }
 
+                // CRITICAL: Add variable change listeners for mapped variables
+                // selectionState().OnData does NOT reliably fire for variable changes!
+                const variableListenerKey = 'variableListeners_' + layout.qInfo.qId;
+                if (!window[variableListenerKey] && odagConfig.variableMappings && odagConfig.variableMappings.length > 0) {
+                    debugLog('🔗 Setting up variable change listeners for', odagConfig.variableMappings.length, 'mapped variables');
+                    window[variableListenerKey] = [];
+
+                    odagConfig.variableMappings.forEach(function(mapping) {
+                        if (mapping.variableName) {
+                            app.variable.getByName(mapping.variableName).then(function(variable) {
+                                if (variable) {
+                                    try {
+                                        // Subscribe to variable changes
+                                        variable.OnChanged.bind(function() {
+                                            debugLog('📊 Variable changed:', mapping.variableName, '- checking state...');
+                                            checkSelectionsChanged();
+                                        });
+                                        window[variableListenerKey].push(mapping.variableName);
+                                        debugLog('✅ Variable listener bound for:', mapping.variableName);
+                                    } catch (varError) {
+                                        debugLog('⚠️ Failed to bind variable listener for:', mapping.variableName, varError);
+                                    }
+                                }
+                            }).catch(function(err) {
+                                debugLog('⚠️ Variable not found:', mapping.variableName, err);
+                            });
+                        }
+                    });
+                }
+
                 // Store generateNewODAGApp function in StateManager for restoreDynamicView to access
                 StateManager.set(extensionId, 'generateNewODAGApp', function() {
                     // Prevent multiple simultaneous clicks
@@ -3730,6 +3784,30 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             debugLog('⚠️ Failed to bind selectionState listener (error code:', error.code || error, ')');
                             // Don't mark as bound so it will retry on next paint
                         }
+                    }
+
+                    // CRITICAL: Re-bind variable listeners for mapped variables
+                    const variableListenerKey = 'variableListeners_' + layout.qInfo.qId;
+                    if (!window[variableListenerKey] && odagConfig.variableMappings && odagConfig.variableMappings.length > 0) {
+                        debugLog('🔄 Re-binding variable listeners at end of paint...');
+                        window[variableListenerKey] = [];
+                        odagConfig.variableMappings.forEach(function(mapping) {
+                            if (mapping.variableName) {
+                                app.variable.getByName(mapping.variableName).then(function(variable) {
+                                    if (variable) {
+                                        try {
+                                            variable.OnChanged.bind(function() {
+                                                debugLog('📊 Variable changed (re-bound at paint end):', mapping.variableName);
+                                                checkSelectionsFunc();
+                                            });
+                                            window[variableListenerKey].push(mapping.variableName);
+                                        } catch (e) {
+                                            debugLog('⚠️ Failed to re-bind variable listener:', mapping.variableName);
+                                        }
+                                    }
+                                }).catch(function() {});
+                            }
+                        });
                     }
                 } else {
                     debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
