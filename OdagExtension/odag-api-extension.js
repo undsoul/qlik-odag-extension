@@ -69,7 +69,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 embedMode: "classic/app",
                 allowInteractions: true,
                 showAppsList: true,
-                enableDebug: false
+                enableDebug: true
             }
         },
         
