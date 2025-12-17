@@ -2338,89 +2338,80 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }, 1000);
                 }
 
-                // Debounce timer for selection change detection
-                let selectionCheckDebounceTimer = null;
+                // Flag to prevent concurrent selection checks
                 let isCheckingSelections = false;
 
                 // Function to check if current selections differ from last generated payload
                 const checkSelectionsChanged = async function() {
-                    // Debounce rapid calls - wait 500ms after last change before checking
-                    // This prevents race conditions when user makes rapid selections
-                    if (selectionCheckDebounceTimer) {
-                        clearTimeout(selectionCheckDebounceTimer);
+                    // Prevent concurrent checks (but don't delay - check immediately)
+                    if (isCheckingSelections) {
+                        debugLog('⏭️ Skipping check - already checking');
+                        return;
                     }
+                    isCheckingSelections = true;
 
-                    selectionCheckDebounceTimer = setTimeout(async function() {
-                        // Prevent concurrent checks
-                        if (isCheckingSelections) {
-                            debugLog('⏭️ Skipping check - already checking');
-                            return;
+                    try {
+                        // Always get fresh value from StateManager (in case it was updated elsewhere)
+                        const storedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
+                        if (storedPayload) {
+                            lastGeneratedPayload = storedPayload;
                         }
-                        isCheckingSelections = true;
 
-                        try {
-                            // Always get fresh value from StateManager (in case it was updated elsewhere)
-                            const storedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
-                            if (storedPayload) {
-                                lastGeneratedPayload = storedPayload;
-                            }
-
-                            debugLog('🔍 checkSelectionsChanged called - isGenerating:', isGenerating, 'lastGeneratedPayload:', !!lastGeneratedPayload);
-                            if (isGenerating) {
-                                debugLog('⏭️ Skipping check - currently generating');
-                                return; // Don't check while generating
-                            }
-                            if (!lastGeneratedPayload) {
-                                debugLog('⏭️ Skipping check - no previous payload to compare');
-                                return; // No previous payload to compare
-                            }
-
-                            // Build current payload to compare binding field selections
-                            const buildResult = await buildPayload(app, odagConfig, layout);
-                            const currentPayload = buildResult.payload;
-
-                            // Store current selections to sessionStorage (persist across page navigation)
-                            const currentSelections = {
-                                bindSelections: currentPayload.bindSelectionState,
-                                variables: currentPayload.variableState || []
-                            };
-                            StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
-                            debugLog('💾 Stored currentBindSelections to sessionStorage for cross-page tracking');
-
-                            // Compare ONLY the binding field selections (bindSelectionState)
-                            // Also compare variables if any are mapped
-                            const currentState = currentSelections;
-                            const lastState = {
-                                bindSelections: lastGeneratedPayload.bindSelectionState,
-                                variables: lastGeneratedPayload.variableState || []
-                            };
-
-                            const currentStateStr = JSON.stringify(currentState);
-                            const lastStateStr = JSON.stringify(lastState);
-
-                            const hasChanged = currentStateStr !== lastStateStr;
-                            debugLog('🔍 Checking state changed (binding selections + variables):', hasChanged);
-                            if (hasChanged) {
-                                debugLog('📊 Current binding selections:', currentPayload.bindSelectionState);
-                                debugLog('📊 Last binding selections:', lastGeneratedPayload.bindSelectionState);
-
-                                // State changed - highlight refresh button
-                                DOM.addClass('needs-refresh');
-
-                                // Show top bar with warning (always show when state changes)
-                                debugLog('🔔 State changed (binding selections or variables) - showing top bar with refresh warning');
-                                topBarManuallyClosed = false; // Reset flag
-                                showTopBar(false, true); // Show without auto-hide, force show for warning
-                            } else {
-                                // State same - remove highlight
-                                DOM.removeClass('needs-refresh');
-                            }
-                        } catch (error) {
-                            debugLog('Error checking state changes:', error);
-                        } finally {
-                            isCheckingSelections = false;
+                        debugLog('🔍 checkSelectionsChanged called - isGenerating:', isGenerating, 'lastGeneratedPayload:', !!lastGeneratedPayload);
+                        if (isGenerating) {
+                            debugLog('⏭️ Skipping check - currently generating');
+                            return; // Don't check while generating
                         }
-                    }, 500); // 500ms debounce delay
+                        if (!lastGeneratedPayload) {
+                            debugLog('⏭️ Skipping check - no previous payload to compare');
+                            return; // No previous payload to compare
+                        }
+
+                        // Build current payload to compare binding field selections
+                        const buildResult = await buildPayload(app, odagConfig, layout);
+                        const currentPayload = buildResult.payload;
+
+                        // Store current selections to sessionStorage (persist across page navigation)
+                        const currentSelections = {
+                            bindSelections: currentPayload.bindSelectionState,
+                            variables: currentPayload.variableState || []
+                        };
+                        StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+                        debugLog('💾 Stored currentBindSelections to sessionStorage for cross-page tracking');
+
+                        // Compare ONLY the binding field selections (bindSelectionState)
+                        // Also compare variables if any are mapped
+                        const currentState = currentSelections;
+                        const lastState = {
+                            bindSelections: lastGeneratedPayload.bindSelectionState,
+                            variables: lastGeneratedPayload.variableState || []
+                        };
+
+                        const currentStateStr = JSON.stringify(currentState);
+                        const lastStateStr = JSON.stringify(lastState);
+
+                        const hasChanged = currentStateStr !== lastStateStr;
+                        debugLog('🔍 Checking state changed (binding selections + variables):', hasChanged);
+                        if (hasChanged) {
+                            debugLog('📊 Current binding selections:', currentPayload.bindSelectionState);
+                            debugLog('📊 Last binding selections:', lastGeneratedPayload.bindSelectionState);
+
+                            // State changed - highlight refresh button
+                            DOM.addClass('needs-refresh');
+
+                            // Show top bar with warning (always show when state changes)
+                            debugLog('🔔 State changed (binding selections or variables) - showing top bar with refresh warning');
+                            topBarManuallyClosed = false; // Reset flag
+                            showTopBar(false, true); // Show without auto-hide, force show for warning
+                        } else {
+                            // State same - remove highlight
+                            DOM.removeClass('needs-refresh');
+                        }
+                    } catch (error) {
+                        debugLog('Error checking state changes:', error);
+                    } finally {
+                        isCheckingSelections = false;
+                    }
                 };
 
                 // Store check function in StateManager so paint can call it
