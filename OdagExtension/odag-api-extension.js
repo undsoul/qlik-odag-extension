@@ -843,8 +843,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
                         const debouncedCheckFunc = StateManager.get(extensionId, 'debouncedCheckSelections');
                         if (checkSelectionsFunc) {
-                            debugLog('✅ checkSelectionsFunc found, calling it...');
-                            checkSelectionsFunc();
+                            // IMPORTANT: Wait 2 seconds before checking selections
+                            // This gives Qlik time to process selection changes from other pages
+                            debugLog('⏳ Waiting 2 seconds for Qlik to process selections...');
+                            setTimeout(function() {
+                                debugLog('✅ checkSelectionsFunc found, calling it after delay...');
+                                checkSelectionsFunc();
+                            }, 2000);
 
                             // CRITICAL: Re-bind selection listener in case it was lost during page navigation
                             const listenerKey = 'selectionListener_' + layout.qInfo.qId;
@@ -3881,8 +3886,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
                 const debouncedCheckFunc = StateManager.get(extensionId, 'debouncedCheckSelections');
                 if (checkSelectionsFunc) {
-                    debugLog('✅ checkSelectionsFunc found, calling it...');
-                    checkSelectionsFunc();
+                    // IMPORTANT: Wait 2 seconds before checking selections
+                    // This gives Qlik time to process selection changes from other pages
+                    debugLog('⏳ Waiting 2 seconds for Qlik to process selections...');
+                    setTimeout(function() {
+                        debugLog('✅ checkSelectionsFunc found, calling it after delay...');
+                        checkSelectionsFunc();
+                    }, 2000);
 
                     // CRITICAL: Re-bind selection listener in case it was lost during page navigation
                     const listenerKey = 'selectionListener_' + layout.qInfo.qId;
