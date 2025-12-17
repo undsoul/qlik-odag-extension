@@ -2264,38 +2264,53 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             generateNewODAGApp();
                         } else {
                             // We found an existing app
-                            // When no stored baseline exists, set current selections as baseline
-                            // This enables change detection from the current state going forward
+                            // When no stored baseline exists, we CAN'T know what selections were used
+                            // to generate the existing app. Show refresh warning by default.
                             if (!lastGeneratedPayload) {
-                                debugLog('📝 Found existing app but no stored payload - setting current selections as baseline');
+                                debugLog('📝 Found existing app but no stored payload - showing refresh warning');
+                                debugLog('⚠️ We cannot know if current selections match the app - user should refresh');
 
                                 try {
                                     const buildResult = await buildPayload(app, odagConfig, layout);
                                     const currentPayload = buildResult.payload;
 
-                                    // Get current variable values to include in baseline
+                                    // Get current variable values
                                     const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
 
-                                    // Set current selections as baseline for change detection
-                                    lastGeneratedPayload = currentPayload;
-                                    lastGeneratedPayload.variableState = currentVariableValues;
-                                    StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
-                                    debugLog('💾 Set current selections as baseline for change detection');
-                                    debugLog('📊 Baseline bindSelectionState:', lastGeneratedPayload.bindSelectionState);
-                                    debugLog('📊 Baseline variableState:', lastGeneratedPayload.variableState);
+                                    // Check if there are ANY selections in binding fields
+                                    const hasBindingSelections = currentPayload.bindSelectionState &&
+                                        currentPayload.bindSelectionState.some(binding =>
+                                            binding.values && binding.values.length > 0
+                                        );
 
-                                    // Store current selections to sessionStorage (persist across page navigation)
+                                    // Store current selections for cross-page tracking
                                     const currentSelections = {
                                         bindSelections: currentPayload.bindSelectionState,
                                         variables: currentVariableValues
                                     };
                                     StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
-                                    debugLog('💾 Stored currentBindSelections on initial paint for cross-page tracking');
 
-                                    // Now any future selection changes will be detected relative to this baseline
-                                    debugLog('✅ Change detection enabled - any selection/variable changes will now trigger refresh warning');
+                                    // Set baseline to EMPTY so ANY selection triggers refresh warning
+                                    // This is safer than assuming current selections match the app
+                                    lastGeneratedPayload = {
+                                        bindSelectionState: [],
+                                        selectionState: [],
+                                        variableState: []
+                                    };
+                                    StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
+                                    debugLog('💾 Set EMPTY baseline - any selections will trigger refresh warning');
+
+                                    // If user already has selections, show refresh warning immediately
+                                    if (hasBindingSelections || currentVariableValues.length > 0) {
+                                        debugLog('🔔 User has selections but no baseline - showing refresh warning');
+                                        DOM.addClass('needs-refresh');
+                                        topBarManuallyClosed = false;
+                                        setTimeout(function() {
+                                            showTopBar(false, true);
+                                        }, 500);
+                                    }
                                 } catch (error) {
-                                    console.error('Error setting initial baseline:', error);
+                                    console.error('Error checking initial selections:', error);
                                 }
                             } else {
                                 debugLog('✅ Found existing app and have stored payload from previous generation');
@@ -2348,18 +2363,56 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Flag to prevent concurrent selection checks
                 let isCheckingSelections = false;
+                let isSavingSelections = false; // Flag to prevent concurrent saves
                 let pendingCheck = false; // Flag to queue another check after current one completes
                 let selectionDebounceTimer = null;
-                const SELECTION_DEBOUNCE_MS = 500; // Wait 500ms after last selection change
+                const SELECTION_DEBOUNCE_MS = 300; // Wait 300ms for UI update (reduced from 500ms)
 
-                // Debounced wrapper - waits for user to stop selecting before checking
+                // IMMEDIATE save function - saves current selections to sessionStorage right away
+                // This ensures selections are captured even if user navigates immediately
+                const saveCurrentSelectionsImmediately = async function() {
+                    if (isSavingSelections) {
+                        debugLog('⏭️ Already saving selections, skipping...');
+                        return;
+                    }
+                    isSavingSelections = true;
+
+                    try {
+                        debugLog('💾 Immediately saving current selections...');
+
+                        // Build current payload
+                        const buildResult = await buildPayload(app, odagConfig, layout);
+                        const currentPayload = buildResult.payload;
+
+                        // Get current variable values
+                        const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+
+                        // Save to sessionStorage immediately
+                        const currentSelections = {
+                            bindSelections: currentPayload.bindSelectionState,
+                            variables: currentVariableValues,
+                            timestamp: Date.now()
+                        };
+                        StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+                        debugLog('✅ Selections saved to sessionStorage immediately');
+                    } catch (error) {
+                        debugLog('⚠️ Error saving selections immediately:', error);
+                    } finally {
+                        isSavingSelections = false;
+                    }
+                };
+
+                // Debounced wrapper - saves immediately, then debounces UI update
                 const debouncedCheckSelections = function() {
+                    // IMMEDIATELY save current selections (don't wait for debounce)
+                    saveCurrentSelectionsImmediately();
+
                     // Clear any pending debounce timer
                     if (selectionDebounceTimer) {
                         clearTimeout(selectionDebounceTimer);
                     }
 
-                    // Set new timer - will fire after user stops making selections
+                    // Debounce only the UI update (top bar, comparison)
                     selectionDebounceTimer = setTimeout(function() {
                         selectionDebounceTimer = null;
 
@@ -2372,7 +2425,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         }
                     }, SELECTION_DEBOUNCE_MS);
 
-                    debugLog('⏱️ Selection change debounced, will check in', SELECTION_DEBOUNCE_MS, 'ms');
+                    debugLog('⏱️ Selections saved, UI update debounced for', SELECTION_DEBOUNCE_MS, 'ms');
                 };
 
                 // Function to check if current selections differ from last generated payload
