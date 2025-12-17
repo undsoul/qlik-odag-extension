@@ -841,6 +841,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     if (isDynamicView) {
                         debugLog('🔍 Paint (early exit) - Checking for selection changes in Dynamic View...');
                         const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                        const debouncedCheckFunc = StateManager.get(extensionId, 'debouncedCheckSelections');
                         if (checkSelectionsFunc) {
                             debugLog('✅ checkSelectionsFunc found, calling it...');
                             checkSelectionsFunc();
@@ -851,8 +852,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 try {
                                     debugLog('🔄 Re-binding selectionState listener after page navigation...');
                                     app.selectionState().OnData.bind(function() {
-                                        debugLog('Selection state changed (re-bound listener) - checking...');
-                                        checkSelectionsFunc();
+                                        debugLog('Selection state changed (re-bound listener) - debouncing...');
+                                        // Use debounced version if available, fallback to direct call
+                                        if (debouncedCheckFunc) {
+                                            debouncedCheckFunc();
+                                        } else {
+                                            checkSelectionsFunc();
+                                        }
                                     });
                                     window[listenerKey] = true;
                                 } catch (error) {
@@ -873,7 +879,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                                 try {
                                                     variable.OnChanged.bind(function() {
                                                         debugLog('📊 Variable changed (re-bound):', mapping.variableName);
-                                                        checkSelectionsFunc();
+                                                        // Use debounced version if available
+                                                        if (debouncedCheckFunc) {
+                                                            debouncedCheckFunc();
+                                                        } else {
+                                                            checkSelectionsFunc();
+                                                        }
                                                     });
                                                     window[variableListenerKey].push(mapping.variableName);
                                                 } catch (e) {
@@ -2337,15 +2348,43 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Flag to prevent concurrent selection checks
                 let isCheckingSelections = false;
+                let pendingCheck = false; // Flag to queue another check after current one completes
+                let selectionDebounceTimer = null;
+                const SELECTION_DEBOUNCE_MS = 500; // Wait 500ms after last selection change
+
+                // Debounced wrapper - waits for user to stop selecting before checking
+                const debouncedCheckSelections = function() {
+                    // Clear any pending debounce timer
+                    if (selectionDebounceTimer) {
+                        clearTimeout(selectionDebounceTimer);
+                    }
+
+                    // Set new timer - will fire after user stops making selections
+                    selectionDebounceTimer = setTimeout(function() {
+                        selectionDebounceTimer = null;
+
+                        if (isCheckingSelections) {
+                            // A check is in progress, queue another one when it completes
+                            debugLog('⏳ Check in progress, queuing another check...');
+                            pendingCheck = true;
+                        } else {
+                            checkSelectionsChanged();
+                        }
+                    }, SELECTION_DEBOUNCE_MS);
+
+                    debugLog('⏱️ Selection change debounced, will check in', SELECTION_DEBOUNCE_MS, 'ms');
+                };
 
                 // Function to check if current selections differ from last generated payload
                 const checkSelectionsChanged = async function() {
-                    // Prevent concurrent checks (but don't delay - check immediately)
+                    // Prevent concurrent checks
                     if (isCheckingSelections) {
-                        debugLog('⏭️ Skipping check - already checking');
+                        debugLog('⏭️ Already checking, will queue pending check');
+                        pendingCheck = true;
                         return;
                     }
                     isCheckingSelections = true;
+                    pendingCheck = false; // Clear pending flag since we're starting a check
 
                     try {
                         // Always get fresh value from StateManager (in case it was updated elsewhere)
@@ -2413,19 +2452,28 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         debugLog('Error checking state changes:', error);
                     } finally {
                         isCheckingSelections = false;
+
+                        // If a check was queued while we were checking, run it now
+                        if (pendingCheck) {
+                            debugLog('🔄 Running queued pending check...');
+                            pendingCheck = false;
+                            // Use setTimeout to avoid deep recursion
+                            setTimeout(checkSelectionsChanged, 50);
+                        }
                     }
                 };
 
-                // Store check function in StateManager so paint can call it
+                // Store check functions in StateManager so paint can call them
                 StateManager.set(extensionId, 'checkSelectionsChanged', checkSelectionsChanged);
+                StateManager.set(extensionId, 'debouncedCheckSelections', debouncedCheckSelections);
 
                 // Listen for selection changes using selection state subscription
                 // This also triggers when variables change (Qlik treats variable changes as selection changes)
                 const listenerKey = 'selectionListener_' + layout.qInfo.qId;
                 try {
                     app.selectionState().OnData.bind(function() {
-                        debugLog('Selection state changed (includes variable changes) - checking...');
-                        checkSelectionsChanged();
+                        debugLog('Selection state changed - debouncing check...');
+                        debouncedCheckSelections();
                     });
                     window[listenerKey] = true;
                     debugLog('✅ Selection listener bound and marked in window.' + listenerKey);
@@ -2449,8 +2497,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     try {
                                         // Subscribe to variable changes
                                         variable.OnChanged.bind(function() {
-                                            debugLog('📊 Variable changed:', mapping.variableName, '- checking state...');
-                                            checkSelectionsChanged();
+                                            debugLog('📊 Variable changed:', mapping.variableName, '- debouncing check...');
+                                            debouncedCheckSelections();
                                         });
                                         window[variableListenerKey].push(mapping.variableName);
                                         debugLog('✅ Variable listener bound for:', mapping.variableName);
@@ -3778,6 +3826,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             if (isDynamicView) {
                 debugLog('🔍 Paint - Checking for selection changes in Dynamic View...');
                 const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                const debouncedCheckFunc = StateManager.get(extensionId, 'debouncedCheckSelections');
                 if (checkSelectionsFunc) {
                     debugLog('✅ checkSelectionsFunc found, calling it...');
                     checkSelectionsFunc();
@@ -3788,8 +3837,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         try {
                             debugLog('🔄 Re-binding selectionState listener at end of paint...');
                             app.selectionState().OnData.bind(function() {
-                                debugLog('Selection state changed (re-bound listener) - checking...');
-                                checkSelectionsFunc();
+                                debugLog('Selection state changed (re-bound listener) - debouncing...');
+                                // Use debounced version if available
+                                if (debouncedCheckFunc) {
+                                    debouncedCheckFunc();
+                                } else {
+                                    checkSelectionsFunc();
+                                }
                             });
                             window[listenerKey] = true;
                         } catch (error) {
@@ -3810,7 +3864,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         try {
                                             variable.OnChanged.bind(function() {
                                                 debugLog('📊 Variable changed (re-bound at paint end):', mapping.variableName);
-                                                checkSelectionsFunc();
+                                                // Use debounced version if available
+                                                if (debouncedCheckFunc) {
+                                                    debouncedCheckFunc();
+                                                } else {
+                                                    checkSelectionsFunc();
+                                                }
                                             });
                                             window[variableListenerKey].push(mapping.variableName);
                                         } catch (e) {
