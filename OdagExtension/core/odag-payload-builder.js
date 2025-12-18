@@ -194,62 +194,13 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                                 selectedSize: selectedCount
                             };
 
-                            // Add small delay to ensure field API is ready
-                            await new Promise(resolve => setTimeout(resolve, 50));
-
-                            const field = app.field(fieldName);
-                            let fieldData = null;
+                            // PRIMARY METHOD: Use Enigma session object for FRESH data
+                            // app.field().getData() returns CACHED data which can be stale!
+                            debugLog('📊 Using Enigma session object for FRESH field values:', fieldName);
 
                             try {
-                                fieldData = await field.getData();
-
-                                if (!fieldData.rows || fieldData.rows.length === 0) {
-                                    debugLog('Method 1a returned empty, trying with parameters...');
-                                    fieldData = await field.getData({
-                                        rows: 10000,
-                                        frequencyMode: 'V'
-                                    });
-                                }
-                            } catch (e) {
-                                debugLog('Field getData error, will use fallback:', e.message);
-                            }
-
-                            // Extract selected values from field data
-                            if (fieldData && fieldData.rows && fieldData.rows.length > 0) {
-                                fieldData.rows.forEach(function(row) {
-                                    if (row.qState === 'S') {
-                                        fieldSelection.values.push({
-                                            selStatus: "S",
-                                            strValue: row.qText,
-                                            numValue: isNaN(row.qNum) ? "NaN" : String(row.qNum)
-                                        });
-                                    }
-                                });
-                                debugLog('Method 1: Found', fieldSelection.values.length, 'selected values for', fieldName);
-                            }
-
-                            // Fallback: Try using qSelected text
-                            if (fieldSelection.values.length === 0 && selection.qSelected) {
-                                debugLog('Method 2: Using qSelected text for', fieldName, ':', selection.qSelected);
-                                const values = selection.qSelected.split(', ');
-                                values.forEach(function(value) {
-                                    if (!value.includes(' of ')) {
-                                        fieldSelection.values.push({
-                                            selStatus: "S",
-                                            strValue: value.trim(),
-                                            numValue: isNaN(value) ? "NaN" : String(value)
-                                        });
-                                    }
-                                });
-                                debugLog('Method 2: Extracted', fieldSelection.values.length, 'values from qSelected');
-                            }
-
-                            // Last resort: Use session object
-                            if (fieldSelection.values.length === 0 && selectedCount > 0) {
-                                debugLog('Method 3: Creating session object for', fieldName);
-                                const enigmaApp = app.model.enigmaModel;
                                 const sessionObj = await enigmaApp.createSessionObject({
-                                    qInfo: { qType: 'CurrentSelections' },
+                                    qInfo: { qType: 'FieldList' },
                                     qListObjectDef: {
                                         qDef: { qFieldDefs: [fieldName] },
                                         qInitialDataFetch: [{
@@ -274,9 +225,50 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                                             });
                                         }
                                     });
-                                    debugLog('Method 3: Found', fieldSelection.values.length, 'selected values via session object');
+                                    debugLog('✅ Enigma method: Found', fieldSelection.values.length, 'selected values for', fieldName);
                                 }
                                 await enigmaApp.destroySessionObject(sessionObj.id);
+                            } catch (enigmaError) {
+                                debugLog('⚠️ Enigma method failed:', enigmaError.message);
+                            }
+
+                            // Fallback 1: Try using qSelected text from selection object
+                            if (fieldSelection.values.length === 0 && selection.qSelected) {
+                                debugLog('Fallback 1: Using qSelected text for', fieldName, ':', selection.qSelected);
+                                const values = selection.qSelected.split(', ');
+                                values.forEach(function(value) {
+                                    if (!value.includes(' of ')) {
+                                        fieldSelection.values.push({
+                                            selStatus: "S",
+                                            strValue: value.trim(),
+                                            numValue: isNaN(value) ? "NaN" : String(value)
+                                        });
+                                    }
+                                });
+                                debugLog('Fallback 1: Extracted', fieldSelection.values.length, 'values from qSelected');
+                            }
+
+                            // Fallback 2: Try app.field().getData() (may be cached but better than nothing)
+                            if (fieldSelection.values.length === 0 && selectedCount > 0) {
+                                debugLog('Fallback 2: Trying app.field().getData() for', fieldName);
+                                try {
+                                    const field = app.field(fieldName);
+                                    const fieldData = await field.getData({ rows: 10000, frequencyMode: 'V' });
+                                    if (fieldData && fieldData.rows) {
+                                        fieldData.rows.forEach(function(row) {
+                                            if (row.qState === 'S') {
+                                                fieldSelection.values.push({
+                                                    selStatus: "S",
+                                                    strValue: row.qText,
+                                                    numValue: isNaN(row.qNum) ? "NaN" : String(row.qNum)
+                                                });
+                                            }
+                                        });
+                                        debugLog('Fallback 2: Found', fieldSelection.values.length, 'values');
+                                    }
+                                } catch (e) {
+                                    debugLog('Fallback 2 failed:', e.message);
+                                }
                             }
 
                             if (fieldSelection.values.length > 0) {
