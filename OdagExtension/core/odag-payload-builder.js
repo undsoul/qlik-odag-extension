@@ -162,18 +162,25 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                 // This ensures any pending selection changes have been fully processed
                 debugLog('🔄 Forcing engine sync before getting selections...');
 
-                // Step 1: Yield to event loop to let pending selection commands be sent to engine
-                await new Promise(resolve => setTimeout(resolve, 0));
+                // Step 1: Wait for pending selection commands to be sent to engine
+                // A zero-delay timeout is NOT enough - need actual time for websocket messages
+                await new Promise(resolve => setTimeout(resolve, 100));
 
-                // Step 2: Call getAppLayout() which waits for all pending engine calculations
+                // Step 2: First getAppLayout() - ensures engine processes any pending commands
                 await enigmaApp.getAppLayout();
-                debugLog('✅ Engine sync complete');
+
+                // Step 3: Second getAppLayout() - double-check sync after first round-trip
+                await enigmaApp.getAppLayout();
+                debugLog('✅ Engine sync complete (double getAppLayout)');
 
                 // Create a fresh session object to get current selections
                 const selectionObj = await enigmaApp.createSessionObject({
                     qInfo: { qType: 'SelectionObject' },
                     qSelectionObjectDef: {}
                 });
+
+                // Wait briefly for the SelectionObject to be populated with current state
+                await new Promise(resolve => setTimeout(resolve, 50));
 
                 const selectionLayout = await selectionObj.getLayout();
 
