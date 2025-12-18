@@ -158,6 +158,17 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                 // app.getList() returns cached subscription data which can be stale
                 const enigmaApp = app.model.enigmaModel;
 
+                // CRITICAL: Force engine sync BEFORE querying selections
+                // This ensures any pending selection changes have been fully processed
+                debugLog('🔄 Forcing engine sync before getting selections...');
+
+                // Step 1: Yield to event loop to let pending selection commands be sent to engine
+                await new Promise(resolve => setTimeout(resolve, 0));
+
+                // Step 2: Call getAppLayout() which waits for all pending engine calculations
+                await enigmaApp.getAppLayout();
+                debugLog('✅ Engine sync complete');
+
                 // Create a fresh session object to get current selections
                 const selectionObj = await enigmaApp.createSessionObject({
                     qInfo: { qType: 'SelectionObject' },
