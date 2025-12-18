@@ -194,80 +194,65 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                                 selectedSize: selectedCount
                             };
 
-                            // PRIMARY METHOD: Use Enigma session object for FRESH data
-                            // app.field().getData() returns CACHED data which can be stale!
-                            debugLog('📊 Using Enigma session object for FRESH field values:', fieldName);
-
-                            try {
-                                const sessionObj = await enigmaApp.createSessionObject({
-                                    qInfo: { qType: 'FieldList' },
-                                    qListObjectDef: {
-                                        qDef: { qFieldDefs: [fieldName] },
-                                        qInitialDataFetch: [{
-                                            qTop: 0,
-                                            qLeft: 0,
-                                            qWidth: 1,
-                                            qHeight: Math.min(selectedCount * 2, 10000)
-                                        }]
-                                    }
-                                });
-
-                                const layout = await sessionObj.getLayout();
-                                if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
-                                    const dataPage = layout.qListObject.qDataPages[0];
-                                    dataPage.qMatrix.forEach(function(row) {
-                                        const cell = row[0];
-                                        if (cell && cell.qState === 'S') {
-                                            fieldSelection.values.push({
-                                                selStatus: "S",
-                                                strValue: cell.qText,
-                                                numValue: isNaN(cell.qNum) ? "NaN" : cell.qNum.toString()
-                                            });
-                                        }
-                                    });
-                                    debugLog('✅ Enigma method: Found', fieldSelection.values.length, 'selected values for', fieldName);
-                                }
-                                await enigmaApp.destroySessionObject(sessionObj.id);
-                            } catch (enigmaError) {
-                                debugLog('⚠️ Enigma method failed:', enigmaError.message);
-                            }
-
-                            // Fallback 1: Try using qSelected text from selection object
-                            if (fieldSelection.values.length === 0 && selection.qSelected) {
-                                debugLog('Fallback 1: Using qSelected text for', fieldName, ':', selection.qSelected);
+                            // PRIMARY METHOD: Use qSelected from SelectionObject (already available, NO extra API calls!)
+                            // This is the FASTEST method as data is already in the selection object
+                            if (selection.qSelected && !selection.qSelected.includes(' of ')) {
+                                debugLog('📊 Using qSelected (fast path) for', fieldName, ':', selection.qSelected);
                                 const values = selection.qSelected.split(', ');
                                 values.forEach(function(value) {
-                                    if (!value.includes(' of ')) {
+                                    const trimmed = value.trim();
+                                    if (trimmed) {
                                         fieldSelection.values.push({
                                             selStatus: "S",
-                                            strValue: value.trim(),
-                                            numValue: isNaN(value) ? "NaN" : String(value)
+                                            strValue: trimmed,
+                                            numValue: isNaN(trimmed) ? "NaN" : String(trimmed)
                                         });
                                     }
                                 });
-                                debugLog('Fallback 1: Extracted', fieldSelection.values.length, 'values from qSelected');
+                                debugLog('✅ Fast path: Found', fieldSelection.values.length, 'values from qSelected');
                             }
 
-                            // Fallback 2: Try app.field().getData() (may be cached but better than nothing)
-                            if (fieldSelection.values.length === 0 && selectedCount > 0) {
-                                debugLog('Fallback 2: Trying app.field().getData() for', fieldName);
+                            // Check if qSelected was truncated (contains "x of y" pattern)
+                            const isTruncated = selection.qSelected && selection.qSelected.includes(' of ');
+
+                            // FALLBACK: Use Enigma session object ONLY if qSelected is truncated or empty
+                            if ((fieldSelection.values.length === 0 || isTruncated) && selectedCount > 0) {
+                                debugLog('📊 Using Enigma session (qSelected truncated/empty) for:', fieldName);
+
                                 try {
-                                    const field = app.field(fieldName);
-                                    const fieldData = await field.getData({ rows: 10000, frequencyMode: 'V' });
-                                    if (fieldData && fieldData.rows) {
-                                        fieldData.rows.forEach(function(row) {
-                                            if (row.qState === 'S') {
+                                    const sessionObj = await enigmaApp.createSessionObject({
+                                        qInfo: { qType: 'FieldList' },
+                                        qListObjectDef: {
+                                            qDef: { qFieldDefs: [fieldName] },
+                                            qInitialDataFetch: [{
+                                                qTop: 0,
+                                                qLeft: 0,
+                                                qWidth: 1,
+                                                qHeight: Math.min(selectedCount * 2, 10000)
+                                            }]
+                                        }
+                                    });
+
+                                    const layout = await sessionObj.getLayout();
+                                    if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
+                                        // Clear any partial values from truncated qSelected
+                                        fieldSelection.values = [];
+                                        const dataPage = layout.qListObject.qDataPages[0];
+                                        dataPage.qMatrix.forEach(function(row) {
+                                            const cell = row[0];
+                                            if (cell && cell.qState === 'S') {
                                                 fieldSelection.values.push({
                                                     selStatus: "S",
-                                                    strValue: row.qText,
-                                                    numValue: isNaN(row.qNum) ? "NaN" : String(row.qNum)
+                                                    strValue: cell.qText,
+                                                    numValue: isNaN(cell.qNum) ? "NaN" : cell.qNum.toString()
                                                 });
                                             }
                                         });
-                                        debugLog('Fallback 2: Found', fieldSelection.values.length, 'values');
+                                        debugLog('✅ Enigma fallback: Found', fieldSelection.values.length, 'values for', fieldName);
                                     }
-                                } catch (e) {
-                                    debugLog('Fallback 2 failed:', e.message);
+                                    await enigmaApp.destroySessionObject(sessionObj.id);
+                                } catch (enigmaError) {
+                                    debugLog('⚠️ Enigma fallback failed:', enigmaError.message);
                                 }
                             }
 
