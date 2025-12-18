@@ -154,11 +154,27 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
          */
         getCurrentSelections: async function(app, debugLog) {
             try {
-                const reply = await new Promise(function(resolve) {
-                    app.getList("CurrentSelections", function(reply) {
-                        resolve(reply);
-                    });
+                // CRITICAL: Use Enigma API directly to get FRESH selection state
+                // app.getList() returns cached subscription data which can be stale
+                const enigmaApp = app.model.enigmaModel;
+
+                // Create a fresh session object to get current selections
+                const selectionObj = await enigmaApp.createSessionObject({
+                    qInfo: { qType: 'SelectionObject' },
+                    qSelectionObjectDef: {}
                 });
+
+                const selectionLayout = await selectionObj.getLayout();
+
+                // Clean up session object immediately
+                await enigmaApp.destroySessionObject(selectionObj.id);
+
+                const reply = {
+                    qSelectionObject: selectionLayout.qSelectionObject
+                };
+
+                debugLog('📊 Got FRESH selections via Enigma API:',
+                    reply.qSelectionObject?.qSelections?.length || 0, 'fields selected');
 
                 const selections = [];
 
