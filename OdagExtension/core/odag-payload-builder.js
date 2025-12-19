@@ -502,6 +502,19 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
 
             // Get ODAG bindings from cache (fetched at paint)
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
+            const bindingsPromiseKey = 'odagBindingsPromise_' + odagConfig.odagLinkId;
+
+            // If bindings are currently being fetched, wait for the fetch to complete
+            if (window[bindingsPromiseKey]) {
+                debugLog('⏳ Waiting for bindings fetch to complete...');
+                try {
+                    await window[bindingsPromiseKey];
+                    debugLog('✅ Bindings fetch completed');
+                } catch (e) {
+                    debugLog('⚠️ Bindings fetch failed:', e.message);
+                }
+            }
+
             const cachedBindings = window[bindingsCacheKey];
 
             debugLog('Building payload - cached bindings:', cachedBindings ? cachedBindings.length + ' fields' : 'none');

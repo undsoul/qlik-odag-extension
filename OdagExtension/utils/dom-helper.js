@@ -110,24 +110,60 @@ define([], function() {
         },
 
         /**
-         * Set HTML content (SAFE - requires DOMPurify)
+         * Basic HTML sanitization (removes dangerous elements/attributes)
+         * Not as comprehensive as DOMPurify but handles common XSS vectors
+         * @param {string} html - HTML content to sanitize
+         * @returns {string} Sanitized HTML
+         */
+        _basicSanitize: function(html) {
+            if (!html || typeof html !== 'string') return html;
+
+            // Remove script tags and their content
+            let sanitized = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+
+            // Remove event handlers (onclick, onerror, onload, etc.)
+            sanitized = sanitized.replace(/\s+on\w+\s*=\s*["'][^"']*["']/gi, '');
+            sanitized = sanitized.replace(/\s+on\w+\s*=\s*[^\s>]+/gi, '');
+
+            // Remove javascript: URLs
+            sanitized = sanitized.replace(/javascript\s*:/gi, '');
+
+            // Remove data: URLs that could contain scripts
+            sanitized = sanitized.replace(/data\s*:\s*text\/html/gi, '');
+
+            return sanitized;
+        },
+
+        /**
+         * Set HTML content with optional sanitization
          * Replaces: $(el).html(content)
          *
          * @param {Element|string} element - DOM element or selector
          * @param {string} html - HTML content
-         * @param {boolean} sanitize - Whether to sanitize (default: true)
+         * @param {boolean|string} options - false to skip sanitization, 'trusted' for internal HTML
          */
-        setHTML: function(element, html, sanitize) {
+        setHTML: function(element, html, options) {
             const el = typeof element === 'string' ? this.get(element) : element;
             if (!el) return;
 
-            // Default to sanitization for security
-            if (sanitize !== false && window.DOMPurify) {
+            // If options is 'trusted', this is internally generated HTML - use basic sanitization
+            if (options === 'trusted') {
+                el.innerHTML = this._basicSanitize(html);
+                return;
+            }
+
+            // If options is false, skip sanitization entirely (use with caution)
+            if (options === false) {
+                el.innerHTML = html;
+                return;
+            }
+
+            // Default: Use DOMPurify if available, otherwise basic sanitization
+            if (window.DOMPurify) {
                 el.innerHTML = window.DOMPurify.sanitize(html);
             } else {
-                // Fallback: use textContent for safety if no DOMPurify
-                console.warn('[DOMHelper] Setting HTML without sanitization - security risk!');
-                el.innerHTML = html;
+                // Use basic sanitization as fallback (no warning spam)
+                el.innerHTML = this._basicSanitize(html);
             }
         },
 

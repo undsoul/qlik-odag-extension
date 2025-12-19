@@ -396,7 +396,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 const cacheBuster = '_=' + Date.now();
                 const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id + '&' + cacheBuster;
 
-                HTTP.post(bindingsUrl, {linkList: [odagConfig.odagLinkId]}, {
+                // Store Promise so buildPayload can await it
+                const bindingsPromiseKey = 'odagBindingsPromise_' + odagConfig.odagLinkId;
+                window[bindingsPromiseKey] = HTTP.post(bindingsUrl, {linkList: [odagConfig.odagLinkId]}, {
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': '*/*',
@@ -494,14 +496,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             console.error('[PAINT] Response:', response);
                             window[bindingsCacheKey] = [];
                         }
-                        // Clear fetching flag
+                        // Clear fetching flag and Promise
                         delete window[bindingsFetchingKey];
+                        delete window[bindingsPromiseKey];
                     }).catch(function(error) {
                         console.error('❌ [PAINT] Failed to fetch Cloud ODAG bindings:', error.status, error.message);
                         console.error('[PAINT] Response:', error.response);
                         window[bindingsCacheKey] = [];
-                        // Clear fetching flag
+                        // Clear fetching flag and Promise
                         delete window[bindingsFetchingKey];
+                        delete window[bindingsPromiseKey];
                     });
             } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
                 // Set fetching flag to prevent duplicate requests
@@ -514,7 +518,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 const cacheBuster = '_=' + Date.now();
                 const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey + '&' + cacheBuster;
 
-                HTTP.get(linkDetailsUrl, {
+                // Store Promise so buildPayload can await it
+                const bindingsPromiseKey = 'odagBindingsPromise_' + odagConfig.odagLinkId;
+                window[bindingsPromiseKey] = HTTP.get(linkDetailsUrl, {
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
@@ -616,13 +622,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             }
                             window[bindingsCacheKey] = []; // Empty array to avoid repeated fetches
                         }
-                        // Clear fetching flag
+                        // Clear fetching flag and Promise
                         delete window[bindingsFetchingKey];
+                        delete window[bindingsPromiseKey];
                     }).catch(function(error) {
                         console.error('❌ Failed to fetch ODAG link details for bindings:', error.status, error.message);
                         window[bindingsCacheKey] = []; // Empty array to avoid repeated fetches
-                        // Clear fetching flag
+                        // Clear fetching flag and Promise
                         delete window[bindingsFetchingKey];
+                        delete window[bindingsPromiseKey];
                     });
             }
 
