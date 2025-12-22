@@ -2,7 +2,7 @@
 
 A powerful, production-ready Qlik Sense extension for managing On-Demand App Generation (ODAG) with enterprise features including Dynamic View mode, variable mapping, real-time status monitoring, and intelligent app lifecycle management.
 
-[![Version](https://img.shields.io/badge/version-7.0.0-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
+[![Version](https://img.shields.io/badge/version-8.0.22-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
 [![Qlik Cloud](https://img.shields.io/badge/Qlik-Cloud-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![On-Premise](https://img.shields.io/badge/Qlik-On--Premise-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -26,7 +26,98 @@ This extension provides an **enhanced user interface** for Qlik's native ODAG fu
 
 ---
 
-## 🆕 Version 7.0.0 - Multilingual Support & Cross-Page Selection Tracking
+## 🆕 Version 8.0 - Vanilla JS Migration & Fast Selection Tracking
+
+### 🚀 Complete Vanilla JS Migration
+
+The extension has been completely rewritten from jQuery to pure vanilla JavaScript, resulting in:
+
+- **Zero jQuery Dependency**: No external library required for DOM operations
+- **Smaller Bundle Size**: Reduced footprint without jQuery overhead
+- **Better Performance**: Native browser APIs are faster than jQuery abstractions
+- **Modern Codebase**: ES6+ syntax with async/await patterns
+- **Enhanced Security**: Built-in HTML sanitization without DOMPurify dependency
+
+### ⚡ Fast Selection Tracking (Critical Fix)
+
+Fixed the "quick selection" race condition where rapid selections weren't captured correctly:
+
+**The Problem:**
+When users made quick selections and immediately clicked "Generate", the ODAG app was created with OLD selection values instead of the latest ones.
+
+**The Solution:**
+Implemented aggressive engine synchronization before querying selections:
+
+```javascript
+// Step 1: Wait for pending selection commands (100ms)
+await new Promise(resolve => setTimeout(resolve, 100));
+
+// Step 2: Double getAppLayout() for guaranteed engine sync
+await enigmaApp.getAppLayout();
+await enigmaApp.getAppLayout();
+
+// Step 3: Create fresh SelectionObject via Enigma API
+const selectionObj = await enigmaApp.createSessionObject({...});
+
+// Step 4: Brief wait for SelectionObject population (50ms)
+await new Promise(resolve => setTimeout(resolve, 50));
+
+// Step 5: Get layout with guaranteed fresh data
+const selectionLayout = await selectionObj.getLayout();
+```
+
+**Result:** Selections are now captured correctly even with rapid user interactions.
+
+### 🔧 New Utility Modules
+
+#### DOM Helper (`utils/dom-helper.js`)
+- jQuery-compatible API with vanilla JS implementation
+- Built-in HTML sanitization (removes script tags, event handlers, javascript: URLs)
+- Safe fallback when DOMPurify isn't available
+- Methods: `get()`, `getAll()`, `on()`, `off()`, `addClass()`, `removeClass()`, `setHTML()`, `setText()`, etc.
+
+#### HTTP Helper (`utils/http-helper.js`)
+- Promise-based HTTP client using Fetch API
+- Automatic JSON parsing
+- Timeout support
+- Error handling with status codes
+
+### 🐛 Bug Fixes in v8.0
+
+#### Fixed: Bindings Race Condition
+- **Issue**: "No cached ODAG bindings found" error on initial load
+- **Cause**: `buildPayload` was called before bindings fetch completed
+- **Fix**: Store fetch Promise in window, `buildPayload` now awaits if fetch is in progress
+
+#### Fixed: Console Warning Spam
+- **Issue**: "[DOMHelper] Setting HTML without sanitization" warning appeared 100+ times
+- **Fix**: Added `_basicSanitize()` function as fallback when DOMPurify isn't loaded
+
+#### Fixed: Engine Sync for Fresh Selections
+- **Issue**: Enigma SelectionObject sometimes returned stale data
+- **Fix**: Double `getAppLayout()` calls + delays ensure engine processes all pending operations
+
+### 📦 Architecture Changes
+
+```
+OdagExtension/
+├── odag-api-extension.js       # Main extension (vanilla JS)
+├── foundation/
+│   ├── odag-language.js        # NEW: Multi-language support
+│   └── odag-state-manager.js   # Enhanced with Promise support
+├── utils/
+│   ├── dom-helper.js           # NEW: jQuery replacement
+│   ├── http-helper.js          # NEW: Fetch API wrapper
+│   └── dompurify-loader.js     # NEW: Optional sanitization
+├── core/
+│   └── odag-payload-builder.js # Enhanced with engine sync
+└── handlers/
+    └── odag-event-handlers.js  # Vanilla JS event handling
+```
+
+---
+
+## 🌍 Version 7.0.0 - Multilingual Support & Cross-Page Selection Tracking
 
 ### 🌍 New Feature: Multilingual Interface
 
@@ -553,7 +644,18 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Version History
 
-### v7.0.0 (Current)
+### v8.0.22 (Current)
+- 🚀 **Vanilla JS Migration**: Complete rewrite from jQuery to pure vanilla JavaScript
+- ⚡ **Fast Selection Tracking**: Fixed race condition with quick selections using Enigma API sync
+- 🔧 **DOM Helper**: New utility module replacing jQuery with built-in HTML sanitization
+- 🔧 **HTTP Helper**: New Fetch API wrapper for HTTP operations
+- 🐛 **Bindings Race Condition**: Fixed "No cached ODAG bindings found" error
+- 🐛 **Console Warning Spam**: Eliminated DOMHelper sanitization warnings
+- 🐛 **Engine Sync**: Double getAppLayout() ensures fresh selection data
+- 📦 **Zero Dependencies**: No jQuery or DOMPurify required
+- 🔒 **Enhanced Security**: Basic HTML sanitization built-in
+
+### v7.0.0
 - 🌍 **Multilingual Support**: Added support for 5 languages (English, Türkçe, Español, 中文, العربية)
 - 🎨 **Language Selection**: New dropdown in properties panel for language preference
 - 📝 **Comprehensive Translations**: All user-facing messages translated
