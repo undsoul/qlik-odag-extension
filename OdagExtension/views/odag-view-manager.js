@@ -2,13 +2,13 @@
  * ODAG View Manager
  * Manages app list views, status monitoring, and UI updates
  *
- * @version 6.0.0
+ * @version 8.0.0
  */
 
-define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
+define(['../utils/dom-helper', '../utils/http-helper', '../foundation/odag-constants'], function(DOM, HTTP, CONSTANTS) {
     'use strict';
 
-    console.log('🔄 ODAG View Manager v6.0.0 LOADED - Fix applied');
+    console.log('🔄 ODAG View Manager v8.0.0 LOADED - Vanilla JS migration');
 
     /**
      * ODAG View Manager Module
@@ -83,15 +83,10 @@ define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
                         'X-Qlik-XrfKey': xrfkey
                       };
 
-                $.ajax({
-                    url: apiUrl,
-                    type: 'GET',
-                    headers: headers,
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function(result) {
-                        if (result && Array.isArray(result)) {
+                try {
+                    const result = await HTTP.get(apiUrl, { headers });
+
+                    if (result && Array.isArray(result)) {
                             // Store previous statuses before clearing
                             const previousStatuses = {};
                             if (window.odagGeneratedApps) {
@@ -199,9 +194,9 @@ define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
                                 debugLog('Auto-clicking newly succeeded app:', newlySucceededApp.name);
                                 setTimeout(function() {
                                     // Find and click the app item
-                                    const $appItem = $('.odag-app-item[data-app-id="' + newlySucceededApp.appId + '"]');
-                                    if ($appItem.length > 0) {
-                                        $appItem.trigger('click');
+                                    const appItem = DOM.get('.odag-app-item[data-app-id="' + newlySucceededApp.appId + '"]');
+                                    if (appItem) {
+                                        DOM.click(appItem);
                                         debugLog('Auto-clicked app successfully');
                                     } else {
                                         debugLog('Could not find app item to auto-click');
@@ -209,11 +204,9 @@ define(['jquery', '../foundation/odag-constants'], function($, CONSTANTS) {
                                 }, CONSTANTS.TIMING.VALIDATION_DEBOUNCE_MS);
                             }
                         }
-                    },
-                    error: function(xhr) {
-                        console.error('Failed to load existing ODAG requests:', xhr.responseText);
-                    }
-                });
+                } catch (error) {
+                    console.error('Failed to load existing ODAG requests:', error.message || error);
+                }
             };
         },
 

@@ -2,7 +2,7 @@
 
 A powerful, production-ready Qlik Sense extension for managing On-Demand App Generation (ODAG) with enterprise features including Dynamic View mode, variable mapping, real-time status monitoring, and intelligent app lifecycle management.
 
-[![Version](https://img.shields.io/badge/version-6.0.0-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
+[![Version](https://img.shields.io/badge/version-7.0.0-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
 [![Qlik Cloud](https://img.shields.io/badge/Qlik-Cloud-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![On-Premise](https://img.shields.io/badge/Qlik-On--Premise-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -21,11 +21,110 @@ This extension provides an **enhanced user interface** for Qlik's native ODAG fu
 - 📊 **Variable Support** - Map Qlik variables to ODAG fields (single or multiple values)
 - 🎯 **Dynamic View** - Maintain only the latest app with automatic cleanup
 - 📱 **Responsive** - Works on desktop, tablet, and mobile devices
+- 🌍 **Multilingual** - Support for 5 languages (English, Turkish, Spanish, Chinese, Arabic)
 - ⚡ **Production Ready** - Enterprise-grade error handling, proper cleanup, Cloud & On-Premise support
 
 ---
 
-## 🆕 Version 6.0.0 - Production Release
+## 🆕 Version 7.0.0 - Multilingual Support & Cross-Page Selection Tracking
+
+### 🌍 New Feature: Multilingual Interface
+
+The extension now supports **5 languages** out of the box, making it accessible to users worldwide:
+
+- 🇬🇧 **English** (Default)
+- 🇹🇷 **Türkçe** (Turkish)
+- 🇪🇸 **Español** (Spanish)
+- 🇨🇳 **中文** (Chinese - Simplified)
+- 🇸🇦 **العربية** (Arabic)
+
+#### What's Translated
+
+All user-facing messages are now available in multiple languages:
+
+- **Button Labels**: Generate, Refresh, Cancel, Delete, Open, Reload, Close
+- **Status Messages**: Queued, Generating, Validating, Ready, Failed, Loading
+- **Progress Indicators**: "Generating ODAG app...", "Loading app...", "Deleting app..."
+- **Validation Messages**: Selection required, Row limit exceeded, App limit reached
+- **Warning Messages**: Selections changed, State changed, Dynamic view alerts
+- **Error Messages**: Load failed, Generation failed, API errors, Access denied
+- **Info Messages**: Select an app, Required fields, Generated on, Last reloaded
+
+#### How to Use
+
+1. Open the extension properties panel
+2. Go to **"Appearance & Language"** section
+3. Select your preferred language from the dropdown
+4. All UI text will automatically update to the selected language
+
+#### Technical Details
+
+- New module: `foundation/odag-language.js` (~600 lines)
+- Language messages organized by category (buttons, status, progress, validation, errors, warnings, success, info)
+- Seamless integration with existing codebase
+- Messages stored in StateManager for global access
+- Fallback to English if translation is missing
+- No performance impact - all translations loaded at startup
+
+#### Benefits
+
+- **Global Accessibility**: Users can work in their native language
+- **Better UX**: Clear, localized messages reduce confusion
+- **Enterprise Ready**: Supports multinational deployments
+- **Easy to Extend**: New languages can be added easily to the language module
+
+### 🔄 Fixed: Selection Tracking Across Page Navigation (Dynamic View)
+
+#### The Problem
+When users made binding field selections, navigated to another sheet, and returned to the extension, the selections were lost. The extension couldn't detect that selections had changed because they were only stored in memory, which cleared during page navigation.
+
+#### The Solution
+Implemented persistent selection tracking using sessionStorage with stable storage keys and automatic app regeneration:
+
+- **Persistent Current Selections**: Extension now stores `currentBindSelections` to sessionStorage whenever selections are checked
+- **Cross-Page Memory**: When you navigate away and return, stored selections are automatically restored
+- **Smart Comparison**: On page reload, extension compares restored selections with baseline (`lastGeneratedPayload`)
+- **Auto-Trigger Refresh**: If selections changed, extension automatically triggers refresh (as if user clicked the button)
+- **Seamless Experience**: New app generation starts automatically without manual intervention
+- **Clean Lifecycle**: Stored selections are cleared after successful generation (they become the new baseline)
+
+#### What Changed
+
+**StateManager** (`foundation/odag-state-manager.js`):
+- Added `currentBindSelections` to persistent keys
+- Enhanced `delete()` to support custom storage keys
+- Better cross-page-load persistence
+
+**Main Extension** (`odag-api-extension.js`):
+- Created stable storage key for current selections (using `app.id + odagLinkId`)
+- Store selections continuously to sessionStorage
+- Restore and compare selections after page navigation
+- Auto-trigger refresh button click when selections changed (after 1 second delay)
+- Clear stored selections after successful generation
+
+#### How It Works Now
+
+```
+1. User makes selections → Stored to sessionStorage
+2. User navigates to another sheet → Selections persist
+3. User returns to extension → Selections restored and compared with baseline
+4. Extension detects change → Automatically triggers refresh after 1 second
+5. New app generation starts → Without manual button click
+6. App completes → Old app deleted, new app displayed
+7. Stored selections cleared → Now part of new baseline
+```
+
+#### Benefits
+
+- ✅ **No Lost Selections**: Selections survive page navigation
+- ✅ **Fully Automatic**: No manual refresh needed - app regenerates automatically
+- ✅ **Seamless Experience**: Users just navigate and the extension handles everything
+- ✅ **Zero Friction**: Navigate away, make changes, come back - new app starts generating
+- ✅ **Stable Tracking**: Uses stable keys that don't change between page loads
+
+---
+
+## Version 6.0.0 - Production Release
 
 ### Major Features
 
@@ -245,6 +344,12 @@ Add the extension to your selection app:
 
 #### **Optional Settings:**
 
+**Language**
+- Choose your preferred interface language
+- Options: English (default), Türkçe, Español, 中文, العربية
+- All UI text updates automatically when you change the language
+- Located in "Appearance & Language" section
+
 **View Mode**
 - `List View` (default): Show all generated apps in a list
 - `Dynamic View`: Show only the latest app, auto-delete old ones
@@ -448,7 +553,20 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Version History
 
-### v6.0.0 (Current)
+### v7.0.0 (Current)
+- 🌍 **Multilingual Support**: Added support for 5 languages (English, Türkçe, Español, 中文, العربية)
+- 🎨 **Language Selection**: New dropdown in properties panel for language preference
+- 📝 **Comprehensive Translations**: All user-facing messages translated
+- 🏗️ **New Module**: Created `foundation/odag-language.js` with 600+ lines of translations
+- ✨ **Auto-Update**: UI text automatically updates when language changes
+- 🔧 **Global Access**: Messages stored in StateManager for use across all modules
+- 🔄 **Fixed: Cross-Page Selection Tracking**: Selections now persist across page navigation in Dynamic View
+- 💾 **Persistent State**: Current selections stored to sessionStorage with stable keys
+- 🎯 **Smart Comparison**: Automatically compares stored selections with baseline after page reload
+- 🤖 **Auto-Trigger Refresh**: Automatically starts app regeneration when selections changed (no manual click needed)
+- ⚡ **Zero-Click Experience**: Navigate away, make changes, come back - app regenerates automatically
+
+### v6.0.0
 - ✨ Added variable change detection in Dynamic View
 - 🐛 Fixed "Access denied" errors in published apps
 - 🐛 Fixed On-Premise binding fields not displaying

@@ -2,14 +2,17 @@
  * ODAG Event Handlers
  * Manages all user interaction handlers (buttons, clicks, etc.)
  *
- * @version 6.0.0
+ * @version 8.0.0
  */
 
 define([
-    'jquery',
+    '../utils/dom-helper',
+    '../utils/http-helper',
     '../foundation/odag-constants'
-], function($, CONSTANTS) {
+], function(DOM, HTTP, CONSTANTS) {
     'use strict';
+
+    console.log('🔄 ODAG Event Handlers v8.0.0 LOADED - Vanilla JS migration');
 
     /**
      * Event Handlers Module
@@ -19,7 +22,7 @@ define([
 
         /**
          * Setup app item handlers (open, cancel, reload, delete)
-         * @param {jQuery} $listContainer - Container element
+         * @param {Element|string} listContainer - Container element or selector
          * @param {string} qId - Extension instance ID
          * @param {Function} updateAppsList - Callback to update apps list
          * @param {Function} showNotification - Notification function
@@ -27,128 +30,165 @@ define([
          * @param {Function} getCookie - Cookie getter function
          * @param {Function} checkODAGValidation - Validation check callback (optional)
          */
-        setupAppItemHandlers: function($listContainer, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation) {
+        setupAppItemHandlers: function(listContainer, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation) {
             const self = this;
+            const container = typeof listContainer === 'string' ? DOM.get(listContainer) : listContainer;
+            if (!container) return;
 
             // Open app handler
-            $listContainer.find('.open-app').off('click').on('click', function(e) {
-                e.stopPropagation();
-                const $item = $(this).closest('.odag-app-item');
-                const appIndex = $item.data('app-index');
-                const appData = window.odagGeneratedApps[appIndex];
+            const openButtons = DOM.getAll('.open-app', container);
+            openButtons.forEach(function(button) {
+                DOM.off(button, 'click');
+                DOM.on(button, 'click', function(e) {
+                    e.stopPropagation();
+                    const item = button.closest('.odag-app-item');
+                    const appIndex = parseInt(item.getAttribute('data-app-index'), 10);
+                    const appData = window.odagGeneratedApps[appIndex];
 
-                // Extract app ID properly if it's an object
-                let appId = '';
-                if (appData.appId) {
-                    if (typeof appData.appId === 'string' && appData.appId !== '[object Object]') {
-                        appId = appData.appId;
-                    } else if (typeof appData.appId === 'object') {
-                        appId = appData.appId.id || appData.appId.appId || appData.appId.resourceId || '';
-                        console.warn('Had to extract app ID from object in open-app handler:', appId);
+                    // Extract app ID properly if it's an object
+                    let appId = '';
+                    if (appData.appId) {
+                        if (typeof appData.appId === 'string' && appData.appId !== '[object Object]') {
+                            appId = appData.appId;
+                        } else if (typeof appData.appId === 'object') {
+                            appId = appData.appId.id || appData.appId.appId || appData.appId.resourceId || '';
+                            console.warn('Had to extract app ID from object in open-app handler:', appId);
+                        }
                     }
-                }
 
-                debugLog('Opening app:', {
-                    appId: appId,
-                    appData: appData
+                    debugLog('Opening app:', {
+                        appId: appId,
+                        appData: appData
+                    });
+
+                    if (!appId || appId === '[object Object]') {
+                        showNotification('App ID not available yet. Please wait for app to be ready.', 'warning');
+                        return;
+                    }
+
+                    window.open(window.location.origin + '/sense/app/' + appId, '_blank');
+                    const menu = button.closest('.app-menu-dropdown');
+                    if (menu) DOM.hide(menu);
                 });
-
-                if (!appId || appId === '[object Object]') {
-                    showNotification('App ID not available yet. Please wait for app to be ready.', 'warning');
-                    return;
-                }
-
-                window.open(window.location.origin + '/sense/app/' + appId, '_blank');
-                $(this).closest('.app-menu-dropdown').hide();
             });
 
             // Cancel app handler
-            $listContainer.find('.cancel-app').off('click').on('click', function(e) {
-                e.stopPropagation();
-                const requestId = $(this).closest('.odag-app-item').data('request-id');
-                const appIndex = $(this).closest('.odag-app-item').data('app-index');
-                const appName = window.odagGeneratedApps[appIndex].name;
+            const cancelButtons = DOM.getAll('.cancel-app', container);
+            cancelButtons.forEach(function(button) {
+                DOM.off(button, 'click');
+                DOM.on(button, 'click', function(e) {
+                    e.stopPropagation();
+                    const item = button.closest('.odag-app-item');
+                    const requestId = item.getAttribute('data-request-id');
+                    const appIndex = parseInt(item.getAttribute('data-app-index'), 10);
+                    const appName = window.odagGeneratedApps[appIndex].name;
 
-                if (confirm('Are you sure you want to cancel generation of "' + appName + '"?')) {
-                    self._cancelApp(requestId, appIndex, qId, updateAppsList, showNotification, debugLog, getCookie);
-                }
+                    if (confirm('Are you sure you want to cancel generation of "' + appName + '"?')) {
+                        self._cancelApp(requestId, appIndex, qId, updateAppsList, showNotification, debugLog, getCookie);
+                    }
 
-                $(this).closest('.app-menu-dropdown').hide();
+                    const menu = button.closest('.app-menu-dropdown');
+                    if (menu) DOM.hide(menu);
+                });
             });
 
             // Reload app handler
-            $listContainer.find('.reload-app').off('click').on('click', function(e) {
-                e.stopPropagation();
-                const requestId = $(this).closest('.odag-app-item').data('request-id');
-                const $item = $(this).closest('.odag-app-item');
-                const appIndex = $(this).closest('.odag-app-item').data('app-index');
+            const reloadButtons = DOM.getAll('.reload-app', container);
+            reloadButtons.forEach(function(button) {
+                DOM.off(button, 'click');
+                DOM.on(button, 'click', function(e) {
+                    e.stopPropagation();
+                    const item = button.closest('.odag-app-item');
+                    const requestId = item.getAttribute('data-request-id');
+                    const appIndex = parseInt(item.getAttribute('data-app-index'), 10);
 
-                self._reloadApp(requestId, appIndex, qId, $item, updateAppsList, showNotification, debugLog, getCookie);
+                    self._reloadApp(requestId, appIndex, qId, item, updateAppsList, showNotification, debugLog, getCookie);
 
-                $(this).closest('.app-menu-dropdown').hide();
+                    const menu = button.closest('.app-menu-dropdown');
+                    if (menu) DOM.hide(menu);
+                });
             });
 
             // Delete app handler
-            $listContainer.find('.delete-app').off('click').on('click', function(e) {
-                e.stopPropagation();
-                e.preventDefault();
+            const deleteButtons = DOM.getAll('.delete-app', container);
+            deleteButtons.forEach(function(button) {
+                DOM.off(button, 'click');
+                DOM.on(button, 'click', function(e) {
+                    e.stopPropagation();
+                    e.preventDefault();
 
-                debugLog('Delete button clicked');
+                    debugLog('Delete button clicked');
 
-                const requestId = $(this).closest('.odag-app-item').data('request-id');
-                const appIndex = $(this).closest('.odag-app-item').data('app-index');
-                const appName = window.odagGeneratedApps[appIndex].name;
+                    const item = button.closest('.odag-app-item');
+                    const requestId = item.getAttribute('data-request-id');
+                    const appIndex = parseInt(item.getAttribute('data-app-index'), 10);
+                    const appName = window.odagGeneratedApps[appIndex].name;
 
-                debugLog('Delete app:', {requestId: requestId, appIndex: appIndex, appName: appName});
+                    debugLog('Delete app:', {requestId: requestId, appIndex: appIndex, appName: appName});
 
-                // Initialize global deletion tracking set if not exists
-                if (!window.odagDeletingRequests) {
-                    window.odagDeletingRequests = new Set();
-                }
+                    // Initialize global deletion tracking set if not exists
+                    if (!window.odagDeletingRequests) {
+                        window.odagDeletingRequests = new Set();
+                    }
 
-                // Check if this request is already being deleted
-                if (window.odagDeletingRequests.has(requestId)) {
-                    showNotification('This app is already being deleted', 'warning');
-                    return;
-                }
+                    // Check if this request is already being deleted
+                    if (window.odagDeletingRequests.has(requestId)) {
+                        showNotification('This app is already being deleted', 'warning');
+                        return;
+                    }
 
-                debugLog('Showing delete confirmation dialog for:', appName);
-                const confirmed = confirm('Are you sure you want to delete "' + appName + '"?');
-                debugLog('User confirmation result:', confirmed);
+                    debugLog('Showing delete confirmation dialog for:', appName);
+                    const confirmed = confirm('Are you sure you want to delete "' + appName + '"?');
+                    debugLog('User confirmation result:', confirmed);
 
-                if (confirmed) {
-                    self._deleteApp(requestId, appIndex, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
-                } else {
-                    debugLog('Delete cancelled by user');
-                }
+                    if (confirmed) {
+                        self._deleteApp(requestId, appIndex, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
+                    } else {
+                        debugLog('Delete cancelled by user');
+                    }
 
-                // Close the menu dropdown regardless of confirmation
-                $(this).closest('.app-menu-dropdown').hide();
+                    // Close the menu dropdown regardless of confirmation
+                    const menu = button.closest('.app-menu-dropdown');
+                    if (menu) DOM.hide(menu);
+                });
             });
         },
 
         /**
          * Setup generate button handler
-         * @param {jQuery} $generateButtons - Generate button elements
+         * @param {Element|NodeList|string} generateButtons - Generate button element(s) or selector
          * @param {Function} generateODAGApp - Generate app callback
          * @param {Object} odagConfig - ODAG configuration
          */
-        setupGenerateHandler: function($generateButtons, generateODAGApp, odagConfig) {
-            $generateButtons.on('click', function(e) {
-                console.log('🔘 Generate button clicked!', {
-                    odagLinkId: odagConfig.odagLinkId,
-                    bindingsCached: !!window['odagBindings_' + odagConfig.odagLinkId],
-                    buttonElement: this
+        setupGenerateHandler: function(generateButtons, generateODAGApp, odagConfig) {
+            let buttons = generateButtons;
+
+            // Convert to array if needed
+            if (typeof generateButtons === 'string') {
+                buttons = DOM.getAll(generateButtons);
+            } else if (generateButtons instanceof Element) {
+                buttons = [generateButtons];
+            } else if (generateButtons instanceof NodeList) {
+                buttons = Array.from(generateButtons);
+            }
+
+            buttons.forEach(function(button) {
+                DOM.on(button, 'click', function(e) {
+                    console.log('🔘 Generate button clicked!', {
+                        odagLinkId: odagConfig.odagLinkId,
+                        bindingsCached: !!window['odagBindings_' + odagConfig.odagLinkId],
+                        buttonElement: button
+                    });
+                    e.preventDefault();
+                    e.stopPropagation();
+                    generateODAGApp();
                 });
-                e.preventDefault();
-                e.stopPropagation();
-                generateODAGApp();
             });
         },
 
         /**
          * Setup delete all button handler
-         * @param {jQuery} $element - Extension element
+         * @param {Element|string} element - Extension element or selector
          * @param {Object} layout - Extension layout
          * @param {Function} updateAppsList - Callback to update apps list
          * @param {Function} showNotification - Notification function
@@ -156,10 +196,15 @@ define([
          * @param {Function} getCookie - Cookie getter function
          * @param {Function} checkODAGValidation - Validation check callback (optional)
          */
-        setupDeleteAllHandler: function($element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation) {
+        setupDeleteAllHandler: function(element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation) {
             const self = this;
+            const el = typeof element === 'string' ? DOM.get(element) : element;
+            if (!el) return;
 
-            $element.find('.delete-all-btn').on('click', function() {
+            const deleteAllBtn = DOM.get('.delete-all-btn', el);
+            if (!deleteAllBtn) return;
+
+            DOM.on(deleteAllBtn, 'click', function() {
                 const appCount = window.odagGeneratedApps ? window.odagGeneratedApps.length : 0;
 
                 if (appCount === 0) {
@@ -178,9 +223,8 @@ define([
                     }
 
                     // Show loading state
-                    const $btn = $(this);
-                    $btn.prop('disabled', true);
-                    $btn.html('⏳');
+                    deleteAllBtn.disabled = true;
+                    DOM.setHTML(deleteAllBtn, '⏳');
 
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
                     const isCloud = window.qlikEnvironment === 'cloud';
@@ -264,34 +308,29 @@ define([
                                         'Content-Type': 'application/json'
                                       };
 
-                                $.ajax({
+                                HTTP.request({
                                     url: deleteUrl,
-                                    type: deleteMethod,
-                                    headers: deleteHeaders,
-                                    xhrFields: {
-                                        withCredentials: true
-                                    },
-                                    success: function() {
-                                        deleteCount++;
-                                        debugLog('Deleted app:', app.name);
-                                        resolve();
-                                    },
-                                    error: function(xhr) {
-                                        // Remove from deleting set on non-404 errors
-                                        if (xhr.status !== 404) {
-                                            window.odagDeletingRequests.delete(app.requestId);
-                                        }
-
-                                        if (xhr.status === 404) {
-                                            // Already deleted, count as success
-                                            deleteCount++;
-                                            debugLog('App already deleted:', app.name);
-                                        } else {
-                                            errorCount++;
-                                            console.error('Failed to delete app:', app.name, xhr.status, xhr.responseText);
-                                        }
-                                        resolve(); // Still resolve to continue with other deletions
+                                    method: deleteMethod,
+                                    headers: deleteHeaders
+                                }).then(function() {
+                                    deleteCount++;
+                                    debugLog('Deleted app:', app.name);
+                                    resolve();
+                                }).catch(function(error) {
+                                    // Remove from deleting set on non-404 errors
+                                    if (error.status !== 404) {
+                                        window.odagDeletingRequests.delete(app.requestId);
                                     }
+
+                                    if (error.status === 404) {
+                                        // Already deleted, count as success
+                                        deleteCount++;
+                                        debugLog('App already deleted:', app.name);
+                                    } else {
+                                        errorCount++;
+                                        console.error('Failed to delete app:', app.name, error.status, error.message);
+                                    }
+                                    resolve(); // Still resolve to continue with other deletions
                                 });
                             } else {
                                 resolve();
@@ -314,8 +353,8 @@ define([
                         }
 
                         // Reset button
-                        $btn.prop('disabled', false);
-                        $btn.html('🗑️');
+                        deleteAllBtn.disabled = false;
+                        DOM.setHTML(deleteAllBtn, '🗑️');
 
                         // Show result
                         if (errorCount > 0) {
@@ -325,7 +364,8 @@ define([
                         }
 
                         // Hide iframe since no app is selected
-                        $('#iframe-container-' + layout.qInfo.qId).hide();
+                        const iframeContainer = DOM.get('#iframe-container-' + layout.qInfo.qId);
+                        if (iframeContainer) DOM.hide(iframeContainer);
                     });
                 }
             });
@@ -333,138 +373,181 @@ define([
 
         /**
          * Setup refresh list button handler
-         * @param {jQuery} $element - Extension element
+         * @param {Element|string} element - Extension element or selector
          * @param {Function} pollODAGStatus - Polling function
          */
-        setupRefreshHandler: function($element, pollODAGStatus) {
-            $element.find('.refresh-list-btn').on('click', function() {
-                pollODAGStatus();
-            });
+        setupRefreshHandler: function(element, pollODAGStatus) {
+            const el = typeof element === 'string' ? DOM.get(element) : element;
+            if (!el) return;
+
+            const refreshBtn = DOM.get('.refresh-list-btn', el);
+            if (refreshBtn) {
+                DOM.on(refreshBtn, 'click', function() {
+                    pollODAGStatus();
+                });
+            }
         },
 
         /**
          * Setup sidebar toggle handler
-         * @param {jQuery} $element - Extension element
+         * @param {Element|string} element - Extension element or selector
          * @param {Object} layout - Extension layout
          */
-        setupSidebarToggleHandler: function($element, layout) {
-            $element.find('.sidebar-toggle-btn').on('click', function() {
+        setupSidebarToggleHandler: function(element, layout) {
+            const el = typeof element === 'string' ? DOM.get(element) : element;
+            if (!el) return;
+
+            const toggleBtn = DOM.get('.sidebar-toggle-btn', el);
+            if (!toggleBtn) return;
+
+            DOM.on(toggleBtn, 'click', function() {
                 const qId = layout.qInfo.qId;
-                const $panel = $('#apps-list-panel-' + qId);
-                const $iframe = $('#iframe-container-' + qId);
-                const $toggleBtn = $(this);
-                const $arrow = $toggleBtn.find('span');
+                const panel = DOM.get('#apps-list-panel-' + qId);
+                const iframe = DOM.get('#iframe-container-' + qId);
+                const arrow = DOM.get('span', toggleBtn);
                 const listWidth = 350;
 
                 // Check if sidebar is currently hidden
-                const isHidden = $panel.css('margin-left') === '-' + listWidth + 'px';
+                const isHidden = panel.style.marginLeft === '-' + listWidth + 'px';
 
                 if (isHidden) {
                     // Show sidebar
-                    $panel.css('margin-left', '0');
-                    $toggleBtn.css('left', listWidth + 'px');
-                    $arrow.text('◀');
+                    panel.style.marginLeft = '0';
+                    toggleBtn.style.left = listWidth + 'px';
+                    if (arrow) DOM.setText(arrow, '◀');
                 } else {
                     // Hide sidebar
-                    $panel.css('margin-left', '-' + listWidth + 'px');
-                    $toggleBtn.css('left', '0');
-                    $arrow.text('▶');
+                    panel.style.marginLeft = '-' + listWidth + 'px';
+                    toggleBtn.style.left = '0';
+                    if (arrow) DOM.setText(arrow, '▶');
                 }
             });
         },
 
         /**
          * Setup app menu button handler (three dots)
-         * @param {jQuery} $listContainer - Container element
+         * @param {Element|string} listContainer - Container element or selector
          */
-        setupAppMenuHandler: function($listContainer) {
-            $listContainer.find('.app-menu-btn').off('click').on('click', function(e) {
-                e.stopPropagation();
-                const $menu = $(this).siblings('.app-menu-dropdown');
+        setupAppMenuHandler: function(listContainer) {
+            const container = typeof listContainer === 'string' ? DOM.get(listContainer) : listContainer;
+            if (!container) return;
 
-                // Hide all other menus
-                $('.app-menu-dropdown').not($menu).hide();
+            const menuButtons = DOM.getAll('.app-menu-btn', container);
+            menuButtons.forEach(function(button) {
+                DOM.off(button, 'click');
+                DOM.on(button, 'click', function(e) {
+                    e.stopPropagation();
+                    const menu = button.parentElement.querySelector('.app-menu-dropdown');
+                    if (!menu) return;
 
-                // Toggle this menu
-                $menu.toggle();
+                    // Hide all other menus
+                    const allMenus = DOM.getAll('.app-menu-dropdown');
+                    allMenus.forEach(function(m) {
+                        if (m !== menu) DOM.hide(m);
+                    });
+
+                    // Toggle this menu
+                    DOM.toggle(menu);
+                });
             });
 
             // Close menu when clicking outside
-            $(document).on('click', function(e) {
-                if (!$(e.target).closest('.app-menu-btn, .app-menu-dropdown').length) {
-                    $('.app-menu-dropdown').hide();
+            DOM.on(document, 'click', function(e) {
+                const target = e.target;
+                if (!target.closest('.app-menu-btn') && !target.closest('.app-menu-dropdown')) {
+                    const allMenus = DOM.getAll('.app-menu-dropdown');
+                    allMenus.forEach(function(menu) {
+                        DOM.hide(menu);
+                    });
                 }
             });
         },
 
         /**
          * Setup app item click handler (for viewing in iframe)
-         * @param {jQuery} $listContainer - Container element
+         * @param {Element|string} listContainer - Container element or selector
          * @param {string} qId - Extension instance ID
          * @param {Function} debugLog - Debug logging function
          */
-        setupAppItemClickHandler: function($listContainer, qId, debugLog) {
-            $listContainer.find('.odag-app-item').off('click').on('click', function(e) {
-                // Don't trigger if clicking on menu button or menu items
-                if ($(e.target).closest('.app-menu-btn, .app-menu-dropdown').length) {
-                    return;
-                }
+        setupAppItemClickHandler: function(listContainer, qId, debugLog) {
+            const container = typeof listContainer === 'string' ? DOM.get(listContainer) : listContainer;
+            if (!container) return;
 
-                const appIndex = $(this).data('app-index');
-                const appData = window.odagGeneratedApps[appIndex];
-
-                // Extract app ID properly if it's an object
-                let appId = '';
-                if (appData.appId) {
-                    if (typeof appData.appId === 'string' && appData.appId !== '[object Object]') {
-                        appId = appData.appId;
-                    } else if (typeof appData.appId === 'object') {
-                        appId = appData.appId.id || appData.appId.appId || appData.appId.resourceId || '';
-                        console.warn('Had to extract app ID from object:', appId);
+            const appItems = DOM.getAll('.odag-app-item', container);
+            appItems.forEach(function(item) {
+                DOM.off(item, 'click');
+                DOM.on(item, 'click', function(e) {
+                    // Don't trigger if clicking on menu button or menu items
+                    if (e.target.closest('.app-menu-btn') || e.target.closest('.app-menu-dropdown')) {
+                        return;
                     }
-                }
 
-                debugLog('App item clicked:', {
-                    appId: appId,
-                    appData: appData,
-                    status: appData.status
+                    const appIndex = parseInt(item.getAttribute('data-app-index'), 10);
+                    const appData = window.odagGeneratedApps[appIndex];
+
+                    // Extract app ID properly if it's an object
+                    let appId = '';
+                    if (appData.appId) {
+                        if (typeof appData.appId === 'string' && appData.appId !== '[object Object]') {
+                            appId = appData.appId;
+                        } else if (typeof appData.appId === 'object') {
+                            appId = appData.appId.id || appData.appId.appId || appData.appId.resourceId || '';
+                            console.warn('Had to extract app ID from object:', appId);
+                        }
+                    }
+
+                    debugLog('App item clicked:', {
+                        appId: appId,
+                        appData: appData,
+                        status: appData.status
+                    });
+
+                    if (!appId || appId === '[object Object]') {
+                        console.warn('App ID not available yet, status:', appData.status);
+                        return;
+                    }
+
+                    if (appData.status !== 'succeeded') {
+                        console.warn('App not ready yet, status:', appData.status);
+                        return;
+                    }
+
+                    // Highlight selected app
+                    const allItems = DOM.getAll('.odag-app-item', container);
+                    allItems.forEach(function(i) {
+                        DOM.removeClass(i, 'selected');
+                    });
+                    DOM.addClass(item, 'selected');
+
+                    // Show iframe with app
+                    const iframeContainer = DOM.get('#iframe-container-' + qId);
+                    const appUrl = window.location.origin + '/sense/app/' + appId;
+
+                    DOM.setHTML(iframeContainer, '<iframe src="' + appUrl + '" style="width:100%;height:100%;border:none;"></iframe>');
+                    DOM.show(iframeContainer);
                 });
-
-                if (!appId || appId === '[object Object]') {
-                    console.warn('App ID not available yet, status:', appData.status);
-                    return;
-                }
-
-                if (appData.status !== 'succeeded') {
-                    console.warn('App not ready yet, status:', appData.status);
-                    return;
-                }
-
-                // Highlight selected app
-                $listContainer.find('.odag-app-item').removeClass('selected');
-                $(this).addClass('selected');
-
-                // Show iframe with app
-                const $iframeContainer = $('#iframe-container-' + qId);
-                const appUrl = window.location.origin + '/sense/app/' + appId;
-
-                $iframeContainer.html('<iframe src="' + appUrl + '" style="width:100%;height:100%;border:none;"></iframe>');
-                $iframeContainer.show();
             });
         },
 
         /**
          * Setup mobile dropdown selector
-         * @param {jQuery} $element - Extension element
+         * @param {Element|string} element - Extension element or selector
          * @param {string} qId - Extension instance ID
          * @param {Function} debugLog - Debug logging function
          */
-        setupMobileDropdownHandler: function($element, qId, debugLog) {
-            $element.find('.mobile-app-selector').on('change', function() {
-                const selectedAppId = $(this).val();
+        setupMobileDropdownHandler: function(element, qId, debugLog) {
+            const el = typeof element === 'string' ? DOM.get(element) : element;
+            if (!el) return;
+
+            const mobileSelector = DOM.get('.mobile-app-selector', el);
+            if (!mobileSelector) return;
+
+            DOM.on(mobileSelector, 'change', function() {
+                const selectedAppId = mobileSelector.value;
 
                 if (!selectedAppId || selectedAppId === '') {
-                    $('#iframe-container-' + qId).hide();
+                    const iframeContainer = DOM.get('#iframe-container-' + qId);
+                    if (iframeContainer) DOM.hide(iframeContainer);
                     return;
                 }
 
@@ -497,11 +580,11 @@ define([
                 }
 
                 // Show iframe with app
-                const $iframeContainer = $('#iframe-container-' + qId);
+                const iframeContainer = DOM.get('#iframe-container-' + qId);
                 const appUrl = window.location.origin + '/sense/app/' + selectedAppId;
 
-                $iframeContainer.html('<iframe src="' + appUrl + '" style="width:100%;height:100%;border:none;"></iframe>');
-                $iframeContainer.show();
+                DOM.setHTML(iframeContainer, '<iframe src="' + appUrl + '" style="width:100%;height:100%;border:none;"></iframe>');
+                DOM.show(iframeContainer);
             });
         },
 
@@ -516,116 +599,84 @@ define([
             const isCloud = window.qlikEnvironment === 'cloud';
 
             // Cloud and On-Premise both use PUT with query parameters to cancel
-            if (isCloud) {
-                const cancelUrl = tenantUrl + '/api/v1/odagrequests/' + requestId +
+            const xrfkey = CONSTANTS.API.XRF_KEY;
+            const cancelUrl = isCloud
+                ? tenantUrl + '/api/v1/odagrequests/' + requestId +
                     '?requestId=' + requestId +
                     '&action=cancel' +
                     '&ignoreSucceeded=true' +
                     '&delGenApp=false' +
-                    '&autoAck=false';
-                $.ajax({
-                    url: cancelUrl,
-                    type: 'PUT',
-                    headers: {
-                        'qlik-csrf-token': getCookie('_csrfToken') || ''
-                    },
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function(result) {
-                        debugLog('Generation cancelled successfully (Cloud)');
-                        // Update status to 'cancelled' instead of removing
-                        window.odagGeneratedApps[appIndex].status = 'cancelled';
-                        updateAppsList(qId);
-                        showNotification('Generation cancelled', 'success');
-                    },
-                    error: function(xhr) {
-                        console.error('Failed to cancel generation:', xhr.responseText);
-                        showNotification('Failed to cancel generation', 'error');
-                    }
-                });
-            } else {
-                // On-Premise uses PUT with query parameters (same as Cloud structure)
-                const xrfkey = CONSTANTS.API.XRF_KEY;
-                const cancelUrl = tenantUrl + '/api/odag/v1/requests/' + requestId +
+                    '&autoAck=false'
+                : tenantUrl + '/api/odag/v1/requests/' + requestId +
                     '?requestId=' + requestId +
                     '&action=cancel' +
                     '&ignoreSucceeded=true' +
                     '&delGenApp=false' +
                     '&autoAck=false' +
                     '&xrfkey=' + xrfkey;
-                $.ajax({
-                    url: cancelUrl,
-                    type: 'PUT',
-                    headers: {
-                        'X-Qlik-XrfKey': xrfkey
-                    },
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function(result) {
-                        debugLog('Generation cancelled successfully (On-Premise)');
-                        // Update status to 'cancelled' instead of removing
-                        window.odagGeneratedApps[appIndex].status = 'cancelled';
-                        updateAppsList(qId);
-                        showNotification('Generation cancelled', 'success');
-                    },
-                    error: function(xhr) {
-                        console.error('Failed to cancel generation:', xhr.responseText);
-                        showNotification('Failed to cancel generation', 'error');
-                    }
+
+            const headers = isCloud
+                ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
+                : { 'X-Qlik-XrfKey': xrfkey };
+
+            HTTP.put(cancelUrl, null, { headers: headers })
+                .then(function(result) {
+                    debugLog('Generation cancelled successfully (' + (isCloud ? 'Cloud' : 'On-Premise') + ')');
+                    // Update status to 'cancelled' instead of removing
+                    window.odagGeneratedApps[appIndex].status = 'cancelled';
+                    updateAppsList(qId);
+                    showNotification('Generation cancelled', 'success');
+                })
+                .catch(function(error) {
+                    console.error('Failed to cancel generation:', error.message);
+                    showNotification('Failed to cancel generation', 'error');
                 });
-            }
         },
 
         /**
          * Reload app
          * @private
          */
-        _reloadApp: function(requestId, appIndex, qId, $item, updateAppsList, showNotification, debugLog, getCookie) {
+        _reloadApp: function(requestId, appIndex, qId, item, updateAppsList, showNotification, debugLog, getCookie) {
             const tenantUrl = window.qlikTenantUrl || window.location.origin;
             const isCloud = window.qlikEnvironment === 'cloud';
+            const xrfkey = CONSTANTS.API.XRF_KEY;
 
             // Note: Reload endpoint may not be available in On-Premise
             const reloadUrl = isCloud
                 ? tenantUrl + '/api/v1/odagrequests/' + requestId + '/reloadApp'
                 : tenantUrl + '/api/odag/v1/requests/' + requestId + '/reloadApp';
 
-            $.ajax({
-                url: reloadUrl,
-                type: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'qlik-csrf-token': getCookie('_csrfToken') || ''
-                },
-                xhrFields: {
-                    withCredentials: true
-                },
-                success: function(result) {
+            const reloadHeaders = {
+                'Content-Type': 'application/json',
+                'qlik-csrf-token': getCookie('_csrfToken') || ''
+            };
+
+            HTTP.post(reloadUrl, null, { headers: reloadHeaders })
+                .then(function(result) {
                     showNotification('App reload started successfully!', 'success');
-                    $item.addClass('reloading');
+                    DOM.addClass(item, 'reloading');
 
                     debugLog('Reload started, polling for updated timestamp...');
 
                     // Poll for updated request data to get new timestamp
                     const pollInterval = setInterval(function() {
-                        const xrfkey = CONSTANTS.API.XRF_KEY;
                         const requestUrl = isCloud
                             ? tenantUrl + '/api/v1/odagrequests/' + requestId
                             : tenantUrl + '/api/odag/v1/requests/' + requestId + '?xrfkey=' + xrfkey;
 
-                        $.ajax({
-                            url: requestUrl,
-                            type: 'GET',
-                            headers: isCloud ? {
+                        const pollHeaders = isCloud
+                            ? {
                                 'Accept': 'application/json',
                                 'qlik-csrf-token': getCookie('_csrfToken') || ''
-                            } : {
+                              }
+                            : {
                                 'Accept': 'application/json',
                                 'X-Qlik-XrfKey': xrfkey
-                            },
-                            xhrFields: { withCredentials: true },
-                            success: function(requestData) {
+                              };
+
+                        HTTP.get(requestUrl, { headers: pollHeaders })
+                            .then(function(requestData) {
                                 // Update the app entry with new modifiedDate
                                 if (window.odagGeneratedApps && window.odagGeneratedApps[appIndex]) {
                                     const oldDate = window.odagGeneratedApps[appIndex].created;
@@ -642,27 +693,25 @@ define([
 
                                         // Stop polling once we get the updated timestamp
                                         clearInterval(pollInterval);
-                                        $item.removeClass('reloading');
+                                        DOM.removeClass(item, 'reloading');
                                         showNotification('App reloaded and timestamp updated!', 'success');
                                     }
                                 }
-                            },
-                            error: function() {
+                            })
+                            .catch(function() {
                                 debugLog('Error polling for request data');
-                            }
-                        });
+                            });
                     }, 2000); // Poll every 2 seconds
 
                     // Stop polling after 30 seconds max
                     setTimeout(function() {
                         clearInterval(pollInterval);
-                        $item.removeClass('reloading');
+                        DOM.removeClass(item, 'reloading');
                     }, 30000);
-                },
-                error: function(xhr) {
+                })
+                .catch(function(error) {
                     showNotification('Failed to reload app', 'error');
-                }
-            });
+                });
         },
 
         /**
@@ -747,48 +796,44 @@ define([
                 debugLog('Delete succeeded app (standard):', deleteUrl);
             }
 
-            $.ajax({
+            HTTP.request({
                 url: deleteUrl,
-                type: deleteMethod,
-                headers: deleteHeaders,
-                xhrFields: {
-                    withCredentials: true
-                },
-                success: function(result) {
+                method: deleteMethod,
+                headers: deleteHeaders
+            }).then(function(result) {
+                window.odagGeneratedApps.splice(appIndex, 1);
+                updateAppsList(qId);
+                showNotification('App deleted successfully!', 'success');
+
+                // Hide iframe if this app was being viewed
+                const iframeContainer = DOM.get('#iframe-container-' + qId);
+                if (iframeContainer) DOM.hide(iframeContainer);
+
+                // Re-run validation to check if generate button should be re-enabled
+                if (checkODAGValidation) {
+                    debugLog('Re-running validation after app deletion');
+                    checkODAGValidation();
+                }
+            }).catch(function(error) {
+                // Remove from deleting set on error (unless it's 404, which means already deleted)
+                if (error.status !== 404) {
+                    window.odagDeletingRequests.delete(requestId);
+                }
+
+                if (error.status === 404) {
+                    showNotification('App was already deleted', 'info');
+                    // Remove from our local array too
                     window.odagGeneratedApps.splice(appIndex, 1);
                     updateAppsList(qId);
-                    showNotification('App deleted successfully!', 'success');
-
-                    // Hide iframe if this app was being viewed
-                    $('#iframe-container-' + qId).hide();
 
                     // Re-run validation to check if generate button should be re-enabled
                     if (checkODAGValidation) {
-                        debugLog('Re-running validation after app deletion');
+                        debugLog('Re-running validation after app deletion (404)');
                         checkODAGValidation();
                     }
-                },
-                error: function(xhr) {
-                    // Remove from deleting set on error (unless it's 404, which means already deleted)
-                    if (xhr.status !== 404) {
-                        window.odagDeletingRequests.delete(requestId);
-                    }
-
-                    if (xhr.status === 404) {
-                        showNotification('App was already deleted', 'info');
-                        // Remove from our local array too
-                        window.odagGeneratedApps.splice(appIndex, 1);
-                        updateAppsList(qId);
-
-                        // Re-run validation to check if generate button should be re-enabled
-                        if (checkODAGValidation) {
-                            debugLog('Re-running validation after app deletion (404)');
-                            checkODAGValidation();
-                        }
-                    } else {
-                        showNotification('Failed to delete app: ' + xhr.status + ' ' + xhr.statusText, 'error');
-                        console.error('Delete failed:', xhr.responseText);
-                    }
+                } else {
+                    showNotification('Failed to delete app: ' + error.status + ' ' + error.statusText, 'error');
+                    console.error('Delete failed:', error.message);
                 }
             });
         }

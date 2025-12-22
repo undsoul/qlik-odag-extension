@@ -159,9 +159,11 @@ qlik-embed {
     font-size: 13px;
     color: #6b7280;
     background: #e5e7eb;
-    padding: 4px 10px;
+    padding: 4px 12px;
     border-radius: 12px;
     font-weight: 500;
+    white-space: nowrap;
+    display: inline-block;
 }
 
 /* Delete all button */

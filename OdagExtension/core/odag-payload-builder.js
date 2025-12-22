@@ -154,11 +154,45 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
          */
         getCurrentSelections: async function(app, debugLog) {
             try {
-                const reply = await new Promise(function(resolve) {
-                    app.getList("CurrentSelections", function(reply) {
-                        resolve(reply);
-                    });
+                // CRITICAL: Use Enigma API directly to get FRESH selection state
+                // app.getList() returns cached subscription data which can be stale
+                const enigmaApp = app.model.enigmaModel;
+
+                // CRITICAL: Force engine sync BEFORE querying selections
+                // This ensures any pending selection changes have been fully processed
+                debugLog('🔄 Forcing engine sync before getting selections...');
+
+                // Step 1: Wait for pending selection commands to be sent to engine
+                // A zero-delay timeout is NOT enough - need actual time for websocket messages
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+                // Step 2: First getAppLayout() - ensures engine processes any pending commands
+                await enigmaApp.getAppLayout();
+
+                // Step 3: Second getAppLayout() - double-check sync after first round-trip
+                await enigmaApp.getAppLayout();
+                debugLog('✅ Engine sync complete (double getAppLayout)');
+
+                // Create a fresh session object to get current selections
+                const selectionObj = await enigmaApp.createSessionObject({
+                    qInfo: { qType: 'SelectionObject' },
+                    qSelectionObjectDef: {}
                 });
+
+                // Wait briefly for the SelectionObject to be populated with current state
+                await new Promise(resolve => setTimeout(resolve, 50));
+
+                const selectionLayout = await selectionObj.getLayout();
+
+                // Clean up session object immediately
+                await enigmaApp.destroySessionObject(selectionObj.id);
+
+                const reply = {
+                    qSelectionObject: selectionLayout.qSelectionObject
+                };
+
+                debugLog('📊 Got FRESH selections via Enigma API:',
+                    reply.qSelectionObject?.qSelections?.length || 0, 'fields selected');
 
                 const selections = [];
 
@@ -178,89 +212,66 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                                 selectedSize: selectedCount
                             };
 
-                            // Add small delay to ensure field API is ready
-                            await new Promise(resolve => setTimeout(resolve, 50));
-
-                            const field = app.field(fieldName);
-                            let fieldData = null;
-
-                            try {
-                                fieldData = await field.getData();
-
-                                if (!fieldData.rows || fieldData.rows.length === 0) {
-                                    debugLog('Method 1a returned empty, trying with parameters...');
-                                    fieldData = await field.getData({
-                                        rows: 10000,
-                                        frequencyMode: 'V'
-                                    });
-                                }
-                            } catch (e) {
-                                debugLog('Field getData error, will use fallback:', e.message);
-                            }
-
-                            // Extract selected values from field data
-                            if (fieldData && fieldData.rows && fieldData.rows.length > 0) {
-                                fieldData.rows.forEach(function(row) {
-                                    if (row.qState === 'S') {
-                                        fieldSelection.values.push({
-                                            selStatus: "S",
-                                            strValue: row.qText,
-                                            numValue: isNaN(row.qNum) ? "NaN" : String(row.qNum)
-                                        });
-                                    }
-                                });
-                                debugLog('Method 1: Found', fieldSelection.values.length, 'selected values for', fieldName);
-                            }
-
-                            // Fallback: Try using qSelected text
-                            if (fieldSelection.values.length === 0 && selection.qSelected) {
-                                debugLog('Method 2: Using qSelected text for', fieldName, ':', selection.qSelected);
+                            // PRIMARY METHOD: Use qSelected from SelectionObject (already available, NO extra API calls!)
+                            // This is the FASTEST method as data is already in the selection object
+                            if (selection.qSelected && !selection.qSelected.includes(' of ')) {
+                                debugLog('📊 Using qSelected (fast path) for', fieldName, ':', selection.qSelected);
                                 const values = selection.qSelected.split(', ');
                                 values.forEach(function(value) {
-                                    if (!value.includes(' of ')) {
+                                    const trimmed = value.trim();
+                                    if (trimmed) {
                                         fieldSelection.values.push({
                                             selStatus: "S",
-                                            strValue: value.trim(),
-                                            numValue: isNaN(value) ? "NaN" : String(value)
+                                            strValue: trimmed,
+                                            numValue: isNaN(trimmed) ? "NaN" : String(trimmed)
                                         });
                                     }
                                 });
-                                debugLog('Method 2: Extracted', fieldSelection.values.length, 'values from qSelected');
+                                debugLog('✅ Fast path: Found', fieldSelection.values.length, 'values from qSelected');
                             }
 
-                            // Last resort: Use session object
-                            if (fieldSelection.values.length === 0 && selectedCount > 0) {
-                                debugLog('Method 3: Creating session object for', fieldName);
-                                const enigmaApp = app.model.enigmaModel;
-                                const sessionObj = await enigmaApp.createSessionObject({
-                                    qInfo: { qType: 'CurrentSelections' },
-                                    qListObjectDef: {
-                                        qDef: { qFieldDefs: [fieldName] },
-                                        qInitialDataFetch: [{
-                                            qTop: 0,
-                                            qLeft: 0,
-                                            qWidth: 1,
-                                            qHeight: Math.min(selectedCount * 2, 10000)
-                                        }]
-                                    }
-                                });
+                            // Check if qSelected was truncated (contains "x of y" pattern)
+                            const isTruncated = selection.qSelected && selection.qSelected.includes(' of ');
 
-                                const layout = await sessionObj.getLayout();
-                                if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
-                                    const dataPage = layout.qListObject.qDataPages[0];
-                                    dataPage.qMatrix.forEach(function(row) {
-                                        const cell = row[0];
-                                        if (cell && cell.qState === 'S') {
-                                            fieldSelection.values.push({
-                                                selStatus: "S",
-                                                strValue: cell.qText,
-                                                numValue: isNaN(cell.qNum) ? "NaN" : cell.qNum.toString()
-                                            });
+                            // FALLBACK: Use Enigma session object ONLY if qSelected is truncated or empty
+                            if ((fieldSelection.values.length === 0 || isTruncated) && selectedCount > 0) {
+                                debugLog('📊 Using Enigma session (qSelected truncated/empty) for:', fieldName);
+
+                                try {
+                                    const sessionObj = await enigmaApp.createSessionObject({
+                                        qInfo: { qType: 'FieldList' },
+                                        qListObjectDef: {
+                                            qDef: { qFieldDefs: [fieldName] },
+                                            qInitialDataFetch: [{
+                                                qTop: 0,
+                                                qLeft: 0,
+                                                qWidth: 1,
+                                                qHeight: Math.min(selectedCount * 2, 10000)
+                                            }]
                                         }
                                     });
-                                    debugLog('Method 3: Found', fieldSelection.values.length, 'selected values via session object');
+
+                                    const layout = await sessionObj.getLayout();
+                                    if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
+                                        // Clear any partial values from truncated qSelected
+                                        fieldSelection.values = [];
+                                        const dataPage = layout.qListObject.qDataPages[0];
+                                        dataPage.qMatrix.forEach(function(row) {
+                                            const cell = row[0];
+                                            if (cell && cell.qState === 'S') {
+                                                fieldSelection.values.push({
+                                                    selStatus: "S",
+                                                    strValue: cell.qText,
+                                                    numValue: isNaN(cell.qNum) ? "NaN" : cell.qNum.toString()
+                                                });
+                                            }
+                                        });
+                                        debugLog('✅ Enigma fallback: Found', fieldSelection.values.length, 'values for', fieldName);
+                                    }
+                                    await enigmaApp.destroySessionObject(sessionObj.id);
+                                } catch (enigmaError) {
+                                    debugLog('⚠️ Enigma fallback failed:', enigmaError.message);
                                 }
-                                await enigmaApp.destroySessionObject(sessionObj.id);
                             }
 
                             if (fieldSelection.values.length > 0) {
@@ -491,6 +502,19 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
 
             // Get ODAG bindings from cache (fetched at paint)
             const bindingsCacheKey = 'odagBindings_' + odagConfig.odagLinkId;
+            const bindingsPromiseKey = 'odagBindingsPromise_' + odagConfig.odagLinkId;
+
+            // If bindings are currently being fetched, wait for the fetch to complete
+            if (window[bindingsPromiseKey]) {
+                debugLog('⏳ Waiting for bindings fetch to complete...');
+                try {
+                    await window[bindingsPromiseKey];
+                    debugLog('✅ Bindings fetch completed');
+                } catch (e) {
+                    debugLog('⚠️ Bindings fetch failed:', e.message);
+                }
+            }
+
             const cachedBindings = window[bindingsCacheKey];
 
             debugLog('Building payload - cached bindings:', cachedBindings ? cachedBindings.length + ' fields' : 'none');

@@ -1,19 +1,24 @@
 define([
     "qlik",
-    "jquery",
+    "./utils/dom-helper",
+    "./utils/http-helper",
+    "./utils/dompurify-loader",
     "./properties/odag-api-properties",
     "./foundation/odag-api-service",
     "./foundation/odag-state-manager",
     "./foundation/odag-constants",
     "./foundation/odag-validators",
     "./foundation/odag-error-handler",
+    "./foundation/odag-language",
     "./handlers/odag-event-handlers",
     "./core/odag-payload-builder",
     "./views/odag-view-manager",
     "css!./styles/odag-api-extension.css"
 ],
-function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, EventHandlers, PayloadBuilder, ViewManager) {
+function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
+
+    console.log('🔄 ODAG Extension v8.0.0 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -70,10 +75,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
         
         paint: function($element, layout) {
             try {
+            // Convert jQuery element to vanilla DOM element
+            const element = $element[0];
             const app = qlik.currApp();
             const odagConfig = layout.odagConfig || {};
-            const elementHeight = $element.height();
-            const elementWidth = $element.width();
+            const elementHeight = element.offsetHeight;
+            const elementWidth = element.offsetWidth;
+
+            // Get language preference (default: English)
+            const selectedLanguage = odagConfig.language || 'en';
+            const messages = Language.getMessages(selectedLanguage);
 
             // Debug logger - only logs when debug mode is enabled
             const debugLog = function() {
@@ -84,13 +95,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             debugLog('ODAG Extension: paint() called');
             debugLog('ODAG Extension: odagConfig =', odagConfig);
+            debugLog('ODAG Extension: selected language =', selectedLanguage);
 
             // Validate ODAG Link ID early to prevent issues
             if (odagConfig.odagLinkId) {
                 const isCloud = window.qlikEnvironment === 'cloud';
                 const validation = Validators.odagLinkId(odagConfig.odagLinkId, isCloud);
                 if (!validation.valid) {
-                    $element.html('<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 1px solid #d32f2f; border-radius: 4px;">' +
+                    DOM.setHTML(element, '<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 1px solid #d32f2f; border-radius: 4px;">' +
                         '<strong>⚠️ Invalid ODAG Link ID</strong><br>' +
                         Validators.sanitizeHtml(validation.error) +
                         '</div>');
@@ -100,6 +112,29 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             // Helper function to get cookie value (use PayloadBuilder module)
             const getCookie = PayloadBuilder.getCookie;
+
+            // Helper functions for common DOM operations in Dynamic View
+            const updateDynamicStatus = function(content) {
+                const el = DOM.get('#dynamic-status-' + layout.qInfo.qId);
+                if (el) DOM.setHTML(el, content);
+            };
+
+            const showCancelButton = function() {
+                const el = DOM.get('#cancel-btn-' + layout.qInfo.qId);
+                if (el) {
+                    DOM.show(el);
+                    el.style.display = 'flex';
+                }
+            };
+
+            const hideCancelButton = function() {
+                const el = DOM.get('#cancel-btn-' + layout.qInfo.qId);
+                if (el) DOM.hide(el);
+            };
+
+            const getDynamicEmbedContainer = function() {
+                return DOM.get('#dynamic-embed-' + layout.qInfo.qId);
+            };
 
             // ========== PERFORMANCE OPTIMIZATIONS ==========
 
@@ -361,12 +396,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const cacheBuster = '_=' + Date.now();
                 const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id + '&' + cacheBuster;
 
-                $.ajax({
-                    url: bindingsUrl,
-                    type: 'POST',
-                    data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
-                    contentType: 'application/json',
-                    cache: false, // Disable jQuery caching
+                // Store Promise so buildPayload can await it
+                const bindingsPromiseKey = 'odagBindingsPromise_' + odagConfig.odagLinkId;
+                window[bindingsPromiseKey] = HTTP.post(bindingsUrl, {linkList: [odagConfig.odagLinkId]}, {
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': '*/*',
@@ -374,16 +406,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         'Cache-Control': 'no-cache, no-store, must-revalidate',
                         'Pragma': 'no-cache',
                         'Expires': '0'
-                    },
-                    xhrFields: {withCredentials: true},
-                    success: function(response) {
-                        debugLog('🔍 [PAINT] Cloud bindings response:', response);
+                    }
+                }).then(function(response) {
+                    debugLog('🔍 [PAINT] Cloud bindings response:', response);
 
-                        // Cloud response format: [{link: {bindings: [...], rowEstExpr, curRowEstHighBound}}]
-                        if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                            const linkData = response[0].link;
-                            const bindings = linkData.bindings;
-                            window[bindingsCacheKey] = bindings;
+                    // Cloud response format: [{link: {bindings: [...], rowEstExpr, curRowEstHighBound}}]
+                    if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                        const linkData = response[0].link;
+                        const bindings = linkData.bindings;
+                        window[bindingsCacheKey] = bindings;
 
                             // Cache full link data (including properties like genAppLimit)
                             const linkDataCacheKey = 'odagLinkData_' + odagConfig.odagLinkId;
@@ -465,17 +496,17 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             console.error('[PAINT] Response:', response);
                             window[bindingsCacheKey] = [];
                         }
-                        // Clear fetching flag
+                        // Clear fetching flag and Promise
                         delete window[bindingsFetchingKey];
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('❌ [PAINT] Failed to fetch Cloud ODAG bindings:', xhr.status, error);
-                        console.error('[PAINT] Response:', xhr.responseText);
+                        delete window[bindingsPromiseKey];
+                    }).catch(function(error) {
+                        console.error('❌ [PAINT] Failed to fetch Cloud ODAG bindings:', error.status, error.message);
+                        console.error('[PAINT] Response:', error.response);
                         window[bindingsCacheKey] = [];
-                        // Clear fetching flag
+                        // Clear fetching flag and Promise
                         delete window[bindingsFetchingKey];
-                    }
-                });
+                        delete window[bindingsPromiseKey];
+                    });
             } else if (!isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey]) {
                 // Set fetching flag to prevent duplicate requests
                 window[bindingsFetchingKey] = true;
@@ -487,10 +518,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 const cacheBuster = '_=' + Date.now();
                 const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey + '&' + cacheBuster;
 
-                $.ajax({
-                    url: linkDetailsUrl,
-                    type: 'GET',
-                    cache: false, // Disable jQuery caching
+                // Store Promise so buildPayload can await it
+                const bindingsPromiseKey = 'odagBindingsPromise_' + odagConfig.odagLinkId;
+                window[bindingsPromiseKey] = HTTP.get(linkDetailsUrl, {
                     headers: {
                         'Content-Type': 'application/json',
                         'Accept': 'application/json',
@@ -499,27 +529,26 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         'Pragma': 'no-cache',
                         'Expires': '0'
                     },
-                    xhrFields: {withCredentials: true},
-                    timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS,
-                    success: function(linkDetails) {
-                        debugLog('🔍 [PAINT] FULL On-Premise link details response:', linkDetails);
+                    timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS
+                }).then(function(linkDetails) {
+                    debugLog('🔍 [PAINT] FULL On-Premise link details response:', linkDetails);
 
-                        // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
-                        // Bindings are inside objectDef, not at top level
-                        let bindings = null;
+                    // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
+                    // Bindings are inside objectDef, not at top level
+                    let bindings = null;
 
-                        if (linkDetails && linkDetails.objectDef && linkDetails.objectDef.bindings) {
-                            bindings = linkDetails.objectDef.bindings;
-                        } else if (linkDetails && linkDetails.bindings) {
-                            bindings = linkDetails.bindings;
-                        }
+                    if (linkDetails && linkDetails.objectDef && linkDetails.objectDef.bindings) {
+                        bindings = linkDetails.objectDef.bindings;
+                    } else if (linkDetails && linkDetails.bindings) {
+                        bindings = linkDetails.bindings;
+                    }
 
-                        debugLog('🔍 [PAINT] Extracted bindings:', bindings);
+                    debugLog('🔍 [PAINT] Extracted bindings:', bindings);
 
-                        if (bindings && Array.isArray(bindings) && bindings.length > 0) {
-                            window[bindingsCacheKey] = bindings;
-                            debugLog('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
-                            debugLog('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
+                    if (bindings && Array.isArray(bindings) && bindings.length > 0) {
+                        window[bindingsCacheKey] = bindings;
+                        debugLog('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
+                        debugLog('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
 
                             // Cache full link data (including properties like genAppLimit) for On-Premise
                             const linkDataCacheKey = 'odagLinkData_' + odagConfig.odagLinkId;
@@ -593,16 +622,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             }
                             window[bindingsCacheKey] = []; // Empty array to avoid repeated fetches
                         }
-                        // Clear fetching flag
+                        // Clear fetching flag and Promise
                         delete window[bindingsFetchingKey];
-                    },
-                    error: function(xhr, status, error) {
-                        console.error('❌ Failed to fetch ODAG link details for bindings:', xhr.status, error);
+                        delete window[bindingsPromiseKey];
+                    }).catch(function(error) {
+                        console.error('❌ Failed to fetch ODAG link details for bindings:', error.status, error.message);
                         window[bindingsCacheKey] = []; // Empty array to avoid repeated fetches
-                        // Clear fetching flag
+                        // Clear fetching flag and Promise
                         delete window[bindingsFetchingKey];
-                    }
-                });
+                        delete window[bindingsPromiseKey];
+                    });
             }
 
             // Check if extension is large enough for iframe view
@@ -663,17 +692,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
                     : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
-                $.ajax({
-                    url: apiUrl,
-                    type: 'GET',
+                HTTP.get(apiUrl, {
                     headers: {
                         'Accept': 'application/json',
                         'Content-Type': 'application/json'
-                    },
-                    xhrFields: {
-                        withCredentials: true
-                    },
-                    success: function(result) {
+                    }
+                }).then(function(result) {
                         if (result && Array.isArray(result) && result.length > 1) {
                             // Sort by date to find latest
                             result.sort(function(a, b) {
@@ -687,6 +711,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('ODAG Extension: Keeping latest app:', latestApp.generatedAppName);
                             debugLog('ODAG Extension: Deleting', appsToDelete.length, 'older apps');
 
+                            // Track deletion promises to update window.odagGeneratedApps after all deletions
+                            const deletionPromises = [];
+
                             appsToDelete.forEach(function(app) {
                                 const isCloud = window.qlikEnvironment === 'cloud';
                                 const xrfkey = CONSTANTS.API.XRF_KEY;
@@ -694,31 +721,58 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                     : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
 
-                                $.ajax({
+                                const deletePromise = HTTP.request({
                                     url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + app.id + '/app?xrfkey=' + xrfkey,
-                                    type: 'DELETE',
-                                    headers: deleteHeaders,
-                                    xhrFields: {
-                                        withCredentials: true
-                                    },
-                                    success: function() {
-                                        debugLog('ODAG Extension: Deleted old app:', app.generatedAppName || app.id);
-                                    },
-                                    error: function(xhr) {
-                                        if (xhr.status !== 404) {
-                                            console.error('ODAG Extension: Failed to delete app:', app.id, xhr.status);
-                                        }
+                                    method: 'DELETE',
+                                    headers: deleteHeaders
+                                }).then(function() {
+                                    debugLog('ODAG Extension: Deleted old app:', app.generatedAppName || app.id);
+                                }).catch(function(error) {
+                                    if (error.status !== 404) {
+                                        console.error('ODAG Extension: Failed to delete app:', app.id, error.status);
                                     }
                                 });
+
+                                deletionPromises.push(deletePromise);
+                            });
+
+                            // After all deletions complete, update window.odagGeneratedApps to only contain the latest app
+                            // This ensures app limit validation works correctly in Dynamic View
+                            Promise.all(deletionPromises).then(function() {
+                                debugLog('ODAG Extension: All old apps deleted, updating window.odagGeneratedApps');
+
+                                // Extract app info from latestApp to match the format used by window.odagGeneratedApps
+                                let generatedAppId = '';
+                                let appName = latestApp.generatedAppName || latestApp.name || 'Generated App';
+
+                                if (latestApp.generatedApp) {
+                                    if (typeof latestApp.generatedApp === 'object' && latestApp.generatedApp.id) {
+                                        generatedAppId = latestApp.generatedApp.id;
+                                    } else if (typeof latestApp.generatedApp === 'string') {
+                                        generatedAppId = latestApp.generatedApp;
+                                    }
+                                }
+
+                                // Update window.odagGeneratedApps to only contain the latest app
+                                window.odagGeneratedApps = [{
+                                    id: latestApp.id,
+                                    requestId: latestApp.id,
+                                    appId: generatedAppId,
+                                    name: appName,
+                                    status: latestApp.state === 'succeeded' ? 'succeeded' : latestApp.state,
+                                    createdDate: latestApp.createdDate
+                                }];
+
+                                debugLog('ODAG Extension: window.odagGeneratedApps updated. App count:', window.odagGeneratedApps.length);
+                            }).catch(function(error) {
+                                console.error('ODAG Extension: Error during app deletions:', error);
                             });
                         } else {
                             debugLog('ODAG Extension: Only one or zero apps exist, no cleanup needed');
                         }
-                    },
-                    error: function(xhr) {
-                        console.error('ODAG Extension: Failed to fetch apps for cleanup:', xhr.responseText);
-                    }
-                });
+                    }).catch(function(error) {
+                        console.error('ODAG Extension: Failed to fetch apps for cleanup:', error.message);
+                    });
             }
 
             // Store flag for view mode switch globally (will be checked after loadExistingRequests is defined)
@@ -747,7 +801,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += '</div>';
                 html += '</div>'; // Close odag-container
                 debugLog('ODAG Extension: Setting warning HTML');
-                $element.html(html);
+                DOM.setHTML(element, html);
                 return qlik.Promise.resolve();
             }
 
@@ -763,7 +817,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += '<div style="font-size: 14px; color: #999;">Configure ODAG settings in the properties panel →</div>';
                 html += '</div>';
                 html += '</div>'; // Close odag-container
-                $element.html(html);
+                DOM.setHTML(element, html);
                 return qlik.Promise.resolve();
             }
 
@@ -789,6 +843,76 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 if (hasContent) {
                     // Already initialized and staying in analysis mode - skip rebuild
                     debugLog('⏭️ ODAG Extension already initialized - skipping HTML rebuild to preserve embeds');
+
+                    // IMPORTANT: Check for selection changes even when skipping rebuild
+                    // This ensures we catch selection changes made on other pages
+                    if (isDynamicView) {
+                        debugLog('🔍 Paint (early exit) - Checking for selection changes in Dynamic View...');
+                        const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                        const debouncedCheckFunc = StateManager.get(extensionId, 'debouncedCheckSelections');
+                        if (checkSelectionsFunc) {
+                            // IMPORTANT: Wait 2 seconds before checking selections
+                            // This gives Qlik time to process selection changes from other pages
+                            debugLog('⏳ Waiting 2 seconds for Qlik to process selections...');
+                            setTimeout(function() {
+                                debugLog('✅ checkSelectionsFunc found, calling it after delay...');
+                                checkSelectionsFunc();
+                            }, 2000);
+
+                            // CRITICAL: Re-bind selection listener in case it was lost during page navigation
+                            const listenerKey = 'selectionListener_' + layout.qInfo.qId;
+                            if (!window[listenerKey]) {
+                                try {
+                                    debugLog('🔄 Re-binding selectionState listener after page navigation...');
+                                    app.selectionState().OnData.bind(function() {
+                                        debugLog('Selection state changed (re-bound listener) - debouncing...');
+                                        // Use debounced version if available, fallback to direct call
+                                        if (debouncedCheckFunc) {
+                                            debouncedCheckFunc();
+                                        } else {
+                                            checkSelectionsFunc();
+                                        }
+                                    });
+                                    window[listenerKey] = true;
+                                } catch (error) {
+                                    debugLog('⚠️ Failed to bind selectionState listener (error code:', error.code || error, ')');
+                                    // Don't mark as bound so it will retry on next paint
+                                }
+                            }
+
+                            // CRITICAL: Re-bind variable listeners for mapped variables
+                            const variableListenerKey = 'variableListeners_' + layout.qInfo.qId;
+                            if (!window[variableListenerKey] && odagConfig.variableMappings && odagConfig.variableMappings.length > 0) {
+                                debugLog('🔄 Re-binding variable listeners after page navigation...');
+                                window[variableListenerKey] = [];
+                                odagConfig.variableMappings.forEach(function(mapping) {
+                                    if (mapping.variableName) {
+                                        app.variable.getByName(mapping.variableName).then(function(variable) {
+                                            if (variable) {
+                                                try {
+                                                    variable.OnChanged.bind(function() {
+                                                        debugLog('📊 Variable changed (re-bound):', mapping.variableName);
+                                                        // Use debounced version if available
+                                                        if (debouncedCheckFunc) {
+                                                            debouncedCheckFunc();
+                                                        } else {
+                                                            checkSelectionsFunc();
+                                                        }
+                                                    });
+                                                    window[variableListenerKey].push(mapping.variableName);
+                                                } catch (e) {
+                                                    debugLog('⚠️ Failed to re-bind variable listener:', mapping.variableName);
+                                                }
+                                            }
+                                        }).catch(function() {});
+                                    }
+                                });
+                            }
+                        } else {
+                            debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
+                        }
+                    }
+
                     return qlik.Promise.resolve();
                 } else {
                     // DOM was cleared (likely due to page navigation), need to reinitialize
@@ -900,7 +1024,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += 'style="background: #ef4444; border: 1px solid #dc2626; border-radius: 3px; color: white; ';
                 html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: none; align-items: center; gap: 4px;">';
-                html += '<span style="font-size: 16px;">⏹</span> Cancel';
+                html += '<span style="font-size: 16px;">⏹</span> ' + Validators.sanitizeHtml(messages.buttons.cancel);
                 html += '</button>';
 
                 // Refresh button
@@ -908,7 +1032,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 html += 'style="background: white; border: 1px solid #ccc; border-radius: 3px; ';
                 html += 'padding: 6px 12px; cursor: pointer; font-size: 14px; pointer-events: auto; ';
                 html += 'box-shadow: 0 1px 3px rgba(0,0,0,0.1); display: flex; align-items: center; gap: 4px;">';
-                html += '<span style="font-size: 16px;">↻</span> Refresh';
+                html += '<span style="font-size: 16px;">↻</span> ' + Validators.sanitizeHtml(messages.buttons.refresh);
                 html += '</button>';
 
                 html += '</div>'; // Close button container
@@ -921,7 +1045,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                 // Embed container takes full space
                 html += '<div class="odag-dynamic-embed" id="dynamic-embed-' + layout.qInfo.qId + '" style="height: 100%; width: 100%;">';
-                html += getLoadingPlaceholder('Loading ODAG app...');
+                html += getLoadingPlaceholder(messages.progress.loadingApp);
                 html += '</div>';
 
                 html += '</div>';
@@ -943,7 +1067,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += 'background-color:' + (odagConfig.buttonColor || '#009845') + ';';
                     html += 'color:' + (odagConfig.buttonTextColor || '#ffffff') + '; width: 100%; margin-bottom: 10px;">';
                     html += '<span class="btn-icon">⚡</span>';
-                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || CONSTANTS.DEFAULTS.BUTTON_TEXT) + '</span>';
+                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || messages.buttons.generate) + '</span>';
                     html += '</button>';
 
                     // Controls row: dropdown + buttons
@@ -953,7 +1077,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += '<select id="mobile-app-selector-' + layout.qInfo.qId + '" class="mobile-app-selector" style="';
                     html += 'flex: 1; padding: 10px; font-size: 14px; border: 1px solid #e5e7eb; border-radius: 6px; ';
                     html += 'background: white; color: #374151; cursor: pointer;">';
-                    html += '<option value="">No apps generated yet</option>';
+                    html += '<option value="">' + messages.status.noApps + '</option>';
                     html += '</select>';
 
                     // Action buttons
@@ -977,7 +1101,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += '<div class="odag-iframe-panel" id="iframe-container-' + layout.qInfo.qId + '" style="flex: 1; overflow: hidden;">';
                     html += '<div class="iframe-placeholder">';
                     html += '<div class="placeholder-icon">📊</div>';
-                    html += '<div class="placeholder-text">Select an app from the dropdown to preview</div>';
+                    html += '<div class="placeholder-text">' + messages.info.selectApp + '</div>';
                     html += '</div>';
                     html += '</div>';
 
@@ -992,7 +1116,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += '<div class="odag-apps-list-panel" id="apps-list-panel-' + layout.qInfo.qId + '" style="width:' + listWidth + 'px; transition: margin-left 0.3s ease;">';
                     html += '<div class="list-header">';
                     html += '<div class="header-top">';
-                    html += '<h3>Generated Apps</h3>';
+                    html += '<h3>' + Validators.sanitizeHtml(messages.info.generatedApps) + '</h3>';
                     html += '<div style="display: flex; align-items: center; gap: 6px;">';
                     html += '<span class="app-count" id="app-count-' + layout.qInfo.qId + '">0 apps</span>';
                     html += '<button class="refresh-list-btn" id="refresh-list-btn-' + layout.qInfo.qId + '" title="Refresh app list" style="background: transparent; border: none; color: #3b82f6; cursor: pointer; font-size: 16px; padding: 4px 6px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center;">';
@@ -1007,7 +1131,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     html += 'background-color:' + (odagConfig.buttonColor || '#009845') + ';';
                     html += 'color:' + (odagConfig.buttonTextColor || '#ffffff') + ';">';
                     html += '<span class="btn-icon">⚡</span>';
-                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || CONSTANTS.DEFAULTS.BUTTON_TEXT) + '</span>';
+                    html += '<span class="btn-text">' + Validators.sanitizeHtml(odagConfig.buttonText || messages.buttons.generate) + '</span>';
                     html += '</button>';
                     html += '<div id="validation-status-' + layout.qInfo.qId + '" style="margin-top: 8px; padding: 10px 12px; border-radius: 6px; font-size: 13px; display: none; text-align: center; font-weight: 500;"></div>';
                     html += '</div>';
@@ -1035,9 +1159,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                     // Show different message based on whether sheet ID is configured
                     if (odagConfig.templateSheetId && odagConfig.templateSheetId.trim() !== '') {
-                        html += '<div class="placeholder-text">Click on any app to view its sheet</div>';
+                        html += '<div class="placeholder-text">' + messages.info.selectApp + '</div>';
                     } else {
-                        html += '<div class="placeholder-text">Select an app from the list to preview</div>';
+                        html += '<div class="placeholder-text">' + messages.info.selectApp + '</div>';
                     }
 
                     html += '</div>';
@@ -1074,7 +1198,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             
             html += '</div>';
 
-            $element.html(html);
+            DOM.setHTML(element, html);
 
             // Calculate row estimation for ODAG validation
             // Use PayloadBuilder module for row estimation
@@ -1138,16 +1262,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
 
                     const rowEstResult = await calculateRowEstimation(app, odagConfig.odagLinkId);
-                    const $statusDiv = $('#validation-status-' + layout.qInfo.qId);
+                    const statusDiv = DOM.get('#validation-status-' + layout.qInfo.qId);
 
                     // Select all generate buttons (List View may have multiple)
-                    const $generateBtn = isDynamicView ?
-                        $('#refresh-btn-' + layout.qInfo.qId) :
-                        $element.find('.odag-generate-btn-compact');
+                    const generateBtn = isDynamicView ?
+                        DOM.get('#refresh-btn-' + layout.qInfo.qId) :
+                        DOM.get('.odag-generate-btn-compact', element);
 
                     debugLog('🔍 Validation check:', {
                         isDynamicView: isDynamicView,
-                        buttonCount: $generateBtn.length,
+                        buttonCount: generateBtn ? 1 : 0,
                         bindingValidationPassed: bindingValidationPassed,
                         rowEstResult: rowEstResult
                     });
@@ -1156,24 +1280,27 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     if (!bindingValidationPassed) {
                         // BLOCK: Binding validation failed
                         if (isDynamicView) {
-                            $generateBtn.hide();
+                            if (generateBtn) DOM.hide(generateBtn);
                         } else {
-                            $generateBtn.prop('disabled', true).css({
-                                'opacity': '0.5',
-                                'cursor': 'not-allowed',
-                                'pointer-events': 'none'
-                            });
+                            if (generateBtn) {
+                                generateBtn.disabled = true;
+                                generateBtn.style.opacity = '0.5';
+                                generateBtn.style.cursor = 'not-allowed';
+                                generateBtn.style.pointerEvents = 'none';
+                            }
                         }
 
                         // Show message in status div - SHORT for dynamic view, FULL for list view
                         const messageToShow = isDynamicView ? bindingErrorMessageShort : bindingErrorMessageFull;
-                        $statusDiv.show().css({
-                            'background': '#fff3cd',
-                            'border': '1px solid #ffc107',
-                            'color': '#856404',
-                            'padding': '12px',
-                            'line-height': '1.5'
-                        }).html(messageToShow);
+                        if (statusDiv) {
+                            DOM.show(statusDiv);
+                            statusDiv.style.background = '#fff3cd';
+                            statusDiv.style.border = '1px solid #ffc107';
+                            statusDiv.style.color = '#856404';
+                            statusDiv.style.padding = '12px';
+                            statusDiv.style.lineHeight = '1.5';
+                            DOM.setHTML(statusDiv, messageToShow);
+                        }
 
                         debugLog('🚫 ODAG binding validation FAILED:', bindingErrorMessageShort);
                     }
@@ -1215,69 +1342,75 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     } else if (appLimitReached) {
                         // BLOCK: App limit reached
                         if (isDynamicView) {
-                            $generateBtn.hide();
+                            if (generateBtn) DOM.hide(generateBtn);
                         } else {
-                            $generateBtn.prop('disabled', true).css({
-                                'opacity': '0.5',
-                                'cursor': 'not-allowed',
-                                'pointer-events': 'none'
-                            });
+                            if (generateBtn) {
+                                generateBtn.disabled = true;
+                                generateBtn.style.opacity = '0.5';
+                                generateBtn.style.cursor = 'not-allowed';
+                                generateBtn.style.pointerEvents = 'none';
+                            }
                         }
 
-                        $statusDiv.show().css({
-                            'background': '#fff3cd',
-                            'border': '1px solid #ffc107',
-                            'color': '#856404',
-                            'padding': '12px',
-                            'line-height': '1.5'
-                        }).html('⚠️ <strong>App limit reached (' + (window.odagGeneratedApps ? window.odagGeneratedApps.length : 0) + '/' + appLimit + ')</strong><br>' +
-                                'Delete an existing app to generate a new one.');
+                        if (statusDiv) {
+                            DOM.show(statusDiv);
+                            statusDiv.style.background = '#fff3cd';
+                            statusDiv.style.border = '1px solid #ffc107';
+                            statusDiv.style.color = '#856404';
+                            statusDiv.style.padding = '12px';
+                            statusDiv.style.lineHeight = '1.5';
+                            DOM.setHTML(statusDiv, '⚠️ <strong>' + messages.validation.appLimitReached + ' (' + (window.odagGeneratedApps ? window.odagGeneratedApps.length : 0) + '/' + appLimit + ')</strong>');
+                        }
                     } else if (!rowEstResult.canGenerate) {
                         // BLOCK: Hide/disable button and show error
                         if (isDynamicView) {
                             // In Dynamic View: HIDE Refresh button when validation fails
-                            $generateBtn.hide();
+                            if (generateBtn) DOM.hide(generateBtn);
                         } else {
                             // In List View: Disable Generate button (gray it out)
-                            $generateBtn.prop('disabled', true).css({
-                                'opacity': '0.5',
-                                'cursor': 'not-allowed',
-                                'pointer-events': 'none'
-                            });
+                            if (generateBtn) {
+                                generateBtn.disabled = true;
+                                generateBtn.style.opacity = '0.5';
+                                generateBtn.style.cursor = 'not-allowed';
+                                generateBtn.style.pointerEvents = 'none';
+                            }
                         }
 
-                        $statusDiv.show().css({
-                            'background': '#ffebee',
-                            'border': '1px solid #ef5350',
-                            'color': '#c62828'
-                        }).html('⚠️ <strong>Cannot generate:</strong> Current selections result in ' +
-                                rowEstResult.actualRowEst + ' rows, exceeding the limit of ' +
-                                rowEstResult.curRowEstHighBound + ' rows. Please refine your selections.');
+                        if (statusDiv) {
+                            DOM.show(statusDiv);
+                            statusDiv.style.background = '#ffebee';
+                            statusDiv.style.border = '1px solid #ef5350';
+                            statusDiv.style.color = '#c62828';
+                            DOM.setHTML(statusDiv, '⚠️ <strong>Cannot generate:</strong> Current selections result in ' +
+                                    rowEstResult.actualRowEst + ' rows, exceeding the limit of ' +
+                                    rowEstResult.curRowEstHighBound + ' rows. Please refine your selections.');
+                        }
 
                         debugLog('🚫 ODAG validation FAILED:', rowEstResult);
                     } else {
                         // ALLOW: Show/enable button and HIDE status message
                         if (isDynamicView) {
                             // In Dynamic View: SHOW Refresh button when validation passes
-                            $generateBtn.show();
+                            if (generateBtn) DOM.show(generateBtn);
 
                             // Add "needs-refresh" warning state to indicate selections changed
                             // This highlights the button in orange/yellow to prompt user to refresh
-                            if (!$generateBtn.hasClass('needs-refresh')) {
-                                $generateBtn.addClass('needs-refresh');
+                            if (generateBtn && !generateBtn.classList.contains('needs-refresh')) {
+                                DOM.addClass(generateBtn, 'needs-refresh');
                                 debugLog('🟡 Added needs-refresh warning state to refresh button');
                             }
                         } else {
                             // In List View: Enable Generate button
-                            $generateBtn.prop('disabled', false).css({
-                                'opacity': '1',
-                                'cursor': 'pointer',
-                                'pointer-events': 'auto'
-                            });
+                            if (generateBtn) {
+                                generateBtn.disabled = false;
+                                generateBtn.style.opacity = '1';
+                                generateBtn.style.cursor = 'pointer';
+                                generateBtn.style.pointerEvents = 'auto';
+                            }
                         }
 
                         // Hide validation status when validation passes - no need to show success message
-                        $statusDiv.hide();
+                        if (statusDiv) DOM.hide(statusDiv);
 
                         debugLog('✅ ODAG validation PASSED:', rowEstResult);
                     }
@@ -1286,6 +1419,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     // On error, allow generation (fail open)
                 }
             };
+
+            // Store language messages in StateManager for access from all functions
+            StateManager.set(extensionId, 'messages', messages);
 
             // Store validation function in StateManager so it can be called on every paint
             StateManager.set(extensionId, 'checkODAGValidation', checkODAGValidation);
@@ -1329,7 +1465,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 let checkStatusInterval = null;
                 let currentRequestId = null;
                 let deletedApps = new Set(); // Track deleted apps to avoid duplicate deletions
-                let lastGeneratedPayload = null; // Track last payload to detect selection changes
+
+                // Create stable storage keys for sessionStorage (appId + odagLinkId doesn't change between page loads)
+                const stableStorageKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_lastGeneratedPayload';
+                const currentSelectionsKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_currentBindSelections';
+                debugLog('📍 Using stable storage key for lastGeneratedPayload:', stableStorageKey);
+                debugLog('📍 Using stable storage key for currentBindSelections:', currentSelectionsKey);
+
+                // Get lastGeneratedPayload from StateManager (persists across page navigation via sessionStorage)
+                let lastGeneratedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
+                debugLog('🔄 Retrieved lastGeneratedPayload from StateManager:', !!lastGeneratedPayload);
 
                 // Store deletedApps in StateManager so restoreDynamicView can access it
                 StateManager.set(extensionId, 'deletedApps', deletedApps);
@@ -1357,14 +1502,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         headers['X-Qlik-XrfKey'] = xrfkey;
                     }
 
-                    $.ajax({
-                        url: apiUrl,
-                        type: 'GET',
-                        headers: headers,
-                        xhrFields: {
-                            withCredentials: true
-                        },
-                        success: function(result) {
+                    HTTP.get(apiUrl, { headers: headers })
+                        .then(function(result) {
                             if (result && Array.isArray(result) && result.length > 0) {
                                 // Filter out the app we want to keep
                                 const appsToDelete = result.filter(function(request) {
@@ -1401,12 +1540,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             } else {
                                 debugLog('No old apps to delete');
                             }
-                        },
-                        error: function(xhr) {
-                            console.error('Failed to get ODAG apps list for cleanup:', xhr.responseText);
+                        })
+                        .catch(function(error) {
+                            console.error('Failed to get ODAG apps list for cleanup:', error.message);
                             // Not critical - just log and continue
-                        }
-                    });
+                        });
                 };
 
                 let previousRequestId = null; // Track the previous app to delete later
@@ -1419,8 +1557,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
 
                     isGenerating = true;
-                    $('#dynamic-status-' + layout.qInfo.qId).html(
-                        getStatusHTML('generating', 'Generating new app with current selections...', true)
+                    updateDynamicStatus(
+                        getStatusHTML('generating', messages.progress.generatingApp, true)
                     );
 
                     // Show top bar and keep it visible (no auto-hide during generation)
@@ -1430,16 +1568,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
 
                     // Show cancel button
-                    $('#cancel-btn-' + layout.qInfo.qId).show().css('display', 'flex');
+                    showCancelButton();
 
                     // Safety timeout: Clear loading state after 60 seconds if stuck
                     const safetyTimeoutId = setTimeout(function() {
                         if (isGenerating) {
                             debugLog('⏱️ Safety timeout: Clearing stuck loading state after 60s');
                             isGenerating = false;
-                            $('#cancel-btn-' + layout.qInfo.qId).hide();
-                            $('#dynamic-status-' + layout.qInfo.qId).html(
-                                getStatusHTML('error', 'Generation timed out. Please try again.')
+                            hideCancelButton();
+                            updateDynamicStatus(
+                                getStatusHTML('error', messages.errors.generationTimeout)
                             );
                         }
                     }, 60000); // 60 seconds
@@ -1454,9 +1592,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
                         const existingApps = await new Promise(function(resolve, reject) {
-                            $.ajax({
-                                url: apiUrl,
-                                type: 'GET',
+                            HTTP.get(apiUrl, {
                                 headers: isCloud ? {
                                     'Accept': 'application/json',
                                     'Content-Type': 'application/json'
@@ -1464,14 +1600,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     'Accept': 'application/json',
                                     'Content-Type': 'application/json',
                                     'X-Qlik-XrfKey': xrfkey
-                                },
-                                xhrFields: { withCredentials: true },
-                                success: function(result) {
-                                    resolve(result || []);
-                                },
-                                error: function() {
-                                    resolve([]); // If fetch fails, continue with empty array
                                 }
+                            }).then(function(result) {
+                                resolve(result || []);
+                            }).catch(function() {
+                                resolve([]); // If fetch fails, continue with empty array
                             });
                         });
 
@@ -1484,6 +1617,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             count: oldRequestIds.length,
                             requestIds: oldRequestIds
                         });
+
+                        // CRITICAL: Wait for Qlik to fully process any pending selection changes
+                        // This ensures we capture the LATEST selections, not stale cached data
+                        debugLog('⏳ Waiting 1.5 seconds for Qlik to process pending selections...');
+                        await new Promise(resolve => setTimeout(resolve, 1500));
 
                         // Build payload with current selections
                         const buildResult = await buildPayload(app, odagConfig, layout);
@@ -1531,11 +1669,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             if (missingRequiredFields.length > 0) {
                                 debugLog('❌ [Dynamic View] Missing required selections in fields:', missingRequiredFields);
                                 isGenerating = false;
-                                $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                hideCancelButton();
 
                                 // Short message for dynamic view status bar
                                 const fieldNames = missingRequiredFields.join(', ');
-                                $('#dynamic-status-' + layout.qInfo.qId).html(
+                                updateDynamicStatus(
                                     getStatusHTML('error', 'Select: ' + fieldNames)
                                 );
 
@@ -1578,7 +1716,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         // Check if generation is allowed based on row estimation
                         if (!rowEstResult.canGenerate) {
                             isGenerating = false;
-                            $('#cancel-btn-' + layout.qInfo.qId).hide();
+                            hideCancelButton();
                             alert(rowEstResult.message);
                             return;
                         }
@@ -1586,9 +1724,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         // Store this payload AND variable state to compare for future selection changes
                         lastGeneratedPayload = payload;
                         lastGeneratedPayload.variableState = currentVariableValues;
+                        StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
+                        debugLog('💾 Stored lastGeneratedPayload to StateManager with stable key');
+
+                        // Clear stored currentBindSelections since these selections now become the new baseline
+                        StateManager.delete(extensionId, 'currentBindSelections', currentSelectionsKey);
+                        debugLog('🗑️ Cleared stored currentBindSelections (now part of baseline)');
 
                         // Remove warning class from refresh button
-                        $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
+                        DOM.removeClass('needs-refresh');
 
                         // Call ODAG API
                         const result = await callODAGAPI(odagConfig.odagLinkId, payload);
@@ -1619,54 +1763,47 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     const statusUrl = (isCloud
                                         ? tenantUrl + '/api/v1/odagrequests/'
                                         : tenantUrl + '/api/odag/v1/requests/') + odagData.id;
-                                    $.ajax({
-                                        url: statusUrl,
-                                        type: 'GET',
-                                        headers: {'Accept': 'application/json'},
-                                        xhrFields: {withCredentials: true},
-                                        success: function(newStatus) {
-                                            if (newStatus && newStatus.state === 'succeeded') {
-                                                clearInterval(deleteCheckInterval);
+                                    HTTP.get(statusUrl, {
+                                        headers: {'Accept': 'application/json'}
+                                    }).then(function(newStatus) {
+                                        if (newStatus && newStatus.state === 'succeeded') {
+                                            clearInterval(deleteCheckInterval);
 
-                                                // Delete all old apps
-                                                oldRequestIds.forEach(function(oldRequestId) {
-                                                    // Skip if it's the new app or already deleted
-                                                    if (oldRequestId === odagData.id || deletedApps.has(oldRequestId)) {
-                                                        return;
+                                            // Delete all old apps
+                                            oldRequestIds.forEach(function(oldRequestId) {
+                                                // Skip if it's the new app or already deleted
+                                                if (oldRequestId === odagData.id || deletedApps.has(oldRequestId)) {
+                                                    return;
+                                                }
+
+                                                // Mark as deleted before making the request
+                                                deletedApps.add(oldRequestId);
+
+                                                const isCloud = window.qlikEnvironment === 'cloud';
+                                                const xrfkey = CONSTANTS.API.XRF_KEY;
+                                                const deleteHeaders = isCloud
+                                                    ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
+                                                    : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
+
+                                                HTTP.request({
+                                                    url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + oldRequestId + '/app?xrfkey=' + xrfkey,
+                                                    method: 'DELETE',
+                                                    headers: deleteHeaders
+                                                }).then(function() {
+                                                    debugLog('Successfully deleted old app:', oldRequestId);
+                                                }).catch(function(error) {
+                                                    if (error.status === 404) {
+                                                        debugLog('App already deleted:', oldRequestId);
+                                                    } else {
+                                                        console.error('Failed to delete old app:', error.message);
+                                                        // Remove from deleted set if it really failed
+                                                        deletedApps.delete(oldRequestId);
                                                     }
-
-                                                    // Mark as deleted before making the request
-                                                    deletedApps.add(oldRequestId);
-
-                                                    const isCloud = window.qlikEnvironment === 'cloud';
-                                                    const xrfkey = CONSTANTS.API.XRF_KEY;
-                                                    const deleteHeaders = isCloud
-                                                        ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
-                                                        : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
-
-                                                    $.ajax({
-                                                        url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + oldRequestId + '/app?xrfkey=' + xrfkey,
-                                                        type: 'DELETE',
-                                                        headers: deleteHeaders,
-                                                        xhrFields: {
-                                                            withCredentials: true
-                                                        },
-                                                        success: function() {
-                                                            debugLog('Successfully deleted old app:', oldRequestId);
-                                                        },
-                                                        error: function(xhr) {
-                                                            if (xhr.status === 404) {
-                                                                debugLog('App already deleted:', oldRequestId);
-                                                            } else {
-                                                                console.error('Failed to delete old app:', xhr.responseText);
-                                                                // Remove from deleted set if it really failed
-                                                                deletedApps.delete(oldRequestId);
-                                                            }
-                                                        }
-                                                    });
                                                 });
-                                            }
+                                            });
                                         }
+                                    }).catch(function(error) {
+                                        // Silently ignore polling errors - will retry on next interval
                                     });
                                 }, 3000);
                             }
@@ -1679,10 +1816,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 loadLatestODAGApp();
                             }, 1000));
                         } else {
-                            $('#dynamic-status-' + layout.qInfo.qId).html(
+                            updateDynamicStatus(
                                 getStatusHTML('failed', 'Failed to generate app', false)
                             );
-                            $('#cancel-btn-' + layout.qInfo.qId).hide();
+                            hideCancelButton();
                             console.error('Failed to generate ODAG app:', result.error);
 
                             // Show user-friendly error message with alert for visibility
@@ -1692,10 +1829,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         }
                     } catch (error) {
                         console.error('ODAG Generation Error:', error);
-                        $('#dynamic-status-' + layout.qInfo.qId).html(
+                        updateDynamicStatus(
                             getStatusHTML('error', 'Error: ' + error.message, false)
                         );
-                        $('#cancel-btn-' + layout.qInfo.qId).hide();
+                        hideCancelButton();
                     } finally {
                         // Always clear loading state and safety timeout
                         isGenerating = false;
@@ -1712,17 +1849,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
                     : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
 
-                    $.ajax({
-                        url: apiUrl,
-                        type: 'GET',
+                    HTTP.get(apiUrl, {
                         headers: {
                             'Accept': 'application/json',
                             'Content-Type': 'application/json'
-                        },
-                        xhrFields: {
-                            withCredentials: true
-                        },
-                        success: function(result) {
+                        }
+                    }).then(function(result) {
                             debugLog('loadLatestODAGApp received response:', {
                                 resultLength: result ? result.length : 0,
                                 currentRequestId: currentRequestId,
@@ -1789,7 +1921,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         }
 
                                         // Hide cancel button
-                                        $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                        hideCancelButton();
 
                                         // Clear current request ID since we found it
                                         currentRequestId = null;
@@ -1817,7 +1949,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         }
 
                                         // Update status indicator
-                                        $('#dynamic-status-' + layout.qInfo.qId).html(
+                                        updateDynamicStatus(
                                             getStatusHTML('succeeded', latestAppName, false)
                                         );
 
@@ -1827,7 +1959,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                                 bindSelectionState: latestApp.bindSelectionState,
                                                 selectionState: latestApp.selectionState || latestApp.bindSelectionState
                                             };
-                                            debugLog('Stored initial payload from existing ODAG app:', lastGeneratedPayload.bindSelectionState);
+                                            StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
+                                            debugLog('💾 Stored initial payload from existing ODAG app with stable key:', lastGeneratedPayload.bindSelectionState);
                                         }
 
                                         // Load the app in embed - only if it's a new app
@@ -1865,14 +1998,14 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                                     if (pendingApp) {
                                         const stateName = pendingApp.state.charAt(0).toUpperCase() + pendingApp.state.slice(1);
-                                        $('#dynamic-status-' + layout.qInfo.qId).html(
+                                        updateDynamicStatus(
                                             getStatusHTML(pendingApp.state, stateName + ': ' + (pendingApp.generatedAppName || 'New App'), true)
                                         );
                                     }
                                 }
                             } else {
-                                $('#dynamic-status-' + layout.qInfo.qId).html(
-                                    getStatusHTML('none', 'No ODAG apps yet', false)
+                                updateDynamicStatus(
+                                    getStatusHTML('none', messages.status.noApps, false)
                                 );
 
                                 // Stop checking if no apps
@@ -1881,11 +2014,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     checkStatusInterval = null;
                                 }
                             }
-                        },
-                        error: function(xhr) {
-                            console.error('Failed to load ODAG requests:', xhr.responseText);
-                            $('#dynamic-status-' + layout.qInfo.qId).html(
-                                getStatusHTML('error', 'Error loading apps', false)
+                        }).catch(function(error) {
+                            console.error('Failed to load ODAG requests:', error.message);
+                            updateDynamicStatus(
+                                getStatusHTML('error', messages.errors.errorLoadingApps, false)
                             );
 
                             // Stop checking on error
@@ -1893,17 +2025,16 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 clearInterval(checkStatusInterval);
                                 checkStatusInterval = null;
                             }
-                        }
-                    });
+                        });
                 };
 
                 const loadDynamicEmbed = function(appId, appName) {
-                    const $container = $('#dynamic-embed-' + layout.qInfo.qId);
+                    const container = getDynamicEmbedContainer();
                     const allowInteractions = odagConfig.allowInteractions !== false;
                     const hostName = window.location.hostname;
 
                     if (!appId) {
-                        $container.html('<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No app available</div>');
+                        if (container) DOM.setHTML(container, '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No app available</div>');
                         return;
                     }
 
@@ -1920,7 +2051,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     });
 
                     // Check if existing embed already matches what we want
-                    const existingEmbed = $container.find('qlik-embed')[0];
+                    const existingEmbed = container ? DOM.get('qlik-embed', container) : null;
                     let needsUpdate = !existingEmbed;
 
                     if (existingEmbed) {
@@ -1956,9 +2087,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         if (!needsUpdate) {
                             debugLog('Dynamic View: Embed already correct, skipping recreation to prevent flash');
                             // Just update the visual state
-                            $container.css('filter', 'none');
-                            $container.css('pointer-events', 'auto');
-                            $container.css('opacity', '1');
+                            if (container) {
+                                container.style.filter = 'none';
+                                container.style.pointerEvents = 'auto';
+                                container.style.opacity = '1';
+                            }
                             return;
                         }
                     }
@@ -1978,7 +2111,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     }
 
                     // Clear container completely
-                    $container.empty();
+                    if (container) container.innerHTML = '';
 
                     // Generate unique key for refresh - include app ID to force new instance
                     const embedKey = 'dynamic-' + appId + '-' + Date.now();
@@ -2006,7 +2139,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 '3. Copy ONLY the ID after /sheet/ in the URL\n' +
                                 '   (before /state/analysis)';
 
-                            $element.html(
+                            DOM.setHTML(element, 
                                 '<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 8px; font-family: monospace; white-space: pre-wrap; line-height: 1.6;">' +
                                 errorMsg +
                                 '</div>'
@@ -2059,7 +2192,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     embedHtml += embedElement;
                     embedHtml += '</div>';
 
-                    $container.html(embedHtml);
+                    if (container) DOM.setHTML(container, embedHtml);
 
                     // Clear init-in-progress flag after a small delay to ensure qlik-embed element is recognized
                     setTimeout(function() {
@@ -2075,16 +2208,18 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     });
 
                     // Force refresh of the qlik-embed component
-                    const newEmbed = $container.find('qlik-embed')[0];
+                    const newEmbed = container ? DOM.get('qlik-embed', container) : null;
                     if (newEmbed) {
                         // Dispatch refresh event to force update
                         newEmbed.dispatchEvent(new CustomEvent('refresh'));
                     }
 
                     // Remove blur overlay - app is ready
-                    $container.css('filter', 'none');
-                    $container.css('pointer-events', 'auto');
-                    $container.css('opacity', '1');
+                    if (container) {
+                        container.style.filter = 'none';
+                        container.style.pointerEvents = 'auto';
+                        container.style.opacity = '1';
+                    }
 
                     // Load qlik-embed script if not already loaded
                     if (!window.qlikEmbedLoaded) {
@@ -2099,8 +2234,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 };
 
                 // Initial load - Delete all existing apps, then generate a new one
-                $('#dynamic-status-' + layout.qInfo.qId).html(
-                    getStatusHTML('loading', 'Initializing Dynamic View...', true)
+                updateDynamicStatus(
+                    getStatusHTML('loading', messages.info.initializing, true)
                 );
 
                 // Keep top bar visible during initialization
@@ -2146,37 +2281,219 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             debugLog('No existing apps found, generating initial app...');
                             generateNewODAGApp();
                         } else {
-                            // We found an existing app, capture current selections as baseline
+                            // We found an existing app
+                            // When no stored baseline exists, we CAN'T know what selections were used
+                            // to generate the existing app. Show refresh warning by default.
                             if (!lastGeneratedPayload) {
+                                debugLog('📝 Found existing app but no stored payload - showing refresh warning');
+                                debugLog('⚠️ We cannot know if current selections match the app - user should refresh');
+
                                 try {
                                     const buildResult = await buildPayload(app, odagConfig, layout);
-                                    lastGeneratedPayload = buildResult.payload;
-                                    debugLog('Stored initial selection state:', lastGeneratedPayload.bindSelectionState);
+                                    const currentPayload = buildResult.payload;
+
+                                    // Get current variable values
+                                    const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+
+                                    // Check if there are ANY selections in binding fields
+                                    const hasBindingSelections = currentPayload.bindSelectionState &&
+                                        currentPayload.bindSelectionState.some(binding =>
+                                            binding.values && binding.values.length > 0
+                                        );
+
+                                    // Store current selections for cross-page tracking
+                                    const currentSelections = {
+                                        bindSelections: currentPayload.bindSelectionState,
+                                        variables: currentVariableValues
+                                    };
+                                    StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+
+                                    // Set baseline to EMPTY so ANY selection triggers refresh warning
+                                    // This is safer than assuming current selections match the app
+                                    lastGeneratedPayload = {
+                                        bindSelectionState: [],
+                                        selectionState: [],
+                                        variableState: []
+                                    };
+                                    StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
+                                    debugLog('💾 Set EMPTY baseline - any selections will trigger refresh warning');
+
+                                    // If user already has selections, show refresh warning immediately
+                                    if (hasBindingSelections || currentVariableValues.length > 0) {
+                                        debugLog('🔔 User has selections but no baseline - showing refresh warning');
+                                        DOM.addClass('needs-refresh');
+                                        topBarManuallyClosed = false;
+                                        setTimeout(function() {
+                                            showTopBar(false, true);
+                                        }, 500);
+                                    }
                                 } catch (error) {
-                                    console.error('Error storing initial payload:', error);
+                                    console.error('Error checking initial selections:', error);
+                                }
+                            } else {
+                                debugLog('✅ Found existing app and have stored payload from previous generation');
+
+                                // Check if we have stored currentBindSelections from before page navigation
+                                const storedCurrentSelections = StateManager.get(extensionId, 'currentBindSelections', null, currentSelectionsKey);
+                                debugLog('🔄 Retrieved stored currentBindSelections from sessionStorage:', !!storedCurrentSelections);
+
+                                if (storedCurrentSelections) {
+                                    // Compare stored selections with baseline
+                                    const lastState = {
+                                        bindSelections: lastGeneratedPayload.bindSelectionState,
+                                        variables: lastGeneratedPayload.variableState || []
+                                    };
+
+                                    const currentStateStr = JSON.stringify(storedCurrentSelections);
+                                    const lastStateStr = JSON.stringify(lastState);
+                                    const hasChanged = currentStateStr !== lastStateStr;
+
+                                    debugLog('🔍 Comparing stored selections with baseline after page reload - changed:', hasChanged);
+                                    if (hasChanged) {
+                                        debugLog('📊 Stored selections:', storedCurrentSelections.bindSelections);
+                                        debugLog('📊 Baseline selections:', lastGeneratedPayload.bindSelectionState);
+
+                                        // Auto-trigger refresh on page load when selections changed
+                                        debugLog('🔄 Auto-triggering refresh on page load due to selection changes');
+                                        setTimeout(function() {
+                                            const refreshBtn = DOM.get('#refresh-btn-' + layout.qInfo.qId);
+                                            if (refreshBtn) {
+                                                refreshBtn.click();
+                                                debugLog('✅ Auto-clicked refresh button after detecting stored selection changes');
+                                            }
+                                        }, 1000);
+                                    }
+                                } else {
+                                    // No stored selections - call checkSelectionsChanged to build fresh payload
+                                    debugLog('⚠️ No stored selections - will check fresh selections after function initialization');
+                                    setTimeout(function() {
+                                        const checkFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                                        if (checkFunc) {
+                                            debugLog('🔍 Calling checkSelectionsChanged after page reload with stored payload');
+                                            checkFunc();
+                                        }
+                                    }, 500);
                                 }
                             }
                         }
                     }, 1000);
                 }
 
-                // Function to check if current selections differ from last generated payload
-                const checkSelectionsChanged = async function() {
-                    if (isGenerating) return; // Don't check while generating
-                    if (!lastGeneratedPayload) return; // No previous payload to compare
+                // Flag to prevent concurrent selection checks
+                let isCheckingSelections = false;
+                let isSavingSelections = false; // Flag to prevent concurrent saves
+                let pendingCheck = false; // Flag to queue another check after current one completes
+                let selectionDebounceTimer = null;
+                const SELECTION_DEBOUNCE_MS = 300; // Wait 300ms for UI update (reduced from 500ms)
+
+                // IMMEDIATE save function - saves current selections to sessionStorage right away
+                // This ensures selections are captured even if user navigates immediately
+                const saveCurrentSelectionsImmediately = async function() {
+                    if (isSavingSelections) {
+                        debugLog('⏭️ Already saving selections, skipping...');
+                        return;
+                    }
+                    isSavingSelections = true;
 
                     try {
-                        // Check both selections AND variables
-                        const currentSelections = await getCurrentSelections(app);
-                        const currentVariables = await getVariableValues(app, odagConfig.variableMappings || []);
+                        debugLog('💾 Immediately saving current selections...');
 
-                        // Combine selections and variables for comparison
-                        const currentState = {
-                            selections: currentSelections,
-                            variables: currentVariables
+                        // Build current payload
+                        const buildResult = await buildPayload(app, odagConfig, layout);
+                        const currentPayload = buildResult.payload;
+
+                        // Get current variable values
+                        const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+
+                        // Save to sessionStorage immediately
+                        const currentSelections = {
+                            bindSelections: currentPayload.bindSelectionState,
+                            variables: currentVariableValues,
+                            timestamp: Date.now()
                         };
+                        StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+                        debugLog('✅ Selections saved to sessionStorage immediately');
+                    } catch (error) {
+                        debugLog('⚠️ Error saving selections immediately:', error);
+                    } finally {
+                        isSavingSelections = false;
+                    }
+                };
+
+                // Debounced wrapper - saves immediately, then debounces UI update
+                const debouncedCheckSelections = function() {
+                    // IMMEDIATELY save current selections (don't wait for debounce)
+                    saveCurrentSelectionsImmediately();
+
+                    // Clear any pending debounce timer
+                    if (selectionDebounceTimer) {
+                        clearTimeout(selectionDebounceTimer);
+                    }
+
+                    // Debounce only the UI update (top bar, comparison)
+                    selectionDebounceTimer = setTimeout(function() {
+                        selectionDebounceTimer = null;
+
+                        if (isCheckingSelections) {
+                            // A check is in progress, queue another one when it completes
+                            debugLog('⏳ Check in progress, queuing another check...');
+                            pendingCheck = true;
+                        } else {
+                            checkSelectionsChanged();
+                        }
+                    }, SELECTION_DEBOUNCE_MS);
+
+                    debugLog('⏱️ Selections saved, UI update debounced for', SELECTION_DEBOUNCE_MS, 'ms');
+                };
+
+                // Function to check if current selections differ from last generated payload
+                const checkSelectionsChanged = async function() {
+                    // Prevent concurrent checks
+                    if (isCheckingSelections) {
+                        debugLog('⏭️ Already checking, will queue pending check');
+                        pendingCheck = true;
+                        return;
+                    }
+                    isCheckingSelections = true;
+                    pendingCheck = false; // Clear pending flag since we're starting a check
+
+                    try {
+                        // Always get fresh value from StateManager (in case it was updated elsewhere)
+                        const storedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
+                        if (storedPayload) {
+                            lastGeneratedPayload = storedPayload;
+                        }
+
+                        debugLog('🔍 checkSelectionsChanged called - isGenerating:', isGenerating, 'lastGeneratedPayload:', !!lastGeneratedPayload);
+                        if (isGenerating) {
+                            debugLog('⏭️ Skipping check - currently generating');
+                            return; // Don't check while generating
+                        }
+                        if (!lastGeneratedPayload) {
+                            debugLog('⏭️ Skipping check - no previous payload to compare');
+                            return; // No previous payload to compare
+                        }
+
+                        // Build current payload to compare binding field selections
+                        const buildResult = await buildPayload(app, odagConfig, layout);
+                        const currentPayload = buildResult.payload;
+
+                        // Get current variable values directly (buildPayload doesn't include variableState)
+                        const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+
+                        // Store current selections to sessionStorage (persist across page navigation)
+                        const currentSelections = {
+                            bindSelections: currentPayload.bindSelectionState,
+                            variables: currentVariableValues
+                        };
+                        StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+                        debugLog('💾 Stored currentBindSelections to sessionStorage for cross-page tracking');
+
+                        // Compare ONLY the binding field selections (bindSelectionState)
+                        // Also compare variables if any are mapped
+                        const currentState = currentSelections;
                         const lastState = {
-                            selections: lastGeneratedPayload.selectionState,
+                            bindSelections: lastGeneratedPayload.bindSelectionState,
                             variables: lastGeneratedPayload.variableState || []
                         };
 
@@ -2184,34 +2501,88 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const lastStateStr = JSON.stringify(lastState);
 
                         const hasChanged = currentStateStr !== lastStateStr;
-                        debugLog('Checking state changed (selections + variables):', hasChanged);
-
+                        debugLog('🔍 Checking state changed (binding selections + variables):', hasChanged);
                         if (hasChanged) {
+                            debugLog('📊 Current binding selections:', currentPayload.bindSelectionState);
+                            debugLog('📊 Last binding selections:', lastGeneratedPayload.bindSelectionState);
+                            debugLog('📊 Current variable values:', currentVariableValues);
+                            debugLog('📊 Last variable values:', lastGeneratedPayload.variableState);
+
                             // State changed - highlight refresh button
-                            $('#refresh-btn-' + layout.qInfo.qId).addClass('needs-refresh');
+                            DOM.addClass('needs-refresh');
 
                             // Show top bar with warning (always show when state changes)
-                            debugLog('🔔 State changed (selections or variables) - showing top bar with refresh warning');
+                            debugLog('🔔 State changed (binding selections or variables) - showing top bar with refresh warning');
                             topBarManuallyClosed = false; // Reset flag
                             showTopBar(false, true); // Show without auto-hide, force show for warning
                         } else {
                             // State same - remove highlight
-                            $('#refresh-btn-' + layout.qInfo.qId).removeClass('needs-refresh');
+                            DOM.removeClass('needs-refresh');
                         }
                     } catch (error) {
                         debugLog('Error checking state changes:', error);
+                    } finally {
+                        isCheckingSelections = false;
+
+                        // If a check was queued while we were checking, run it now
+                        if (pendingCheck) {
+                            debugLog('🔄 Running queued pending check...');
+                            pendingCheck = false;
+                            // Use setTimeout to avoid deep recursion
+                            setTimeout(checkSelectionsChanged, 50);
+                        }
                     }
                 };
 
-                // Store check function in StateManager so paint can call it
+                // Store check functions in StateManager so paint can call them
                 StateManager.set(extensionId, 'checkSelectionsChanged', checkSelectionsChanged);
+                StateManager.set(extensionId, 'debouncedCheckSelections', debouncedCheckSelections);
 
                 // Listen for selection changes using selection state subscription
                 // This also triggers when variables change (Qlik treats variable changes as selection changes)
-                app.selectionState().OnData.bind(function() {
-                    debugLog('Selection state changed (includes variable changes) - checking...');
-                    checkSelectionsChanged();
-                });
+                const listenerKey = 'selectionListener_' + layout.qInfo.qId;
+                try {
+                    app.selectionState().OnData.bind(function() {
+                        debugLog('Selection state changed - debouncing check...');
+                        debouncedCheckSelections();
+                    });
+                    window[listenerKey] = true;
+                    debugLog('✅ Selection listener bound and marked in window.' + listenerKey);
+                } catch (error) {
+                    console.error('⚠️ Failed to bind selectionState listener on initialization (error code:', error.code || error, ')');
+                    console.error('This is usually due to WebSocket connection issues or session expiry.');
+                    // Don't mark as bound so it will retry on next paint
+                }
+
+                // CRITICAL: Add variable change listeners for mapped variables
+                // selectionState().OnData does NOT reliably fire for variable changes!
+                const variableListenerKey = 'variableListeners_' + layout.qInfo.qId;
+                if (!window[variableListenerKey] && odagConfig.variableMappings && odagConfig.variableMappings.length > 0) {
+                    debugLog('🔗 Setting up variable change listeners for', odagConfig.variableMappings.length, 'mapped variables');
+                    window[variableListenerKey] = [];
+
+                    odagConfig.variableMappings.forEach(function(mapping) {
+                        if (mapping.variableName) {
+                            app.variable.getByName(mapping.variableName).then(function(variable) {
+                                if (variable) {
+                                    try {
+                                        // Subscribe to variable changes
+                                        variable.OnChanged.bind(function() {
+                                            debugLog('📊 Variable changed:', mapping.variableName, '- debouncing check...');
+                                            debouncedCheckSelections();
+                                        });
+                                        window[variableListenerKey].push(mapping.variableName);
+                                        debugLog('✅ Variable listener bound for:', mapping.variableName);
+                                    } catch (varError) {
+                                        debugLog('⚠️ Failed to bind variable listener for:', mapping.variableName, varError);
+                                    }
+                                }
+                            }).catch(function(err) {
+                                debugLog('⚠️ Variable not found:', mapping.variableName, err);
+                            });
+                        }
+                    });
+                }
 
                 // Store generateNewODAGApp function in StateManager for restoreDynamicView to access
                 StateManager.set(extensionId, 'generateNewODAGApp', function() {
@@ -2238,10 +2609,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         ApiService.cancelRequest(currentRequestId)
                             .then(function() {
                                 debugLog('Generation cancelled');
-                                $('#dynamic-status-' + layout.qInfo.qId).html(
+                                updateDynamicStatus(
                                     getStatusHTML('none', 'Generation cancelled', false)
                                 );
-                                $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                hideCancelButton();
                                 isGenerating = false;
                                 currentRequestId = null;
 
@@ -2251,36 +2622,42 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             .catch(function(error) {
                                 console.error('Failed to cancel:', error.responseText || error.message);
                                 // Even if cancel fails, reset the UI
-                                $('#dynamic-status-' + layout.qInfo.qId).html(
-                                    getStatusHTML('error', 'Cancel failed', false)
+                                updateDynamicStatus(
+                                    getStatusHTML('error', messages.errors.cancelFailed, false)
                                 );
-                                $('#cancel-btn-' + layout.qInfo.qId).hide();
+                                hideCancelButton();
                                 isGenerating = false;
                             });
                     }
                 });
 
                 // Handle refresh button click - Generate a NEW app
-                $('#refresh-btn-' + layout.qInfo.qId).on('click', function() {
-                    debugLog('Refresh clicked - generating new ODAG app...');
+                const refreshBtn = DOM.get('#refresh-btn-' + layout.qInfo.qId);
+                if (refreshBtn) {
+                    DOM.on(refreshBtn, 'click', function() {
+                        debugLog('Refresh clicked - generating new ODAG app...');
 
-                    // Reset the manually closed flag - normal behavior resumes after refresh
-                    topBarManuallyClosed = false;
+                        // Reset the manually closed flag - normal behavior resumes after refresh
+                        topBarManuallyClosed = false;
 
-                    // Add blur overlay to the embed
-                    const $embedContainer = $('#dynamic-embed-' + layout.qInfo.qId);
-                    $embedContainer.css('filter', 'blur(3px)');
-                    $embedContainer.css('pointer-events', 'none');
-                    $embedContainer.css('opacity', '0.6');
+                        // Add blur overlay to the embed
+                        const embedContainer = getDynamicEmbedContainer();
+                        if (embedContainer) {
+                            embedContainer.style.filter = 'blur(3px)';
+                            embedContainer.style.pointerEvents = 'none';
+                            embedContainer.style.opacity = '0.6';
+                        }
 
-                    const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
-                    if (generateFunc) generateFunc();
-                });
+                        const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
+                        if (generateFunc) generateFunc();
+                    });
+                }
 
                 // Handle cancel button click
+                const cancelBtn = DOM.get('#cancel-btn-' + layout.qInfo.qId);
                 const cancelFunc = StateManager.get(extensionId, 'cancelGeneration');
-                if (cancelFunc) {
-                    $('#cancel-btn-' + layout.qInfo.qId).on('click', cancelFunc);
+                if (cancelBtn && cancelFunc) {
+                    DOM.on(cancelBtn, 'click', cancelFunc);
                 }
 
                 // Load the latest ODAG app on initialization
@@ -2298,20 +2675,24 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     // Re-attach button click handlers (they get lost when HTML is recreated)
                     const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
                     const cancelFunc = StateManager.get(extensionId, 'cancelGeneration');
+                    const refreshBtnRestored = DOM.get('#refresh-btn-' + layout.qInfo.qId);
+                    const cancelBtnRestored = DOM.get('#cancel-btn-' + layout.qInfo.qId);
 
-                    if (generateFunc) {
-                        $('#refresh-btn-' + layout.qInfo.qId).off('click').on('click', function() {
+                    if (refreshBtnRestored && generateFunc) {
+                        DOM.on(refreshBtnRestored, 'click', function() {
                             debugLog('Refresh clicked (restored handler)');
-                            const $embedContainer = $('#dynamic-embed-' + layout.qInfo.qId);
-                            $embedContainer.css('filter', 'blur(3px)');
-                            $embedContainer.css('pointer-events', 'none');
-                            $embedContainer.css('opacity', '0.6');
+                            const embedContainer = getDynamicEmbedContainer();
+                            if (embedContainer) {
+                                embedContainer.style.filter = 'blur(3px)';
+                                embedContainer.style.pointerEvents = 'none';
+                                embedContainer.style.opacity = '0.6';
+                            }
                             generateFunc();
                         });
                     }
 
-                    if (cancelFunc) {
-                        $('#cancel-btn-' + layout.qInfo.qId).off('click').on('click', cancelFunc);
+                    if (cancelBtnRestored && cancelFunc) {
+                        DOM.on(cancelBtnRestored, 'click', cancelFunc);
                     }
 
                     // That's it! Don't make API calls, don't recreate embeds or modify DOM
@@ -2325,13 +2706,13 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 let lastSelectionState = null;
                 let isTopBarVisible = true; // Track visibility state
                 let topBarManuallyClosed = false; // Track if user explicitly closed the top bar
-                const $topBar = $('#dynamic-top-bar-' + layout.qInfo.qId);
+                const topBar = DOM.get('#dynamic-top-bar-' + layout.qInfo.qId);
 
                 const hideTopBar = function() {
-                    $topBar.css({
-                        'transform': 'translateY(-100%)',
-                        'opacity': '0'
-                    });
+                    if (topBar) {
+                        topBar.style.transform = 'translateY(-100%)';
+                        topBar.style.opacity = '0';
+                    }
                     isTopBarVisible = false;
                 };
 
@@ -2342,10 +2723,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         return;
                     }
 
-                    $topBar.css({
-                        'transform': 'translateY(0)',
-                        'opacity': '1'
-                    });
+                    if (topBar) {
+                        topBar.style.transform = 'translateY(0)';
+                        topBar.style.opacity = '1';
+                    }
                     isTopBarVisible = true;
 
                     // Clear existing timer
@@ -2379,23 +2760,26 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                 });
 
                 // Close button handler - hide top bar when clicked
-                $('#close-topbar-btn-' + layout.qInfo.qId).on('click', function(e) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    debugLog('❌ Close button clicked - hiding top bar until refresh needed');
+                const closeTopbarBtn = DOM.get('#close-topbar-btn-' + layout.qInfo.qId);
+                if (closeTopbarBtn) {
+                    DOM.on(closeTopbarBtn, 'click', function(e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        debugLog('❌ Close button clicked - hiding top bar until refresh needed');
 
-                    // Set flag to keep bar hidden until selections change
-                    topBarManuallyClosed = true;
+                        // Set flag to keep bar hidden until selections change
+                        topBarManuallyClosed = true;
 
-                    // Clear any pending auto-hide timer
-                    if (hideTimer) {
-                        clearTimeout(hideTimer);
-                        hideTimer = null;
-                    }
+                        // Clear any pending auto-hide timer
+                        if (hideTimer) {
+                            clearTimeout(hideTimer);
+                            hideTimer = null;
+                        }
 
-                    // Hide the top bar immediately
-                    hideTopBar();
-                });
+                        // Hide the top bar immediately
+                        hideTopBar();
+                    });
+                }
             }
 
             // Keep track of generated apps (not for dynamic view)
@@ -2512,22 +2896,22 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             };            
             // Update apps list display
             updateAppsList = function(qId) {
-                const $listContainer = $('#apps-list-' + qId);
-                const $appCount = $('#app-count-' + qId);
-                const elementHeight = $element.height();
+                const listContainer = DOM.get('#apps-list-' + qId);
+                const appCountEl = DOM.get('#app-count-' + qId);
+                const elementHeight = element.offsetHeight;
                 const isLargeView = elementHeight > 400;
 
-                // Update app count
+                // Update app count (localized)
                 const appCount = window.odagGeneratedApps.length;
-                $appCount.text(appCount + (appCount === 1 ? ' app' : ' apps'));
+                if (appCountEl) appCountEl.textContent = appCount + ' ' + messages.info.appCount;
 
                 // Update mobile dropdown if it exists
-                const $mobileSelector = $('#mobile-app-selector-' + qId);
-                if ($mobileSelector.length > 0) {
+                const mobileSelector = DOM.get('#mobile-app-selector-' + qId);
+                if (mobileSelector) {
                     if (appCount === 0) {
-                        $mobileSelector.html('<option value="">No apps generated yet</option>');
+                        DOM.setHTML(mobileSelector, '<option value="">' + messages.status.noApps + '</option>');
                     } else {
-                        let dropdownHtml = '<option value="">Select an app...</option>';
+                        let dropdownHtml = '<option value="">' + messages.info.selectApp + '</option>';
                         window.odagGeneratedApps.forEach(function(app, index) {
                             // Get app ID as string
                             let appIdStr = '';
@@ -2549,12 +2933,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 dropdownHtml += '<option value="" disabled>' + app.name + ' (Generating...)</option>';
                             }
                         });
-                        $mobileSelector.html(dropdownHtml);
+                        DOM.setHTML(mobileSelector, dropdownHtml);
                     }
                 }
 
                 if (appCount === 0) {
-                    $listContainer.html('<div class="list-empty">No apps generated yet</div>');
+                    if (listContainer) DOM.setHTML(listContainer, '<div class="list-empty">No apps generated yet</div>');
                     return;
                 }
 
@@ -2594,12 +2978,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             listHtml += '<span class="app-status status-loading">';
                             listHtml += '<span class="status-spinner"></span> ';
 
-                            // Show user-friendly status text
+                            // Show user-friendly status text (localized)
                             let statusDisplayText = app.status.charAt(0).toUpperCase() + app.status.slice(1);
-                            if (app.status === 'queued') statusDisplayText = 'Queued';
-                            if (app.status === 'validating') statusDisplayText = 'Validating';
-                            if (app.status === 'generating') statusDisplayText = 'Generating';
-                            if (app.status === 'loading') statusDisplayText = 'Loading';
+                            if (app.status === 'queued') statusDisplayText = messages.status.queued;
+                            if (app.status === 'validating') statusDisplayText = messages.status.validating;
+                            if (app.status === 'generating') statusDisplayText = messages.status.generating;
+                            if (app.status === 'loading') statusDisplayText = messages.status.loading;
 
                             listHtml += statusDisplayText;
                             listHtml += '</span>';
@@ -2607,8 +2991,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             const statusIcon = app.status === 'succeeded' ? '✓' :
                                              app.status === 'failed' ? '❌' :
                                              app.status === 'cancelled' ? '⏹' : '⚠';
-                            const statusText = app.status === 'succeeded' ? 'Ready' :
-                                             app.status === 'cancelled' ? 'Cancelled' : app.status;
+                            const statusText = app.status === 'succeeded' ? messages.status.ready :
+                                             app.status === 'cancelled' ? messages.status.cancelled :
+                                             app.status === 'failed' ? messages.status.failed : app.status;
                             listHtml += '<span class="app-status status-' + app.status + '">' + statusIcon + ' ' + statusText + '</span>';
                         }
                     }
@@ -2616,36 +3001,42 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     listHtml += '</div>';
 
                     listHtml += '<div class="app-menu-container">';
-                    listHtml += '<button class="app-menu-btn" title="Actions">⋮</button>';
+                    listHtml += '<button class="app-menu-btn" title="' + Validators.sanitizeHtml(messages.info.actions) + '">⋮</button>';
                     listHtml += '<div class="app-menu-dropdown" style="display:none;">';
 
                     // Show cancel option for pending/generating apps
                     if (app.status === 'pending' || app.status === 'queued' ||
                         app.status === 'loading' || app.status === 'generating' ||
                         app.status === 'validating') {
-                        listHtml += '<div class="menu-item cancel-app"><span class="menu-icon">⏹️</span> Cancel generation</div>';
+                        listHtml += '<div class="menu-item cancel-app"><span class="menu-icon">⏹️</span> ' + messages.buttons.cancel + '</div>';
                     } else if (app.status === 'succeeded') {
                         // Only succeeded apps can be opened
-                        listHtml += '<div class="menu-item open-app"><span class="menu-icon">🔗</span> Open in new tab</div>';
-                        listHtml += '<div class="menu-item reload-app"><span class="menu-icon">🔄</span> Reload data</div>';
+                        listHtml += '<div class="menu-item open-app"><span class="menu-icon">🔗</span> ' + messages.buttons.open + '</div>';
+                        listHtml += '<div class="menu-item reload-app"><span class="menu-icon">🔄</span> ' + messages.buttons.reload + '</div>';
                     }
                     // All apps (succeeded, failed, cancelled) can be deleted
 
-                    listHtml += '<div class="menu-item delete-app"><span class="menu-icon">🗑️</span> Delete app</div>';
+                    listHtml += '<div class="menu-item delete-app"><span class="menu-icon">🗑️</span> ' + messages.buttons.delete + '</div>';
                     listHtml += '</div>';
                     listHtml += '</div>';
 
                     listHtml += '</div>';
                 });
 
-                $listContainer.html(listHtml);
-                
-                // Bind events
-                $listContainer.find('.odag-app-item').off('click').on('click', function(e) {
-                    // Don't trigger if clicking on menu button or menu items (or their children)
-                    if (!$(e.target).closest('.app-menu-btn').length && !$(e.target).closest('.menu-item').length) {
-                        const appId = $(this).data('app-id');
-                        const appIndex = $(this).data('app-index');
+                if (listContainer) DOM.setHTML(listContainer, listHtml);
+
+                // Bind events - using vanilla JS
+                const appItems = listContainer ? listContainer.querySelectorAll('.odag-app-item') : [];
+                appItems.forEach(function(item) {
+                    // Remove existing listeners
+                    const newItem = item.cloneNode(true);
+                    item.parentNode.replaceChild(newItem, item);
+
+                    newItem.addEventListener('click', function(e) {
+                        // Don't trigger if clicking on menu button or menu items (or their children)
+                        if (!e.target.closest('.app-menu-btn') && !e.target.closest('.menu-item')) {
+                            const appId = newItem.getAttribute('data-app-id');
+                            const appIndex = newItem.getAttribute('data-app-index');
                         const appData = window.odagGeneratedApps[appIndex];
 
                         debugLog('App clicked:', {
@@ -2695,8 +3086,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         }
 
                         if (isLargeView) {
-                            $('.odag-app-item').removeClass('selected');
-                            $(this).addClass('selected');
+                            DOM.removeClass('selected');
+                            DOM.addClass('selected');
 
                             // Build qlik-embed element based on view mode
                             const viewMode = odagConfig.viewMode || 'odagApp';
@@ -2733,7 +3124,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         '3. Copy ONLY the ID after /sheet/ in the URL\n' +
                                         '   (before /state/analysis)';
 
-                                    $listContainer.html(
+                                    if (listContainer) DOM.setHTML(listContainer,
                                         '<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 8px; font-family: monospace; white-space: pre-wrap; line-height: 1.6;">' +
                                         errorMsg +
                                         '</div>'
@@ -2802,10 +3193,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             }
 
                             // Replace placeholder with qlik-embed
-                            const $container = $('#iframe-container-' + qId);
+                            const iframeContainer = DOM.get('#iframe-container-' + qId);
 
                             // Check if existing embed matches what we want to create
-                            const existingEmbed = $container.find('qlik-embed')[0];
+                            const existingEmbed = iframeContainer ? DOM.get('qlik-embed', iframeContainer) : null;
                             let needsUpdate = !existingEmbed;
 
                             if (existingEmbed) {
@@ -2865,15 +3256,15 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                 }
 
                                 // Clear the container completely (this also removes any remaining embeds)
-                                $container.empty();
+                                if (iframeContainer) iframeContainer.innerHTML = '';
 
                                 // Add a small delay to ensure proper cleanup
                                 setTimeout(function() {
                                     // Ensure container is visible
-                                    $container.show();
+                                    if (iframeContainer) DOM.show(iframeContainer);
 
                                     // Show loading animation first
-                                    $container.html(getLoadingPlaceholder('Loading app...'));
+                                    if (iframeContainer) DOM.setHTML(iframeContainer, getLoadingPlaceholder(messages.progress.loadingApp));
 
                                     // Create a wrapper div to contain the qlik-embed properly with relative positioning
                                     setTimeout(function() {
@@ -2882,18 +3273,18 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         embedHtml += '</div>';
 
                                         debugLog('LIST VIEW - Setting container HTML');
-                                        $container.html(embedHtml);
+                                        if (iframeContainer) DOM.setHTML(iframeContainer, embedHtml);
 
                                         debugLog('Created new qlik-embed element:', {
                                             appId: embedAppId,
                                             viewMode: viewMode,
                                             sheetId: odagConfig.templateSheetId || 'N/A',
-                                            container: $container.attr('id'),
+                                            container: iframeContainer ? iframeContainer.id : 'N/A',
                                             embedKey: embedKey
                                         });
 
                                         // Force a re-render of the web component
-                                        const newEmbed = $container.find('qlik-embed')[0];
+                                        const newEmbed = iframeContainer ? DOM.get('qlik-embed', iframeContainer) : null;
                                         if (newEmbed) {
                                             // Trigger a custom event to force refresh if needed
                                             newEmbed.dispatchEvent(new CustomEvent('refresh'));
@@ -2922,10 +3313,13 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         }
                     }
                 });
-                
+                });
+
                 // Setup all app item action handlers using EventHandlers module
-                EventHandlers.setupAppMenuHandler($listContainer);
-                EventHandlers.setupAppItemHandlers($listContainer, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
+                if (listContainer) {
+                    EventHandlers.setupAppMenuHandler(listContainer);
+                    EventHandlers.setupAppItemHandlers(listContainer, qId, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
+                }
             };
 
             // Set updateAppsList on ViewManager context now that it's defined
@@ -2946,9 +3340,12 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     return;
                 }
 
-                const $button = $('.odag-generate-btn-compact');
-                console.log('🔘 Found', $button.length, 'generate button(s) to disable');
-                $button.addClass('loading').prop('disabled', true);
+                const buttons = element.querySelectorAll('.odag-generate-btn-compact');
+                console.log('🔘 Found', buttons.length, 'generate button(s) to disable');
+                buttons.forEach(function(button) {
+                    DOM.addClass(button, 'loading');
+                    button.disabled = true;
+                });
 
                 try {
                     // Ensure bindings are loaded before generating (both Cloud and On-Premise)
@@ -2966,12 +3363,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const bindingsUrl = currentUrl + '/api/v1/odaglinks/selAppLinkUsages?selAppId=' + app.id + '&' + cacheBuster;
 
                         await new Promise(function(resolve, reject) {
-                            $.ajax({
-                                url: bindingsUrl,
-                                type: 'POST',
-                                data: JSON.stringify({linkList: [odagConfig.odagLinkId]}),
-                                contentType: 'application/json',
-                                cache: false, // Disable jQuery caching
+                            HTTP.post(bindingsUrl, {linkList: [odagConfig.odagLinkId]}, {
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'Accept': '*/*',
@@ -2980,46 +3372,43 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     'Pragma': 'no-cache',
                                     'Expires': '0'
                                 },
-                                xhrFields: {withCredentials: true},
-                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2, // Longer timeout for bindings
-                                success: function(response) {
-                                    debugLog('🔍 Cloud bindings response:', response);
+                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2 // Longer timeout for bindings
+                            }).then(function(response) {
+                                debugLog('🔍 Cloud bindings response:', response);
 
-                                    if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
-                                        const linkData = response[0].link;
-                                        const bindings = linkData.bindings;
-                                        window[bindingsCacheKey] = bindings;
+                                if (response && response.length > 0 && response[0].link && response[0].link.bindings) {
+                                    const linkData = response[0].link;
+                                    const bindings = linkData.bindings;
+                                    window[bindingsCacheKey] = bindings;
 
-                                        // Cache row estimation config from ODAG link
-                                        const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
+                                    // Cache row estimation config from ODAG link
+                                    const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
 
-                                        // Extract curRowEstHighBound from properties.rowEstRange[0].highBound
-                                        let curRowEstHighBound = linkData.curRowEstHighBound;
-                                        if (!curRowEstHighBound && linkData.properties && linkData.properties.rowEstRange &&
-                                            linkData.properties.rowEstRange.length > 0) {
-                                            curRowEstHighBound = linkData.properties.rowEstRange[0].highBound;
-                                        }
-
-                                        window[rowEstCacheKey] = {
-                                            rowEstExpr: linkData.rowEstExpr,
-                                            curRowEstHighBound: curRowEstHighBound
-                                        };
-
-                                        debugLog('✅ Cloud bindings cached for generation:', bindings.length, 'bindings');
-                                        debugLog('✅ Bindings:', JSON.stringify(bindings, null, 2));
-                                        debugLog('✅ Row estimation config:', window[rowEstCacheKey]);
-                                        resolve();
-                                    } else {
-                                        console.error('❌ Unexpected Cloud bindings response format');
-                                        window[bindingsCacheKey] = [];
-                                        resolve();
+                                    // Extract curRowEstHighBound from properties.rowEstRange[0].highBound
+                                    let curRowEstHighBound = linkData.curRowEstHighBound;
+                                    if (!curRowEstHighBound && linkData.properties && linkData.properties.rowEstRange &&
+                                        linkData.properties.rowEstRange.length > 0) {
+                                        curRowEstHighBound = linkData.properties.rowEstRange[0].highBound;
                                     }
-                                },
-                                error: function(xhr, status, error) {
-                                    console.error('❌ Failed to fetch Cloud bindings:', xhr.status, error);
+
+                                    window[rowEstCacheKey] = {
+                                        rowEstExpr: linkData.rowEstExpr,
+                                        curRowEstHighBound: curRowEstHighBound
+                                    };
+
+                                    debugLog('✅ Cloud bindings cached for generation:', bindings.length, 'bindings');
+                                    debugLog('✅ Bindings:', JSON.stringify(bindings, null, 2));
+                                    debugLog('✅ Row estimation config:', window[rowEstCacheKey]);
+                                    resolve();
+                                } else {
+                                    console.error('❌ Unexpected Cloud bindings response format');
                                     window[bindingsCacheKey] = [];
-                                    reject(new Error('Failed to fetch Cloud bindings: ' + error));
+                                    resolve();
                                 }
+                            }).catch(function(error) {
+                                console.error('❌ Failed to fetch Cloud bindings:', error.status, error.message);
+                                window[bindingsCacheKey] = [];
+                                reject(new Error('Failed to fetch Cloud bindings: ' + error.message));
                             });
                         });
                     } else if (!isCloud && !window[bindingsCacheKey]) {
@@ -3032,10 +3421,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         const linkDetailsUrl = currentUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '?xrfkey=' + xrfkey + '&' + cacheBuster;
 
                         await new Promise(function(resolve, reject) {
-                            $.ajax({
-                                url: linkDetailsUrl,
-                                type: 'GET',
-                                cache: false, // Disable jQuery caching
+                            HTTP.get(linkDetailsUrl, {
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'Accept': 'application/json',
@@ -3044,9 +3430,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                     'Pragma': 'no-cache',
                                     'Expires': '0'
                                 },
-                                xhrFields: {withCredentials: true},
-                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2, // Longer timeout for link details
-                                success: function(linkDetails) {
+                                timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2 // Longer timeout for link details
+                            }).then(function(linkDetails) {
                                     debugLog('🔍 FULL On-Premise link details response:', linkDetails);
 
                                     // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
@@ -3099,13 +3484,11 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                                         window[bindingsCacheKey] = [];
                                         resolve();
                                     }
-                                },
-                                error: function(xhr, status, error) {
-                                    console.error('❌ Failed to fetch ODAG link details for bindings:', xhr.status, error);
+                                }).catch(function(error) {
+                                    console.error('❌ Failed to fetch ODAG link details for bindings:', error.status, error.message);
                                     window[bindingsCacheKey] = [];
-                                    reject(new Error('Failed to fetch bindings: ' + error));
-                                }
-                            });
+                                    reject(new Error('Failed to fetch bindings: ' + error.message));
+                                });
                         });
                     }
 
@@ -3170,7 +3553,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                         // If there are missing required fields, alert user
                         if (missingRequiredFields.length > 0) {
                             debugLog('❌ Missing required selections in fields:', missingRequiredFields);
-                            $button.removeClass('loading').prop('disabled', false);
+                            buttons.forEach(function(btn) {
+                                DOM.removeClass(btn, 'loading');
+                                btn.disabled = false;
+                            });
 
                             // Build clear, informative warning message with dynamic prefixes
                             const fieldListBullets = missingFieldDetails.map(detail => {
@@ -3220,7 +3606,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
                     // Check if generation is allowed based on row estimation
                     if (!rowEstResult.canGenerate) {
-                        $button.removeClass('loading').prop('disabled', false);
+                        buttons.forEach(function(btn) {
+                            DOM.removeClass(btn, 'loading');
+                            btn.disabled = false;
+                        });
                         alert(rowEstResult.message);
                         return;
                     }
@@ -3304,7 +3693,10 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     console.error('ODAG Generation Error:', error);
                     showNotification('Error: ' + error.message, 'error');
                 } finally {
-                    $button.removeClass('loading').prop('disabled', false);
+                    buttons.forEach(function(btn) {
+                        DOM.removeClass(btn, 'loading');
+                        btn.disabled = false;
+                    });
                 }
             };
             
@@ -3394,41 +3786,44 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             // Button click handler (not in dynamic view)
             if (!isDynamicView) {
-                const $generateButtons = $element.find('.odag-generate-btn-compact');
+                const $generateButtons = DOM.get('.odag-generate-btn-compact', element);
                 debugLog('🔘 Attaching click handlers to', $generateButtons.length, 'generate button(s)');
 
                 // Setup generate button handler
                 EventHandlers.setupGenerateHandler($generateButtons, generateODAGApp, odagConfig);
 
                 // Setup sidebar toggle handler
-                EventHandlers.setupSidebarToggleHandler($element, layout);
+                EventHandlers.setupSidebarToggleHandler(element, layout);
 
                 // Refresh list button handler
-                $element.find('.refresh-list-btn').on('click', function() {
-                    const $btn = $(this);
+                const refreshBtn = DOM.get('.refresh-list-btn', element);
+                if (refreshBtn) {
+                    DOM.on(refreshBtn, 'click', function() {
+                        // Add spinning animation
+                        refreshBtn.style.transform = 'rotate(360deg)';
+                        setTimeout(function() {
+                            refreshBtn.style.transform = 'rotate(0deg)';
+                        }, 600);
 
-                    // Add spinning animation
-                    $btn.css('transform', 'rotate(360deg)');
-                    setTimeout(function() {
-                        $btn.css('transform', 'rotate(0deg)');
-                    }, 600);
-
-                    // Reload the apps list
-                    loadExistingRequests().then(function() {
-                        updateAppsList(layout.qInfo.qId);
-                        showNotification('App list refreshed', 'info');
-                    }).catch(function(error) {
-                        debugLog('Error refreshing apps list:', error);
-                        showNotification('Failed to refresh app list', 'error');
+                        // Reload the apps list
+                        loadExistingRequests().then(function() {
+                            updateAppsList(layout.qInfo.qId);
+                            showNotification('App list refreshed', 'info');
+                        }).catch(function(error) {
+                            debugLog('Error refreshing apps list:', error);
+                            showNotification('Failed to refresh app list', 'error');
+                        });
                     });
-                });
+                }
 
                 // Setup delete all button handler
-                EventHandlers.setupDeleteAllHandler($element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
+                EventHandlers.setupDeleteAllHandler(element, layout, updateAppsList, showNotification, debugLog, getCookie, checkODAGValidation);
 
                 // Mobile dropdown selector handler
-                $element.find('.mobile-app-selector').on('change', function() {
-                    const selectedAppId = $(this).val();
+                const mobileSel = DOM.get('.mobile-app-selector', element);
+                if (mobileSel) {
+                    DOM.on(mobileSel, 'change', function() {
+                        const selectedAppId = mobileSel.value;
 
                     if (!selectedAppId || selectedAppId === '') {
                         debugLog('No app selected from mobile dropdown');
@@ -3448,8 +3843,8 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     debugLog('Mobile dropdown: Selected app', selectedApp.name);
 
                     // Clear existing iframe
-                    const $iframeContainer = $('#iframe-container-' + layout.qInfo.qId);
-                    $iframeContainer.empty();
+                    const mobileIframeContainer = DOM.get('#iframe-container-' + layout.qInfo.qId);
+                    if (mobileIframeContainer) mobileIframeContainer.innerHTML = '';
 
                     // Mobile always uses classic/app mode (full app overview, no sheet ID)
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
@@ -3483,7 +3878,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                     // Add a small delay to ensure proper cleanup before creating new embed
                     setTimeout(function() {
                         // Ensure container is visible
-                        $iframeContainer.show();
+                        if (mobileIframeContainer) DOM.show(mobileIframeContainer);
 
                         // Wrap embed in a container div for proper positioning
                         const embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">' +
@@ -3491,16 +3886,78 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
                             '</div>';
 
                         debugLog('Mobile: Setting embed HTML');
-                        $iframeContainer.html(embedHtml);
+                        if (mobileIframeContainer) DOM.setHTML(mobileIframeContainer, embedHtml);
                     }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
                 });
             }
+        }  // Close if (!isDynamicView) from line 3569
 
             // Check for selection changes on every paint (for Dynamic View)
+            // This ensures we catch selection changes made on other pages
             if (isDynamicView) {
+                debugLog('🔍 Paint - Checking for selection changes in Dynamic View...');
                 const checkSelectionsFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
+                const debouncedCheckFunc = StateManager.get(extensionId, 'debouncedCheckSelections');
                 if (checkSelectionsFunc) {
-                    checkSelectionsFunc();
+                    // IMPORTANT: Wait 2 seconds before checking selections
+                    // This gives Qlik time to process selection changes from other pages
+                    debugLog('⏳ Waiting 2 seconds for Qlik to process selections...');
+                    setTimeout(function() {
+                        debugLog('✅ checkSelectionsFunc found, calling it after delay...');
+                        checkSelectionsFunc();
+                    }, 2000);
+
+                    // CRITICAL: Re-bind selection listener in case it was lost during page navigation
+                    const listenerKey = 'selectionListener_' + layout.qInfo.qId;
+                    if (!window[listenerKey]) {
+                        try {
+                            debugLog('🔄 Re-binding selectionState listener at end of paint...');
+                            app.selectionState().OnData.bind(function() {
+                                debugLog('Selection state changed (re-bound listener) - debouncing...');
+                                // Use debounced version if available
+                                if (debouncedCheckFunc) {
+                                    debouncedCheckFunc();
+                                } else {
+                                    checkSelectionsFunc();
+                                }
+                            });
+                            window[listenerKey] = true;
+                        } catch (error) {
+                            debugLog('⚠️ Failed to bind selectionState listener (error code:', error.code || error, ')');
+                            // Don't mark as bound so it will retry on next paint
+                        }
+                    }
+
+                    // CRITICAL: Re-bind variable listeners for mapped variables
+                    const variableListenerKey = 'variableListeners_' + layout.qInfo.qId;
+                    if (!window[variableListenerKey] && odagConfig.variableMappings && odagConfig.variableMappings.length > 0) {
+                        debugLog('🔄 Re-binding variable listeners at end of paint...');
+                        window[variableListenerKey] = [];
+                        odagConfig.variableMappings.forEach(function(mapping) {
+                            if (mapping.variableName) {
+                                app.variable.getByName(mapping.variableName).then(function(variable) {
+                                    if (variable) {
+                                        try {
+                                            variable.OnChanged.bind(function() {
+                                                debugLog('📊 Variable changed (re-bound at paint end):', mapping.variableName);
+                                                // Use debounced version if available
+                                                if (debouncedCheckFunc) {
+                                                    debouncedCheckFunc();
+                                                } else {
+                                                    checkSelectionsFunc();
+                                                }
+                                            });
+                                            window[variableListenerKey].push(mapping.variableName);
+                                        } catch (e) {
+                                            debugLog('⚠️ Failed to re-bind variable listener:', mapping.variableName);
+                                        }
+                                    }
+                                }).catch(function() {});
+                            }
+                        });
+                    }
+                } else {
+                    debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
                 }
             }
 
@@ -3523,10 +3980,9 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             }
 
             return qlik.Promise.resolve();
-
             } catch (error) {
                 console.error('ODAG Extension ERROR:', error);
-                $element.html('<div style="padding: 20px; color: red;">Error: ' + error.message + '</div>');
+                DOM.setHTML(element, '<div style="padding: 20px; color: red;">Error: ' + error.message + '</div>');
                 return qlik.Promise.reject(error);
             }
         },
@@ -3550,7 +4006,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
             // Remove any document-level event listeners
             const clickHandlerKey = 'clickHandler_' + extensionId;
             if (window[clickHandlerKey]) {
-                $(document).off('click', window[clickHandlerKey]);
+                DOM.off('click', window[clickHandlerKey]);
                 delete window[clickHandlerKey];
             }
 
@@ -3590,7 +4046,7 @@ function(qlik, $, properties, ApiService, StateManager, CONSTANTS, Validators, E
 
             // Remove DOM element content
             if ($element) {
-                $element.empty();
+                DOM.empty(element);
             }
         }
     };

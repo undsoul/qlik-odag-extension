@@ -2,7 +2,7 @@
  * ODAG State Manager
  * Manages extension state without polluting global window namespace
  *
- * @version 6.0.0
+ * @version 8.0.0
  */
 
 define([], function() {
@@ -11,7 +11,7 @@ define([], function() {
     /**
      * State Manager
      * Replaces window[dynamicKey] pattern with proper state management
-     * v6: Enhanced with timers, observers, and better cleanup
+     * v8: Already vanilla JS - no jQuery dependency, uses ES6 Map/Array
      */
     const ODAGStateManager = {
 
@@ -44,16 +44,46 @@ define([], function() {
          * @param {string} extensionId - Extension instance ID (layout.qInfo.qId)
          * @param {string} key - State key
          * @param {any} defaultValue - Default value if not found
+         * @param {string} customStorageKey - Optional custom storage key for sessionStorage (for persistent keys)
          * @returns {any} State value
          */
-        get: function(extensionId, key, defaultValue) {
+        get: function(extensionId, key, defaultValue, customStorageKey) {
             if (!this._states.has(extensionId)) {
-                return defaultValue;
+                this._states.set(extensionId, new Map());
             }
 
             const instanceState = this._states.get(extensionId);
-            return instanceState.has(key) ? instanceState.get(key) : defaultValue;
+
+            // If key exists in memory, return it
+            if (instanceState.has(key)) {
+                return instanceState.get(key);
+            }
+
+            // If this is a persistent key, try loading from sessionStorage
+            if (this._persistentKeys.includes(key)) {
+                try {
+                    // Use custom storage key if provided, otherwise use extensionId
+                    const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
+                    const storedValue = sessionStorage.getItem(storageKey);
+                    if (storedValue !== null) {
+                        const parsed = JSON.parse(storedValue);
+                        // Store in memory for future access
+                        instanceState.set(key, parsed);
+                        console.log('[ODAG StateManager] Loaded ' + key + ' from sessionStorage with key:', storageKey);
+                        return parsed;
+                    }
+                } catch (e) {
+                    console.warn('[ODAG StateManager] Failed to load state from sessionStorage:', e);
+                }
+            }
+
+            return defaultValue;
         },
+
+        /**
+         * Keys that should persist across browser refreshes
+         */
+        _persistentKeys: ['lastGeneratedPayload', 'currentBindSelections'],
 
         /**
          * Set state value for extension instance
@@ -61,14 +91,27 @@ define([], function() {
          * @param {string} key - State key
          * @param {any} value - State value
          * @param {boolean} silent - Don't notify observers if true
+         * @param {string} customStorageKey - Optional custom storage key for sessionStorage (for persistent keys)
          */
-        set: function(extensionId, key, value, silent) {
+        set: function(extensionId, key, value, silent, customStorageKey) {
             if (!this._states.has(extensionId)) {
                 this._states.set(extensionId, new Map());
             }
 
             const oldValue = this._states.get(extensionId).get(key);
             this._states.get(extensionId).set(key, value);
+
+            // Persist to sessionStorage if this is a persistent key
+            if (this._persistentKeys.includes(key)) {
+                try {
+                    // Use custom storage key if provided, otherwise use extensionId
+                    const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
+                    sessionStorage.setItem(storageKey, JSON.stringify(value));
+                    console.log('[ODAG StateManager] Persisted ' + key + ' to sessionStorage with key:', storageKey);
+                } catch (e) {
+                    console.warn('[ODAG StateManager] Failed to persist state to sessionStorage:', e);
+                }
+            }
 
             // Notify observers if not silent
             if (!silent) {
@@ -94,9 +137,22 @@ define([], function() {
          * Delete specific state key
          * @param {string} extensionId - Extension instance ID
          * @param {string} key - State key
+         * @param {string} customStorageKey - Optional custom storage key for sessionStorage (for persistent keys)
          * @returns {boolean} True if deleted
          */
-        delete: function(extensionId, key) {
+        delete: function(extensionId, key, customStorageKey) {
+            // Remove from sessionStorage if persistent key
+            if (this._persistentKeys.includes(key)) {
+                try {
+                    // Use custom storage key if provided, otherwise use extensionId
+                    const storageKey = customStorageKey || ('odagState_' + extensionId + '_' + key);
+                    sessionStorage.removeItem(storageKey);
+                    console.log('[ODAG StateManager] Removed ' + key + ' from sessionStorage with key:', storageKey);
+                } catch (e) {
+                    console.warn('[ODAG StateManager] Failed to remove state from sessionStorage:', e);
+                }
+            }
+
             if (!this._states.has(extensionId)) {
                 return false;
             }
@@ -143,6 +199,17 @@ define([], function() {
             if (this._observers.has(extensionId)) {
                 this._observers.delete(extensionId);
             }
+
+            // Remove persistent keys from sessionStorage
+            const self = this;
+            this._persistentKeys.forEach(function(key) {
+                try {
+                    const storageKey = 'odagState_' + extensionId + '_' + key;
+                    sessionStorage.removeItem(storageKey);
+                } catch (e) {
+                    console.warn('[ODAG StateManager] Failed to cleanup sessionStorage:', e);
+                }
+            });
 
             // Remove state
             if (this._states.has(extensionId)) {
