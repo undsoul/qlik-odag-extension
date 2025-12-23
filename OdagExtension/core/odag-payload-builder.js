@@ -147,6 +147,18 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
         },
 
         /**
+         * Create a hash of selection content for comparison
+         * @param {Object} selectionLayout - Selection layout from Enigma
+         * @returns {string} Hash string representing selection content
+         */
+        _createSelectionHash: function(selectionLayout) {
+            const selections = selectionLayout?.qSelectionObject?.qSelections || [];
+            // Create hash from field names + their qSelected values (fast, no API calls)
+            const hashParts = selections.map(s => s.qField + ':' + (s.qSelectedCount || 0) + ':' + (s.qSelected || '')).sort();
+            return hashParts.join('|');
+        },
+
+        /**
          * Get current selections from app
          * @param {Object} app - Qlik app object
          * @param {Function} debugLog - Debug logging function
@@ -163,11 +175,15 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                 debugLog('🔄 Forcing engine sync before getting selections...');
 
                 // Step 1: Wait for pending selection commands to be sent to engine
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // Increased from 100ms to 200ms for better engine sync
+                await new Promise(resolve => setTimeout(resolve, 200));
 
-                // Step 2: Force engine sync with getAppLayout()
+                // Step 2: Force MULTIPLE engine syncs with getAppLayout()
+                // This more aggressively flushes the engine's internal state
                 await enigmaApp.getAppLayout();
-                debugLog('✅ Initial engine sync complete');
+                await new Promise(resolve => setTimeout(resolve, 50));
+                await enigmaApp.getAppLayout();
+                debugLog('✅ Initial engine sync complete (double getAppLayout)');
 
                 // Create a fresh session object to get current selections
                 const selectionObj = await enigmaApp.createSessionObject({
@@ -175,29 +191,34 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                     qSelectionObjectDef: {}
                 });
 
-                // STABILITY CHECK: Get layout multiple times until stable
-                // This ensures the engine has finished processing all selection changes
+                // ENHANCED STABILITY CHECK: Compare selection CONTENT hash, not just count
+                // This catches cases where the count stays the same but content should change
                 let selectionLayout = null;
-                let previousSelectionCount = -1;
+                let previousHash = '';
                 let stableCount = 0;
-                const maxAttempts = 5;
-                const stabilityThreshold = 2; // Need 2 consecutive same results
+                const maxAttempts = 8;  // Increased from 5 to 8
+                const stabilityThreshold = 3; // Increased from 2 to 3 for more confidence
 
                 for (let attempt = 0; attempt < maxAttempts && stableCount < stabilityThreshold; attempt++) {
-                    await new Promise(resolve => setTimeout(resolve, 50));
+                    // Wait between reads - engine needs time to process
+                    await new Promise(resolve => setTimeout(resolve, 75));
+
+                    // Force engine sync before each read
+                    await enigmaApp.getAppLayout();
+
                     selectionLayout = await selectionObj.getLayout();
+                    const currentHash = this._createSelectionHash(selectionLayout);
 
-                    const currentCount = selectionLayout.qSelectionObject?.qSelections?.length || 0;
-
-                    if (currentCount === previousSelectionCount) {
+                    if (currentHash === previousHash) {
                         stableCount++;
                         debugLog('🔄 Selection stable check:', stableCount, '/', stabilityThreshold);
                     } else {
                         stableCount = 1; // Reset, but count this as first stable reading
-                        debugLog('🔄 Selection count changed:', previousSelectionCount, '->', currentCount);
+                        const currentCount = selectionLayout.qSelectionObject?.qSelections?.length || 0;
+                        debugLog('🔄 Selection content changed (attempt', attempt + 1, ') - fields:', currentCount);
                     }
 
-                    previousSelectionCount = currentCount;
+                    previousHash = currentHash;
                 }
 
                 debugLog('✅ Selection state stabilized after', stableCount, 'consistent readings');
