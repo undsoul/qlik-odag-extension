@@ -163,15 +163,11 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                 debugLog('🔄 Forcing engine sync before getting selections...');
 
                 // Step 1: Wait for pending selection commands to be sent to engine
-                // A zero-delay timeout is NOT enough - need actual time for websocket messages
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                // Step 2: First getAppLayout() - ensures engine processes any pending commands
+                // Step 2: Force engine sync with getAppLayout()
                 await enigmaApp.getAppLayout();
-
-                // Step 3: Second getAppLayout() - double-check sync after first round-trip
-                await enigmaApp.getAppLayout();
-                debugLog('✅ Engine sync complete (double getAppLayout)');
+                debugLog('✅ Initial engine sync complete');
 
                 // Create a fresh session object to get current selections
                 const selectionObj = await enigmaApp.createSessionObject({
@@ -179,10 +175,32 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                     qSelectionObjectDef: {}
                 });
 
-                // Wait briefly for the SelectionObject to be populated with current state
-                await new Promise(resolve => setTimeout(resolve, 50));
+                // STABILITY CHECK: Get layout multiple times until stable
+                // This ensures the engine has finished processing all selection changes
+                let selectionLayout = null;
+                let previousSelectionCount = -1;
+                let stableCount = 0;
+                const maxAttempts = 5;
+                const stabilityThreshold = 2; // Need 2 consecutive same results
 
-                const selectionLayout = await selectionObj.getLayout();
+                for (let attempt = 0; attempt < maxAttempts && stableCount < stabilityThreshold; attempt++) {
+                    await new Promise(resolve => setTimeout(resolve, 50));
+                    selectionLayout = await selectionObj.getLayout();
+
+                    const currentCount = selectionLayout.qSelectionObject?.qSelections?.length || 0;
+
+                    if (currentCount === previousSelectionCount) {
+                        stableCount++;
+                        debugLog('🔄 Selection stable check:', stableCount, '/', stabilityThreshold);
+                    } else {
+                        stableCount = 1; // Reset, but count this as first stable reading
+                        debugLog('🔄 Selection count changed:', previousSelectionCount, '->', currentCount);
+                    }
+
+                    previousSelectionCount = currentCount;
+                }
+
+                debugLog('✅ Selection state stabilized after', stableCount, 'consistent readings');
 
                 // Clean up session object immediately
                 await enigmaApp.destroySessionObject(selectionObj.id);
