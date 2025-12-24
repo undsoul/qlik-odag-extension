@@ -157,16 +157,10 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
         getFieldSelectedValues: async function(enigmaApp, fieldName, debugLog) {
             try {
                 // Create a fresh ListObject to query THIS SPECIFIC field's current state
-                // Using qAutoSortByState to force engine to recalculate selection state
                 const listObj = await enigmaApp.createSessionObject({
-                    qInfo: { qType: 'FieldSel_' + fieldName + '_' + Date.now() }, // Unique per field+time
+                    qInfo: { qType: 'FieldSel' },
                     qListObjectDef: {
-                        qDef: {
-                            qFieldDefs: [fieldName],
-                            qSortCriterias: [{ qSortByState: 1 }] // Sort by state forces state recalculation
-                        },
-                        qAutoSortByState: { qDisplayNumberOfRows: 1 }, // Force selected values first
-                        qShowAlternatives: true, // Include alternative values
+                        qDef: { qFieldDefs: [fieldName] },
                         qInitialDataFetch: [{
                             qTop: 0,
                             qLeft: 0,
@@ -176,9 +170,6 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                     }
                 });
 
-                // Force a layout invalidation by getting layout twice
-                await listObj.getLayout();
-                await new Promise(resolve => setTimeout(resolve, 20));
                 const layout = await listObj.getLayout();
                 const values = [];
                 let hasSelection = false;
@@ -236,34 +227,10 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
             try {
                 const enigmaApp = app.model.enigmaModel;
 
-                debugLog('🔄 Getting FRESH selections via direct field queries...');
+                debugLog('🔄 Getting selections via direct field queries...');
 
-                // AGGRESSIVE ENGINE SYNC SEQUENCE
-                // The problem is that getAppLayout() doesn't always ensure selection state is current
-
-                // Step 1: Wait for UI to send selection command to engine
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-                // Step 2: Force engine to COMPUTE something - this requires consistent state
-                // evaluate() forces the engine to process all pending operations first
-                try {
-                    await enigmaApp.evaluate('=1');
-                    debugLog('✅ Engine evaluate() sync complete');
-                } catch (e) {
-                    debugLog('⚠️ evaluate() failed, using getAppLayout fallback');
-                    await enigmaApp.getAppLayout();
-                }
-
-                // Step 3: Additional wait after sync
-                await new Promise(resolve => setTimeout(resolve, 50));
-
-                // Step 4: Get app layout to ensure we have latest state
+                // Quick engine sync - fresh app reference from qlik.currApp() should have current state
                 await enigmaApp.getAppLayout();
-
-                // Step 5: One more wait to let WebSocket messages settle
-                await new Promise(resolve => setTimeout(resolve, 50));
-
-                debugLog('✅ Aggressive engine sync complete');
 
                 const selections = [];
 
