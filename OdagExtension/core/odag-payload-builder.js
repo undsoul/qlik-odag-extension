@@ -482,11 +482,22 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
          */
         buildPayload: async function(app, odagConfig, layout, debugLog) {
             const self = this;
-            const enigmaApp = app.model.enigmaModel;
+
+            // CRITICAL: Get a FRESH app reference to avoid stale enigmaModel
+            // The passed 'app' object might have a cached/stale enigmaModel
+            let freshApp = app;
+            try {
+                freshApp = qlik.currApp();
+                debugLog('✅ Got fresh app reference via qlik.currApp()');
+            } catch (e) {
+                debugLog('⚠️ Could not get fresh app, using passed app:', e.message);
+            }
+
+            const enigmaApp = freshApp.model.enigmaModel;
             const appLayout = await enigmaApp.getAppLayout();
 
             // Always use the current app ID
-            let appId = app.id;
+            let appId = freshApp.id || app.id;
             if (!appId) {
                 // Fallback: try to get from URL if app.id is not available
                 const pathMatch = window.location.pathname.match(/\/app\/([^\/]+)/);
@@ -531,8 +542,9 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
             }
 
             // Pass binding field names to getCurrentSelections for DIRECT field queries
-            const currentSelections = await self.getCurrentSelections(app, bindingFieldNames, debugLog);
-            const variableSelections = await self.getVariableValues(app, odagConfig.variableMappings || []);
+            // Use freshApp for getting selections to ensure we get current state
+            const currentSelections = await self.getCurrentSelections(freshApp, bindingFieldNames, debugLog);
+            const variableSelections = await self.getVariableValues(freshApp, odagConfig.variableMappings || []);
 
             // Create map of actually selected fields
             const selectionMap = new Map();
@@ -680,7 +692,7 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
             }
 
             // Calculate row estimation based on ODAG link configuration
-            const rowEstResult = await self.calculateRowEstimation(app, odagConfig.odagLinkId, debugLog);
+            const rowEstResult = await self.calculateRowEstimation(freshApp, odagConfig.odagLinkId, debugLog);
 
             const payload = {
                 clientContextHandle: self.generateContextHandle(),
