@@ -256,8 +256,6 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
                         qSelectionObjectDef: {}
                     });
 
-                    // Wait and get layout
-                    await new Promise(resolve => setTimeout(resolve, 100));
                     const selectionLayout = await selectionObj.getLayout();
 
                     if (selectionLayout.qSelectionObject?.qSelections) {

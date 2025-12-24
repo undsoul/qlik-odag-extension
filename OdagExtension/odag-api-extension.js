@@ -1618,12 +1618,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             requestIds: oldRequestIds
                         });
 
-                        // CRITICAL: Wait for Qlik to fully process any pending selection changes
-                        // This ensures we capture the LATEST selections, not stale cached data
-                        debugLog('⏳ Waiting 1.5 seconds for Qlik to process pending selections...');
-                        await new Promise(resolve => setTimeout(resolve, 1500));
-
-                        // Build payload with current selections
+                        // Build payload with current selections (fresh app reference ensures current state)
                         const buildResult = await buildPayload(app, odagConfig, layout);
                         const payload = buildResult.payload;
                         const rowEstResult = buildResult.rowEstResult;
