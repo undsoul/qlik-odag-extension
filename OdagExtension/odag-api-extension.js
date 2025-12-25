@@ -72,8 +72,115 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 enableDebug: true
             }
         },
-        
+
+        /**
+         * Setup real-time selection subscriptions for binding fields
+         * This works like a chart - each field gets a persistent ListObject subscription
+         * that automatically updates when selections change
+         * @param {Object} app - Qlik app object
+         * @param {Array} bindings - ODAG binding fields
+         * @param {string} odagLinkId - ODAG link ID for cache key
+         * @param {Function} debugLog - Debug logging function
+         */
+        _setupSelectionSubscriptions: function(app, bindings, odagLinkId, debugLog) {
+            const subscriptionKey = 'odagSelectionSubscriptions_' + odagLinkId;
+            const cacheKey = 'odagSelectionCache_' + odagLinkId;
+
+            // Don't create duplicate subscriptions
+            if (window[subscriptionKey]) {
+                debugLog('📡 Selection subscriptions already active for', odagLinkId);
+                return;
+            }
+
+            debugLog('📡 Setting up real-time selection subscriptions for', bindings.length, 'binding fields');
+
+            // Initialize cache
+            window[cacheKey] = {};
+            window[subscriptionKey] = [];
+
+            const enigmaApp = app.model.enigmaModel;
+
+            bindings.forEach(function(binding) {
+                const fieldName = binding.selectAppParamName || binding.selectionAppParamName || binding.fieldName || binding.name;
+                if (!fieldName) return;
+
+                debugLog('📡 Creating subscription for field:', fieldName);
+
+                // Create a persistent session object for this field
+                enigmaApp.createSessionObject({
+                    qInfo: { qType: 'OdagFieldSubscription_' + fieldName.replace(/\s+/g, '_') },
+                    qListObjectDef: {
+                        qDef: { qFieldDefs: [fieldName] },
+                        qAutoSortByState: { qDisplayNumberOfRows: -1 },
+                        qInitialDataFetch: [{
+                            qTop: 0,
+                            qLeft: 0,
+                            qWidth: 1,
+                            qHeight: 10000
+                        }]
+                    }
+                }).then(function(listObj) {
+                    // Store reference to prevent garbage collection
+                    window[subscriptionKey].push({ fieldName: fieldName, obj: listObj });
+
+                    // Initial fetch
+                    listObj.getLayout().then(function(layout) {
+                        updateFieldCache(fieldName, layout);
+                    });
+
+                    // Subscribe to changes - this is the KEY part!
+                    // When selection changes, Qlik automatically invalidates and calls this
+                    listObj.on('changed', function() {
+                        debugLog('📡 [SUBSCRIPTION] Field changed:', fieldName);
+                        listObj.getLayout().then(function(layout) {
+                            updateFieldCache(fieldName, layout);
+                        });
+                    });
+
+                    debugLog('✅ Subscription active for field:', fieldName);
+                }).catch(function(err) {
+                    debugLog('⚠️ Failed to create subscription for field:', fieldName, err.message);
+                });
+            });
+
+            // Helper function to update cache from ListObject layout
+            function updateFieldCache(fieldName, layout) {
+                const values = [];
+                if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
+                    const dataPage = layout.qListObject.qDataPages[0];
+                    dataPage.qMatrix.forEach(function(row) {
+                        const cell = row[0];
+                        if (cell && cell.qState === 'S') {
+                            values.push({
+                                selStatus: 'S',
+                                strValue: cell.qText,
+                                numValue: isNaN(cell.qNum) ? 'NaN' : cell.qNum.toString()
+                            });
+                        }
+                    });
+                }
+
+                window[cacheKey][fieldName] = {
+                    values: values,
+                    hasSelection: values.length > 0,
+                    timestamp: Date.now()
+                };
+
+                debugLog('📡 [CACHE] Updated', fieldName, ':', values.length, 'selected values');
+            }
+        },
+
+        /**
+         * Get cached selections for all binding fields
+         * @param {string} odagLinkId - ODAG link ID
+         * @returns {Object} Cache object with field selections
+         */
+        _getCachedSelections: function(odagLinkId) {
+            return window['odagSelectionCache_' + odagLinkId] || {};
+        },
+
         paint: function($element, layout) {
+            const extension = this; // Reference to extension object for helper methods
             try {
             // Convert jQuery element to vanilla DOM element
             const element = $element[0];
@@ -384,6 +491,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 debugLog('🔄 JUST EXITED EDIT MODE → FETCHING FRESH API DATA FROM SERVER');
             } else if (window[bindingsCacheKey]) {
                 debugLog('📦 Using cached bindings (already fetched)');
+                // Setup subscriptions for cached bindings too (might be missing after page reload)
+                extension._setupSelectionSubscriptions(app, window[bindingsCacheKey], odagConfig.odagLinkId, debugLog);
             }
 
             if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey] && !isEditMode) {
@@ -470,6 +579,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             debugLog('✅ [PAINT] Cloud bindings cached:', bindings.length, 'bindings');
                             debugLog('✅ [PAINT] Cloud bindings array:', JSON.stringify(bindings, null, 2));
                             debugLog('✅ [PAINT] Row estimation config:', window[rowEstCacheKey]);
+
+                            // Setup real-time selection subscriptions (chart-like behavior)
+                            extension._setupSelectionSubscriptions(app, bindings, odagConfig.odagLinkId, debugLog);
 
                             // Extract field names and store in layout for properties panel display
                             const fieldNames = bindings.map(function(b) {
@@ -593,6 +705,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     source: curRowEstHighBound ? 'found' : 'NOT FOUND - check ODAG Link configuration in QMC'
                                 });
                             }
+
+                            // Setup real-time selection subscriptions (chart-like behavior)
+                            extension._setupSelectionSubscriptions(app, bindings, odagConfig.odagLinkId, debugLog);
 
                             // Extract field names and store in layout for properties panel display
                             const fieldNames = bindings.map(function(b) {

@@ -490,25 +490,51 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
 
             debugLog('Building payload - cached bindings:', cachedBindings ? cachedBindings.length + ' fields' : 'none');
 
-            // Extract binding field names FIRST so we can query them directly
-            // This bypasses SelectionObject caching issues
-            const bindingFieldNames = [];
-            if (cachedBindings && cachedBindings.length > 0) {
-                for (const binding of cachedBindings) {
-                    const fieldName = binding.selectAppParamName ||
-                                    binding.selectionAppParamName ||
-                                    binding.fieldName ||
-                                    binding.name;
-                    if (fieldName) {
-                        bindingFieldNames.push(fieldName);
+            // CHECK SUBSCRIPTION CACHE FIRST - this is the chart-like approach
+            // Subscriptions auto-update when selections change, so cache is always current
+            const selectionCacheKey = 'odagSelectionCache_' + odagConfig.odagLinkId;
+            const selectionCache = window[selectionCacheKey];
+
+            let currentSelections = [];
+
+            if (selectionCache && Object.keys(selectionCache).length > 0) {
+                // USE CACHED SELECTIONS - no engine query needed!
+                debugLog('📡 Using CACHED selections from subscription (no engine query)');
+
+                for (const fieldName in selectionCache) {
+                    const cached = selectionCache[fieldName];
+                    if (cached.hasSelection && cached.values && cached.values.length > 0) {
+                        currentSelections.push({
+                            selectionAppParamType: 'Field',
+                            selectionAppParamName: fieldName,
+                            values: cached.values,
+                            selectedSize: cached.values.length
+                        });
+                        debugLog('📡 From cache:', fieldName, '-', cached.values.length, 'values');
                     }
                 }
-                debugLog('📋 Will query', bindingFieldNames.length, 'binding fields directly');
+
+                debugLog('✅ Got', currentSelections.length, 'selections from cache');
+            } else {
+                // FALLBACK: Query engine if no cache (first load before subscriptions ready)
+                debugLog('⚠️ No selection cache - falling back to engine query');
+
+                const bindingFieldNames = [];
+                if (cachedBindings && cachedBindings.length > 0) {
+                    for (const binding of cachedBindings) {
+                        const fieldName = binding.selectAppParamName ||
+                                        binding.selectionAppParamName ||
+                                        binding.fieldName ||
+                                        binding.name;
+                        if (fieldName) {
+                            bindingFieldNames.push(fieldName);
+                        }
+                    }
+                }
+
+                currentSelections = await self.getCurrentSelections(freshApp, bindingFieldNames, debugLog);
             }
 
-            // Pass binding field names to getCurrentSelections for DIRECT field queries
-            // Use freshApp for getting selections to ensure we get current state
-            const currentSelections = await self.getCurrentSelections(freshApp, bindingFieldNames, debugLog);
             const variableSelections = await self.getVariableValues(freshApp, odagConfig.variableMappings || []);
 
             // Create map of actually selected fields
