@@ -46,44 +46,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             });
     }
 
-    return {
-        definition: properties,
-        initialProperties: {
-            qHyperCubeDef: {
-                qDimensions: [],
-                qMeasures: [],
-                qInitialDataFetch: [{
-                    qWidth: 10,
-                    qHeight: 50
-                }]
-            },
-            odagConfig: {
-                odagLinkId: "",
-                variableMappings: [],
-                buttonText: "Generate ODAG App",
-                buttonColor: "#009845",
-                buttonTextColor: "#ffffff",
-                includeCurrentSelections: true,
-                viewMode: "odagApp",
-                templateSheetId: "",
-                embedMode: "classic/app",
-                allowInteractions: true,
-                autoRefreshOnSelectionChange: true,
-                showAppsList: true,
-                enableDebug: true
-            }
-        },
-
-        /**
-         * Setup real-time selection subscriptions for binding fields
-         * This works like a chart - each field gets a persistent ListObject subscription
-         * that automatically updates when selections change
-         * @param {Object} app - Qlik app object
-         * @param {Array} bindings - ODAG binding fields
-         * @param {string} odagLinkId - ODAG link ID for cache key
-         * @param {Function} debugLog - Debug logging function
-         */
-        _setupSelectionSubscriptions: function(app, bindings, odagLinkId, debugLog) {
+    /**
+     * Setup real-time selection subscriptions for binding fields
+     * This works like a chart - each field gets a persistent ListObject subscription
+     * that automatically updates when selections change
+     * @param {Object} app - Qlik app object
+     * @param {Array} bindings - ODAG binding fields
+     * @param {string} odagLinkId - ODAG link ID for cache key
+     * @param {Function} debugLog - Debug logging function
+     */
+    function setupSelectionSubscriptions(app, bindings, odagLinkId, debugLog) {
             const subscriptionKey = 'odagSelectionSubscriptions_' + odagLinkId;
             const cacheKey = 'odagSelectionCache_' + odagLinkId;
 
@@ -169,19 +141,46 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 debugLog('📡 [CACHE] Updated', fieldName, ':', values.length, 'selected values');
             }
-        },
+    }
 
-        /**
-         * Get cached selections for all binding fields
-         * @param {string} odagLinkId - ODAG link ID
-         * @returns {Object} Cache object with field selections
-         */
-        _getCachedSelections: function(odagLinkId) {
-            return window['odagSelectionCache_' + odagLinkId] || {};
+    /**
+     * Get cached selections for all binding fields
+     * @param {string} odagLinkId - ODAG link ID
+     * @returns {Object} Cache object with field selections
+     */
+    function getCachedSelections(odagLinkId) {
+        return window['odagSelectionCache_' + odagLinkId] || {};
+    }
+
+    return {
+        definition: properties,
+        initialProperties: {
+            qHyperCubeDef: {
+                qDimensions: [],
+                qMeasures: [],
+                qInitialDataFetch: [{
+                    qWidth: 10,
+                    qHeight: 50
+                }]
+            },
+            odagConfig: {
+                odagLinkId: "",
+                variableMappings: [],
+                buttonText: "Generate ODAG App",
+                buttonColor: "#009845",
+                buttonTextColor: "#ffffff",
+                includeCurrentSelections: true,
+                viewMode: "odagApp",
+                templateSheetId: "",
+                embedMode: "classic/app",
+                allowInteractions: true,
+                autoRefreshOnSelectionChange: true,
+                showAppsList: true,
+                enableDebug: true
+            }
         },
 
         paint: function($element, layout) {
-            const extension = this; // Reference to extension object for helper methods
             try {
             // Convert jQuery element to vanilla DOM element
             const element = $element[0];
@@ -493,7 +492,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             } else if (window[bindingsCacheKey]) {
                 debugLog('📦 Using cached bindings (already fetched)');
                 // Setup subscriptions for cached bindings too (might be missing after page reload)
-                extension._setupSelectionSubscriptions(app, window[bindingsCacheKey], odagConfig.odagLinkId, debugLog);
+                setupSelectionSubscriptions(app, window[bindingsCacheKey], odagConfig.odagLinkId, debugLog);
             }
 
             if (isCloud && odagConfig.odagLinkId && !window[bindingsCacheKey] && !window[bindingsFetchingKey] && !isEditMode) {
@@ -582,7 +581,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             debugLog('✅ [PAINT] Row estimation config:', window[rowEstCacheKey]);
 
                             // Setup real-time selection subscriptions (chart-like behavior)
-                            extension._setupSelectionSubscriptions(app, bindings, odagConfig.odagLinkId, debugLog);
+                            setupSelectionSubscriptions(app, bindings, odagConfig.odagLinkId, debugLog);
 
                             // Extract field names and store in layout for properties panel display
                             const fieldNames = bindings.map(function(b) {
@@ -708,7 +707,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             }
 
                             // Setup real-time selection subscriptions (chart-like behavior)
-                            extension._setupSelectionSubscriptions(app, bindings, odagConfig.odagLinkId, debugLog);
+                            setupSelectionSubscriptions(app, bindings, odagConfig.odagLinkId, debugLog);
 
                             // Extract field names and store in layout for properties panel display
                             const fieldNames = bindings.map(function(b) {
