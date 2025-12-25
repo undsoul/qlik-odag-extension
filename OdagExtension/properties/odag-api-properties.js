@@ -493,6 +493,15 @@ define([], function() {
                         ref: "odagConfig.allowInteractions",
                         label: "Allow Interactions",
                         defaultValue: true
+                    },
+                    autoRefreshOnSelectionChange: {
+                        type: "boolean",
+                        ref: "odagConfig.autoRefreshOnSelectionChange",
+                        label: "Auto Refresh on Selection Change",
+                        defaultValue: true,
+                        show: function(layout) {
+                            return layout.odagConfig && layout.odagConfig.viewMode === 'dynamicView';
+                        }
                     }
                 }
             },

@@ -68,6 +68,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 templateSheetId: "",
                 embedMode: "classic/app",
                 allowInteractions: true,
+                autoRefreshOnSelectionChange: true,
                 showAppsList: true,
                 enableDebug: true
             }
@@ -2519,7 +2520,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 let isSavingSelections = false; // Flag to prevent concurrent saves
                 let pendingCheck = false; // Flag to queue another check after current one completes
                 let selectionDebounceTimer = null;
+                let autoRefreshDebounceTimer = null; // Debounce for auto-generation
                 const SELECTION_DEBOUNCE_MS = 300; // Wait 300ms for UI update (reduced from 500ms)
+                const AUTO_REFRESH_DEBOUNCE_MS = 1500; // Wait 1.5s for auto-regeneration (let user finish selecting)
 
                 // IMMEDIATE save function - saves current selections to sessionStorage right away
                 // This ensures selections are captured even if user navigates immediately
@@ -2646,10 +2649,44 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             // State changed - highlight refresh button
                             DOM.addClass('needs-refresh');
 
-                            // Show top bar with warning (always show when state changes)
-                            debugLog('🔔 State changed (binding selections or variables) - showing top bar with refresh warning');
-                            topBarManuallyClosed = false; // Reset flag
-                            showTopBar(false, true); // Show without auto-hide, force show for warning
+                            // AUTO-REFRESH: Debounce and trigger generation automatically (if enabled)
+                            // This makes it work like a chart - selections change, content updates
+                            const autoRefreshEnabled = odagConfig.autoRefreshOnSelectionChange !== false; // Default true
+
+                            if (autoRefreshEnabled) {
+                                if (autoRefreshDebounceTimer) {
+                                    clearTimeout(autoRefreshDebounceTimer);
+                                }
+
+                                debugLog('🔄 Selections changed - scheduling auto-refresh in', AUTO_REFRESH_DEBOUNCE_MS, 'ms');
+                                autoRefreshDebounceTimer = CleanupManager.addTimeout(setTimeout(function() {
+                                    autoRefreshDebounceTimer = null;
+
+                                    // Double-check we're not already generating
+                                    if (isGenerating) {
+                                        debugLog('⏭️ Auto-refresh skipped - already generating');
+                                        return;
+                                    }
+
+                                    debugLog('🚀 AUTO-REFRESH: Triggering ODAG generation due to selection change');
+
+                                    // Blur the current embed to indicate refresh
+                                    const embedContainer = getDynamicEmbedContainer();
+                                    if (embedContainer) {
+                                        embedContainer.style.filter = 'blur(3px)';
+                                        embedContainer.style.pointerEvents = 'none';
+                                        embedContainer.style.opacity = '0.6';
+                                    }
+
+                                    // Trigger generation
+                                    generateNewODAGApp();
+                                }, AUTO_REFRESH_DEBOUNCE_MS));
+                            } else {
+                                // Auto-refresh disabled - just show warning
+                                debugLog('🔔 State changed - showing top bar with refresh warning (auto-refresh disabled)');
+                                topBarManuallyClosed = false;
+                                showTopBar(false, true);
+                            }
                         } else {
                             // State same - remove highlight
                             DOM.removeClass('needs-refresh');

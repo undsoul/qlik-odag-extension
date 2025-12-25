@@ -493,7 +493,14 @@ define(['jquery', 'qlik', '../foundation/odag-constants'], function($, qlik, CON
             // CHECK SUBSCRIPTION CACHE FIRST - this is the chart-like approach
             // Subscriptions auto-update when selections change, so cache is always current
             const selectionCacheKey = 'odagSelectionCache_' + odagConfig.odagLinkId;
-            const selectionCache = window[selectionCacheKey];
+            let selectionCache = window[selectionCacheKey];
+
+            // If cache is empty, wait briefly for subscriptions to populate it
+            if (!selectionCache || Object.keys(selectionCache).length === 0) {
+                debugLog('⏳ Waiting for subscription cache to populate...');
+                await new Promise(resolve => setTimeout(resolve, 500));
+                selectionCache = window[selectionCacheKey];
+            }
 
             let currentSelections = [];
 
