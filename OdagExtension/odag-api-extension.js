@@ -1618,13 +1618,38 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             requestIds: oldRequestIds
                         });
 
-                        // Build payload with current selections (fresh app reference ensures current state)
-                        const buildResult = await buildPayload(app, odagConfig, layout);
-                        const payload = buildResult.payload;
-                        const rowEstResult = buildResult.rowEstResult;
+                        // Check if we have stored selections from page navigation
+                        // These are more reliable than querying the engine after page change
+                        const storedSelections = StateManager.get(extensionId, 'currentBindSelections', null, currentSelectionsKey);
 
-                        // Also get current variable values to store for change detection
-                        const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+                        let payload, rowEstResult, currentVariableValues;
+
+                        if (storedSelections && storedSelections.bindSelections) {
+                            debugLog('📦 Using STORED selections from sessionStorage (more reliable after page navigation)');
+
+                            // Use stored selections directly - these were captured when user made the selection
+                            const buildResult = await buildPayload(app, odagConfig, layout);
+                            rowEstResult = buildResult.rowEstResult;
+
+                            // Override bindSelectionState with stored selections
+                            payload = {
+                                ...buildResult.payload,
+                                bindSelectionState: storedSelections.bindSelections,
+                                selectionState: storedSelections.bindSelections.filter(s => s.values && s.values.length > 0)
+                            };
+
+                            currentVariableValues = storedSelections.variables || [];
+                            debugLog('✅ Payload built using stored selections');
+                        } else {
+                            debugLog('🔄 No stored selections - querying engine directly');
+                            // Build payload with current selections (fresh app reference ensures current state)
+                            const buildResult = await buildPayload(app, odagConfig, layout);
+                            payload = buildResult.payload;
+                            rowEstResult = buildResult.rowEstResult;
+
+                            // Also get current variable values to store for change detection
+                            currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+                        }
 
                         // CRITICAL VALIDATION: Check binding fields BEFORE sending to API (same as compact view)
                         const cachedBindings = window['odagBindings_' + odagConfig.odagLinkId];
