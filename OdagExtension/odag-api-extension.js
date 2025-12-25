@@ -1672,6 +1672,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }
 
                     isGenerating = true;
+
+                    // CRITICAL: Cancel any pending auto-refresh to prevent race conditions
+                    if (autoRefreshDebounceTimer) {
+                        clearTimeout(autoRefreshDebounceTimer);
+                        autoRefreshDebounceTimer = null;
+                        debugLog('🛑 Cancelled pending auto-refresh timer');
+                    }
+
                     updateDynamicStatus(
                         getStatusHTML('generating', messages.progress.generatingApp, true)
                     );
@@ -1765,6 +1773,18 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             // Also get current variable values to store for change detection
                             currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
                         }
+
+                        // CRITICAL: Update lastGeneratedPayload IMMEDIATELY after building payload
+                        // This prevents race conditions where multiple checkSelectionsChanged calls
+                        // see hasChanged = true because the baseline wasn't updated yet
+                        const immediatePayloadSnapshot = {
+                            bindSelectionState: payload.bindSelectionState,
+                            selectionState: payload.selectionState,
+                            variableState: currentVariableValues
+                        };
+                        lastGeneratedPayload = immediatePayloadSnapshot;
+                        StateManager.set(extensionId, 'lastGeneratedPayload', immediatePayloadSnapshot, false, stableStorageKey);
+                        debugLog('🔒 Immediately locked lastGeneratedPayload to prevent duplicate generations');
 
                         // CRITICAL VALIDATION: Check binding fields BEFORE sending to API (same as compact view)
                         const cachedBindings = window['odagBindings_' + odagConfig.odagLinkId];
