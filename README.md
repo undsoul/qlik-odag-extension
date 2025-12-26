@@ -2,7 +2,7 @@
 
 A powerful, production-ready Qlik Sense extension for managing On-Demand App Generation (ODAG) with enterprise features including Dynamic View mode, variable mapping, real-time status monitoring, and intelligent app lifecycle management.
 
-[![Version](https://img.shields.io/badge/version-8.0.22-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
+[![Version](https://img.shields.io/badge/version-8.0.35-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
 [![Qlik Cloud](https://img.shields.io/badge/Qlik-Cloud-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![On-Premise](https://img.shields.io/badge/Qlik-On--Premise-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -302,7 +302,8 @@ Specialized mode for always showing the most current data:
 - **Single App Management**: Maintains exactly one latest app
 - **Selection Change Detection**: Visual indicators when selections differ
 - **Variable Change Detection**: Monitors mapped variables for changes
-- **Auto-Refresh**: Pulsing refresh button on state changes
+- **Auto-Refresh on Selection Change**: Automatically regenerates app when selections change (1.5s debounce)
+- **Configurable Auto-Refresh**: Enable/disable via property panel (default: enabled)
 - **Smart Cleanup**: Automatically deletes old app when new one succeeds
 - **Blur Overlay**: Visual feedback during generation
 - **Desktop Only**: Mobile devices automatically use List View
@@ -644,7 +645,14 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Version History
 
-### v8.0.22 (Current)
+### v8.0.35 (Current)
+- 🔄 **Auto-Refresh on Selection Change**: Automatically regenerates ODAG app when selections change (1.5s debounce)
+- ⚙️ **Configurable Auto-Refresh**: New property "Auto Refresh on Selection Change" (default: enabled)
+- 🐛 **Race Condition Fix**: Prevented duplicate generations when making rapid selections
+- 🔒 **Immediate Payload Lock**: Updates baseline immediately after building payload to prevent race conditions
+- 🛑 **Timer Cancellation**: Cancels pending auto-refresh timers when generation starts
+
+### v8.0.22
 - 🚀 **Vanilla JS Migration**: Complete rewrite from jQuery to pure vanilla JavaScript
 - ⚡ **Fast Selection Tracking**: Fixed race condition with quick selections using Enigma API sync
 - 🔧 **DOM Helper**: New utility module replacing jQuery with built-in HTML sanitization
