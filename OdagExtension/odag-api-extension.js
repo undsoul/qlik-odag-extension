@@ -751,11 +751,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
             // Check if extension is large enough for iframe view
             const isLargeView = elementHeight > 400 && elementWidth > 600;
-            // Detect mobile viewport early (width < 768px) for use in initialization logic
+            // Detect mobile viewport (width < 768px) for responsive layout adjustments only
             const isMobile = elementWidth < CONSTANTS.UI.MOBILE_BREAKPOINT_PX;
-            // On mobile, force list view (not dynamic view) and classic/app embed mode
-            const isDynamicView = isMobile ? false : odagConfig.viewMode === 'dynamicView';
-            const effectiveEmbedMode = isMobile ? 'classic/app' : (odagConfig.embedMode || 'classic/app');
+            // Use whatever view mode is configured - no mobile restrictions
+            const isDynamicView = odagConfig.viewMode === 'dynamicView';
+            const effectiveEmbedMode = odagConfig.embedMode || 'classic/app';
 
             debugLog('ODAG Extension: isEditMode =', isEditMode, 'isDynamicView =', isDynamicView, 'isMobile =', isMobile, 'effectiveEmbedMode =', effectiveEmbedMode, 'odagLinkId =', odagConfig.odagLinkId);
 
@@ -1041,12 +1041,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             if (viewportChanged) {
                 debugLog('🔄 Viewport changed (mobile <-> desktop), rebuilding layout');
                 delete window[initKey];
-                // Also clear Dynamic View flags when switching to mobile
-                if (isMobile) {
-                    const dynamicViewKey = 'dynamicView_' + layout.qInfo.qId;
-                    delete window[dynamicViewKey];
-                    debugLog('🔄 Switched to mobile - clearing Dynamic View flags');
-                }
             }
 
             // Store current mode and mobile state for next paint cycle
@@ -3897,8 +3891,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             // Note: configKey and currentConfig already declared at top of paint() for cleanup logic
             const configChanged = previousConfig && previousConfig !== currentConfig;
 
-            // Dynamic View should NEVER run on mobile - double check
-            if (isDynamicView && initDynamicView && !isMobile) {
+            // Initialize Dynamic View if configured
+            if (isDynamicView && initDynamicView) {
                 const initInProgressKey = 'dynamicViewInitInProgress_' + layout.qInfo.qId;
 
                 debugLog('Dynamic View initialization check:', {
@@ -3964,8 +3958,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }
                 }
             } else if (!isDynamicView && window[dynamicViewKey]) {
-                // Clean up flags if switching away from dynamic view (including when switching to mobile)
-                debugLog('🔄 Switching away from Dynamic View (isMobile=' + isMobile + '), clearing flags');
+                // Clean up flags if switching away from dynamic view
+                debugLog('🔄 Switching away from Dynamic View, clearing flags');
                 delete window[dynamicViewKey];
                 delete window[configKey];
             }
