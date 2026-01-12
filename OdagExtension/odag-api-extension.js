@@ -753,13 +753,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             const isLargeView = elementHeight > 400 && elementWidth > 600;
             // Detect mobile viewport (width < 768px) for responsive layout adjustments only
             const isMobile = elementWidth < CONSTANTS.UI.MOBILE_BREAKPOINT_PX;
-            // Get web-integration-id from config (required for qlik-embed in Qlik Cloud)
-            const webIntegrationId = odagConfig.webIntegrationId || '';
             // Use whatever view mode is configured - no mobile restrictions
             const isDynamicView = odagConfig.viewMode === 'dynamicView';
             const effectiveEmbedMode = odagConfig.embedMode || 'classic/app';
 
-            debugLog('ODAG Extension: isEditMode =', isEditMode, 'isDynamicView =', isDynamicView, 'isMobile =', isMobile, 'webIntegrationId =', webIntegrationId || '(not set)', 'effectiveEmbedMode =', effectiveEmbedMode, 'odagLinkId =', odagConfig.odagLinkId);
+            debugLog('ODAG Extension: isEditMode =', isEditMode, 'isDynamicView =', isDynamicView, 'isMobile =', isMobile, 'effectiveEmbedMode =', effectiveEmbedMode, 'odagLinkId =', odagConfig.odagLinkId);
 
             // Check if we're switching TO Dynamic View (even in edit mode)
             // This cleanup happens BEFORE edit mode check so it runs immediately
@@ -2325,10 +2323,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     }
 
                     embedElement += 'host="' + hostName + '" ';
-                    // Add web-integration-id if configured (required for Qlik Cloud)
-                    if (webIntegrationId) {
-                        embedElement += 'web-integration-id="' + webIntegrationId + '" ';
-                    }
                     embedElement += 'no-cache="true" '; // Add no-cache attribute
                     embedElement += 'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
 
@@ -2359,8 +2353,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         appId: appId,
                         appName: appName,
                         sheetId: odagConfig.templateSheetId || 'Full App',
-                        embedKey: embedKey,
-                        webIntegrationId: webIntegrationId || '(not set)'
+                        embedKey: embedKey
                     });
 
                     // Force refresh of the qlik-embed component
@@ -3349,10 +3342,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 }
 
                                 embedElement += 'host="' + hostName + '" ';
-                                // Add web-integration-id if configured (required for Qlik Cloud)
-                                if (webIntegrationId) {
-                                    embedElement += 'web-integration-id="' + webIntegrationId + '" ';
-                                }
                                 embedElement += 'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
 
                                 const context = {
@@ -3375,10 +3364,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 embedElement += 'ui="' + embedMode + '" ';
                                 embedElement += 'app-id="' + embedAppId + '" ';
                                 embedElement += 'host="' + hostName + '" ';
-                                // Add web-integration-id if configured (required for Qlik Cloud)
-                                if (webIntegrationId) {
-                                    embedElement += 'web-integration-id="' + webIntegrationId + '" ';
-                                }
                                 embedElement += 'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
 
                                 // Add context for interactions (no theme - use app default)
@@ -3471,8 +3456,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                             viewMode: viewMode,
                                             sheetId: odagConfig.templateSheetId || 'N/A',
                                             container: iframeContainer ? iframeContainer.id : 'N/A',
-                                            embedKey: embedKey,
-                                            webIntegrationId: webIntegrationId || '(not set)'
+                                            embedKey: embedKey
                                         });
 
                                         const newEmbed = iframeContainer ? DOM.get('qlik-embed', iframeContainer) : null;
@@ -4048,12 +4032,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         'key="' + embedKey + '" ' +
                         'ui="' + embedMode + '" ' +
                         'app-id="' + selectedApp.appId + '" ' +
-                        'host="' + hostName + '" ';
-                    // Add web-integration-id if configured (required for Qlik Cloud)
-                    if (webIntegrationId) {
-                        embedElement += 'web-integration-id="' + webIntegrationId + '" ';
-                    }
-                    embedElement += 'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
+                        'host="' + hostName + '" ' +
+                        'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
 
                     const context = { interactions: { select: allowInteractions, edit: false } };
                     embedElement += "context___json='" + JSON.stringify(context) + "' ";

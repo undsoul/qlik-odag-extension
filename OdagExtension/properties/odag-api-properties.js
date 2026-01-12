@@ -502,27 +502,6 @@ define([], function() {
                         show: function(layout) {
                             return layout.odagConfig && layout.odagConfig.viewMode === 'dynamicView';
                         }
-                    },
-                    webIntegrationId: {
-                        type: "string",
-                        ref: "odagConfig.webIntegrationId",
-                        label: "Web Integration ID (for qlik-embed)",
-                        expression: "optional",
-                        defaultValue: ""
-                    },
-                    webIntegrationIdInfo: {
-                        component: "text",
-                        label: "",
-                        template: function() {
-                            return '<div style="padding: 8px; background: #e0f2fe; border-left: 3px solid #0284c7; border-radius: 4px; color: #0c4a6e; font-size: 11px;">' +
-                                   '<strong>ℹ️ Web Integration ID:</strong><br/>' +
-                                   '• Required for qlik-embed in Qlik Cloud<br/>' +
-                                   '• Get it from Management Console → Web → Create new integration<br/>' +
-                                   '• Add your domain to allowed origins</div>';
-                        },
-                        show: function() {
-                            return window.qlikEnvironment === 'cloud';
-                        }
                     }
                 }
             },
