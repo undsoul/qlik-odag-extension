@@ -2299,49 +2299,103 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         }
                     }
 
-                    // Create qlik-embed element with timestamp to force refresh
-                    let embedElement = '<qlik-embed ';
-                    embedElement += 'key="' + embedKey + '" ';
-                    embedElement += 'data-refresh="' + Date.now() + '" '; // Force refresh attribute
-                    embedElement += 'ui="' + embedMode + '" ';
-                    embedElement += 'app-id="' + appId + '" ';
+                    // Mobile: Use iframe (shares session), Desktop: Use qlik-embed
+                    if (isMobile) {
+                        debugLog('📱 Mobile detected - using iframe instead of qlik-embed');
 
-                    if (hasValidSheetId) {
-                        // On-Premise: Always use sheet-id
-                        // Cloud: analytics/sheet uses object-id, classic/app uses sheet-id
-                        const isCloud = window.qlikEnvironment === 'cloud';
-                        if (embedMode === 'analytics/sheet' && isCloud) {
-                            embedElement += 'object-id="' + sheetId.trim() + '" ';
-                            debugLog('Creating analytics/sheet embed with object-id (Cloud):', sheetId.trim());
-                        } else {
-                            embedElement += 'sheet-id="' + sheetId.trim() + '" ';
-                            debugLog('Creating embed with sheet-id:', sheetId.trim(), 'Mode:', embedMode);
+                        const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                        let appUrl = tenantUrl + '/sense/app/' + appId;
+                        if (hasValidSheetId) {
+                            appUrl += '/sheet/' + sheetId.trim() + '/state/analysis';
                         }
+
+                        const iframeHtml = '<iframe src="' + appUrl + '" ' +
+                            'style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" ' +
+                            'allow="fullscreen" ' +
+                            'sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals">' +
+                            '</iframe>';
+
+                        if (container) DOM.setHTML(container, iframeHtml);
+
+                        // Remove blur overlay
+                        if (container) {
+                            container.style.filter = 'none';
+                            container.style.pointerEvents = 'auto';
+                            container.style.opacity = '1';
+                        }
+
+                        debugLog('Dynamic view (mobile iframe):', { appId: appId, appUrl: appUrl });
                     } else {
-                        // No sheet ID configured, show app overview
-                        debugLog('Creating ' + embedMode + ' embed (app overview)');
-                    }
+                        // Desktop: Use qlik-embed
+                        let embedElement = '<qlik-embed ';
+                        embedElement += 'key="' + embedKey + '" ';
+                        embedElement += 'data-refresh="' + Date.now() + '" ';
+                        embedElement += 'ui="' + embedMode + '" ';
+                        embedElement += 'app-id="' + appId + '" ';
 
-                    embedElement += 'host="' + hostName + '" ';
-                    embedElement += 'no-cache="true" '; // Add no-cache attribute
-                    embedElement += 'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
-
-                    // Add context for interactions (no theme - use app default)
-                    const context = {
-                        interactions: {
-                            select: allowInteractions,
-                            edit: false
+                        if (hasValidSheetId) {
+                            const isCloud = window.qlikEnvironment === 'cloud';
+                            if (embedMode === 'analytics/sheet' && isCloud) {
+                                embedElement += 'object-id="' + sheetId.trim() + '" ';
+                                debugLog('Creating analytics/sheet embed with object-id (Cloud):', sheetId.trim());
+                            } else {
+                                embedElement += 'sheet-id="' + sheetId.trim() + '" ';
+                                debugLog('Creating embed with sheet-id:', sheetId.trim(), 'Mode:', embedMode);
+                            }
+                        } else {
+                            debugLog('Creating ' + embedMode + ' embed (app overview)');
                         }
-                    };
-                    embedElement += "context___json='" + JSON.stringify(context) + "' ";
-                    embedElement += '></qlik-embed>';
 
-                    // Add wrapper
-                    let embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">';
-                    embedHtml += embedElement;
-                    embedHtml += '</div>';
+                        embedElement += 'host="' + hostName + '" ';
+                        embedElement += 'no-cache="true" ';
+                        embedElement += 'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
 
-                    if (container) DOM.setHTML(container, embedHtml);
+                        const context = {
+                            interactions: {
+                                select: allowInteractions,
+                                edit: false
+                            }
+                        };
+                        embedElement += "context___json='" + JSON.stringify(context) + "' ";
+                        embedElement += '></qlik-embed>';
+
+                        let embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">';
+                        embedHtml += embedElement;
+                        embedHtml += '</div>';
+
+                        if (container) DOM.setHTML(container, embedHtml);
+
+                        debugLog('Dynamic view refreshed with new ODAG app:', {
+                            appId: appId,
+                            appName: appName,
+                            sheetId: odagConfig.templateSheetId || 'Full App',
+                            embedKey: embedKey
+                        });
+
+                        // Force refresh of the qlik-embed component
+                        const newEmbed = container ? DOM.get('qlik-embed', container) : null;
+                        if (newEmbed) {
+                            newEmbed.dispatchEvent(new CustomEvent('refresh'));
+                        }
+
+                        // Remove blur overlay - app is ready
+                        if (container) {
+                            container.style.filter = 'none';
+                            container.style.pointerEvents = 'auto';
+                            container.style.opacity = '1';
+                        }
+
+                        // Load qlik-embed script if not already loaded
+                        if (!window.qlikEmbedLoaded) {
+                            const script = document.createElement('script');
+                            script.src = 'https://cdn.jsdelivr.net/npm/@qlik/embed-web-components';
+                            script.crossOrigin = 'anonymous';
+                            script.onload = function() {
+                                window.qlikEmbedLoaded = true;
+                            };
+                            document.head.appendChild(script);
+                        }
+                    }
 
                     // Clear init-in-progress flag
                     setTimeout(function() {
@@ -2349,29 +2403,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         debugLog('Cleared initInProgressKey after embed initialization');
                     }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
 
-                    debugLog('Dynamic view refreshed with new ODAG app:', {
-                        appId: appId,
-                        appName: appName,
-                        sheetId: odagConfig.templateSheetId || 'Full App',
-                        embedKey: embedKey
-                    });
-
-                    // Force refresh of the qlik-embed component
-                    const newEmbed = container ? DOM.get('qlik-embed', container) : null;
-                    if (newEmbed) {
-                        // Dispatch refresh event to force update
-                        newEmbed.dispatchEvent(new CustomEvent('refresh'));
-                    }
-
-                    // Remove blur overlay - app is ready
-                    if (container) {
-                        container.style.filter = 'none';
-                        container.style.pointerEvents = 'auto';
-                        container.style.opacity = '1';
-                    }
-
-                    // Load qlik-embed script if not already loaded
-                    if (!window.qlikEmbedLoaded) {
+                    // Load qlik-embed script if not already loaded (for non-mobile)
+                    if (!isMobile && !window.qlikEmbedLoaded) {
                         const script = document.createElement('script');
                         script.src = 'https://cdn.jsdelivr.net/npm/@qlik/embed-web-components';
                         script.crossOrigin = 'anonymous';
@@ -3422,7 +3455,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             }
 
                             if (needsUpdate) {
-                                debugLog('LIST VIEW - Creating new embed. HTML:', embedElement);
+                                debugLog('LIST VIEW - Creating new embed. isMobile:', isMobile);
 
                                 // Clear any existing content first
                                 if (existingEmbed) {
@@ -3438,43 +3471,65 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                 if (iframeContainer) iframeContainer.innerHTML = '';
 
-                                // Use qlik-embed for all browsers
-                                setTimeout(function() {
-                                    if (iframeContainer) DOM.show(iframeContainer);
-                                    if (iframeContainer) DOM.setHTML(iframeContainer, getLoadingPlaceholder(messages.progress.loadingApp));
+                                // Mobile: Use iframe, Desktop: Use qlik-embed
+                                if (isMobile) {
+                                    debugLog('📱 LIST VIEW - Mobile detected, using iframe');
 
+                                    const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                                    let appUrl = tenantUrl + '/sense/app/' + embedAppId;
+                                    if (odagConfig.templateSheetId && odagConfig.templateSheetId.trim()) {
+                                        appUrl += '/sheet/' + odagConfig.templateSheetId.trim() + '/state/analysis';
+                                    }
+
+                                    const iframeHtml = '<iframe src="' + appUrl + '" ' +
+                                        'style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" ' +
+                                        'allow="fullscreen" ' +
+                                        'sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals">' +
+                                        '</iframe>';
+
+                                    if (iframeContainer) {
+                                        DOM.show(iframeContainer);
+                                        DOM.setHTML(iframeContainer, iframeHtml);
+                                    }
+                                } else {
+                                    // Desktop: Use qlik-embed
                                     setTimeout(function() {
-                                        let embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">';
-                                        embedHtml += embedElement;
-                                        embedHtml += '</div>';
+                                        if (iframeContainer) DOM.show(iframeContainer);
+                                        if (iframeContainer) DOM.setHTML(iframeContainer, getLoadingPlaceholder(messages.progress.loadingApp));
 
-                                        debugLog('LIST VIEW - Setting container HTML');
-                                        if (iframeContainer) DOM.setHTML(iframeContainer, embedHtml);
+                                        setTimeout(function() {
+                                            let embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">';
+                                            embedHtml += embedElement;
+                                            embedHtml += '</div>';
 
-                                        debugLog('Created new qlik-embed element:', {
-                                            appId: embedAppId,
-                                            viewMode: viewMode,
-                                            sheetId: odagConfig.templateSheetId || 'N/A',
-                                            container: iframeContainer ? iframeContainer.id : 'N/A',
-                                            embedKey: embedKey
-                                        });
+                                            debugLog('LIST VIEW - Setting container HTML');
+                                            if (iframeContainer) DOM.setHTML(iframeContainer, embedHtml);
 
-                                        const newEmbed = iframeContainer ? DOM.get('qlik-embed', iframeContainer) : null;
-                                        if (newEmbed) {
-                                            newEmbed.dispatchEvent(new CustomEvent('refresh'));
-                                        }
-                                    }, 300);
-                                }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
+                                            debugLog('Created new qlik-embed element:', {
+                                                appId: embedAppId,
+                                                viewMode: viewMode,
+                                                sheetId: odagConfig.templateSheetId || 'N/A',
+                                                container: iframeContainer ? iframeContainer.id : 'N/A',
+                                                embedKey: embedKey
+                                            });
 
-                                // Load qlik-embed script if not already loaded
-                                if (!window.qlikEmbedLoaded) {
-                                    const script = document.createElement('script');
-                                    script.src = 'https://cdn.jsdelivr.net/npm/@qlik/embed-web-components';
-                                    script.crossOrigin = 'anonymous';
-                                    script.onload = function() {
-                                        window.qlikEmbedLoaded = true;
-                                    };
-                                    document.head.appendChild(script);
+                                            const newEmbed = iframeContainer ? DOM.get('qlik-embed', iframeContainer) : null;
+                                            if (newEmbed) {
+                                                newEmbed.dispatchEvent(new CustomEvent('refresh'));
+                                            }
+                                        }, 300);
+                                    }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
+
+                                    // Load qlik-embed script if not already loaded
+                                    if (!window.qlikEmbedLoaded) {
+                                        const script = document.createElement('script');
+                                        script.src = 'https://cdn.jsdelivr.net/npm/@qlik/embed-web-components';
+                                        script.crossOrigin = 'anonymous';
+                                        script.onload = function() {
+                                            window.qlikEmbedLoaded = true;
+                                        };
+                                        document.head.appendChild(script);
+                                    }
                                 }
                             }
                         } else {
@@ -4020,31 +4075,22 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     const mobileIframeContainer = DOM.get('#iframe-container-' + layout.qInfo.qId);
                     if (mobileIframeContainer) mobileIframeContainer.innerHTML = '';
 
-                    // Use qlik-embed for all browsers
-                    debugLog('📱 Mobile dropdown - using qlik-embed');
+                    // Mobile: Always use iframe (shares session)
+                    debugLog('📱 Mobile dropdown - using iframe');
 
-                    const embedMode = 'classic/app';
-                    const allowInteractions = odagConfig.allowInteractions !== false;
-                    const hostName = window.location.hostname;
-                    const embedKey = 'mobile-embed-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+                    const tenantUrl = window.qlikTenantUrl || window.location.origin;
+                    const appUrl = tenantUrl + '/sense/app/' + selectedApp.appId;
 
-                    let embedElement = '<qlik-embed ' +
-                        'key="' + embedKey + '" ' +
-                        'ui="' + embedMode + '" ' +
-                        'app-id="' + selectedApp.appId + '" ' +
-                        'host="' + hostName + '" ' +
-                        'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
+                    const iframeHtml = '<iframe src="' + appUrl + '" ' +
+                        'style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" ' +
+                        'allow="fullscreen" ' +
+                        'sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals">' +
+                        '</iframe>';
 
-                    const context = { interactions: { select: allowInteractions, edit: false } };
-                    embedElement += "context___json='" + JSON.stringify(context) + "' ";
-                    embedElement += '></qlik-embed>';
-
-                    setTimeout(function() {
-                        if (mobileIframeContainer) DOM.show(mobileIframeContainer);
-                        const embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">' +
-                            embedElement + '</div>';
-                        if (mobileIframeContainer) DOM.setHTML(mobileIframeContainer, embedHtml);
-                    }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
+                    if (mobileIframeContainer) {
+                        DOM.show(mobileIframeContainer);
+                        DOM.setHTML(mobileIframeContainer, iframeHtml);
+                    }
                 });
             }
         }  // Close if (!isDynamicView) from line 3569
