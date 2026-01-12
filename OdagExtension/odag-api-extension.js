@@ -1390,12 +1390,22 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         // BLOCK: Binding validation failed
                         if (isDynamicView) {
                             if (generateBtn) DOM.hide(generateBtn);
+                            // Hide embed container (don't show "Loading app..." when validation fails)
+                            const embedContainer = getDynamicEmbedContainer();
+                            if (embedContainer) {
+                                DOM.setHTML(embedContainer, '');
+                            }
                         } else {
                             if (generateBtn) {
                                 generateBtn.disabled = true;
                                 generateBtn.style.opacity = '0.5';
                                 generateBtn.style.cursor = 'not-allowed';
                                 generateBtn.style.pointerEvents = 'none';
+                            }
+                            // Hide iframe container in List View when validation fails
+                            const iframeContainer = DOM.get('#iframe-container-' + layout.qInfo.qId);
+                            if (iframeContainer) {
+                                DOM.setHTML(iframeContainer, '');
                             }
                         }
 
@@ -1461,6 +1471,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             }
                         }
 
+                        // Hide embed container when app limit reached
+                        if (isDynamicView) {
+                            const embedContainer = getDynamicEmbedContainer();
+                            if (embedContainer) DOM.setHTML(embedContainer, '');
+                        } else {
+                            const iframeContainer = DOM.get('#iframe-container-' + layout.qInfo.qId);
+                            if (iframeContainer) DOM.setHTML(iframeContainer, '');
+                        }
+
                         if (statusDiv) {
                             DOM.show(statusDiv);
                             statusDiv.style.background = '#fff3cd';
@@ -1475,6 +1494,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         if (isDynamicView) {
                             // In Dynamic View: HIDE Refresh button when validation fails
                             if (generateBtn) DOM.hide(generateBtn);
+                            // Hide embed container
+                            const embedContainer = getDynamicEmbedContainer();
+                            if (embedContainer) DOM.setHTML(embedContainer, '');
                         } else {
                             // In List View: Disable Generate button (gray it out)
                             if (generateBtn) {
@@ -1483,6 +1505,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 generateBtn.style.cursor = 'not-allowed';
                                 generateBtn.style.pointerEvents = 'none';
                             }
+                            // Hide iframe container
+                            const iframeContainer = DOM.get('#iframe-container-' + layout.qInfo.qId);
+                            if (iframeContainer) DOM.setHTML(iframeContainer, '');
                         }
 
                         if (statusDiv) {
