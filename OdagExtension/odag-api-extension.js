@@ -2305,28 +2305,24 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         }
                     }
 
-                    // WebView detection - use direct navigation instead of qlik-embed
+                    // WebView (native Qlik app): Use iframe instead of qlik-embed
                     if (isWebView) {
-                        debugLog('🌐 WebView detected - using direct navigation instead of qlik-embed');
+                        debugLog('📱 WebView detected - using iframe instead of qlik-embed');
 
-                        // Build app URL for direct navigation
                         const tenantUrl = window.qlikTenantUrl || window.location.origin;
                         let appUrl = tenantUrl + '/sense/app/' + appId;
                         if (hasValidSheetId) {
                             appUrl += '/sheet/' + sheetId.trim() + '/state/analysis';
                         }
 
-                        // Show "Open App" button instead of embedding
-                        const webViewHtml = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); padding: 20px; text-align: center;">' +
-                            '<div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 400px;">' +
-                            '<div style="font-size: 48px; margin-bottom: 16px;">📱</div>' +
-                            '<h3 style="margin: 0 0 12px 0; color: #1a1a2e; font-size: 18px;">ODAG App Ready</h3>' +
-                            '<p style="margin: 0 0 20px 0; color: #666; font-size: 14px; line-height: 1.5;">' + (appName || 'Generated App') + '</p>' +
-                            '<a href="' + appUrl + '" style="display: inline-block; background: #009845; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px; transition: background 0.2s;">' +
-                            '🚀 Open App</a>' +
-                            '</div></div>';
+                        // Use iframe for mobile - shares session with parent
+                        const iframeHtml = '<iframe src="' + appUrl + '" ' +
+                            'style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" ' +
+                            'allow="fullscreen" ' +
+                            'sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals">' +
+                            '</iframe>';
 
-                        if (container) DOM.setHTML(container, webViewHtml);
+                        if (container) DOM.setHTML(container, iframeHtml);
 
                         // Remove blur overlay
                         if (container) {
@@ -3480,9 +3476,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                 if (iframeContainer) iframeContainer.innerHTML = '';
 
-                                // WebView: Show "Open App" button instead of qlik-embed
+                                // WebView (native Qlik app): Use iframe instead of qlik-embed
                                 if (isWebView) {
-                                    debugLog('🌐 LIST VIEW - WebView detected, showing Open App button');
+                                    debugLog('📱 LIST VIEW - WebView detected, using iframe');
 
                                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
                                     let appUrl = tenantUrl + '/sense/app/' + embedAppId;
@@ -3490,18 +3486,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         appUrl += '/sheet/' + odagConfig.templateSheetId.trim() + '/state/analysis';
                                     }
 
-                                    const webViewHtml = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); padding: 20px; text-align: center;">' +
-                                        '<div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 400px;">' +
-                                        '<div style="font-size: 48px; margin-bottom: 16px;">📱</div>' +
-                                        '<h3 style="margin: 0 0 12px 0; color: #1a1a2e; font-size: 18px;">ODAG App Ready</h3>' +
-                                        '<p style="margin: 0 0 20px 0; color: #666; font-size: 14px; line-height: 1.5;">' + (selectedApp.name || 'Generated App') + '</p>' +
-                                        '<a href="' + appUrl + '" style="display: inline-block; background: #009845; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">' +
-                                        '🚀 Open App</a>' +
-                                        '</div></div>';
+                                    const iframeHtml = '<iframe src="' + appUrl + '" ' +
+                                        'style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" ' +
+                                        'allow="fullscreen" ' +
+                                        'sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals">' +
+                                        '</iframe>';
 
                                     if (iframeContainer) {
                                         DOM.show(iframeContainer);
-                                        DOM.setHTML(iframeContainer, webViewHtml);
+                                        DOM.setHTML(iframeContainer, iframeHtml);
                                     }
                                 } else {
                                     // Standard browser: Use qlik-embed
@@ -4089,60 +4082,46 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                     const tenantUrl = window.qlikTenantUrl || window.location.origin;
 
-                    // WebView: Show "Open App" button instead of qlik-embed
+                    // WebView (native Qlik app): Use iframe, otherwise qlik-embed
                     if (isWebView) {
-                        debugLog('🌐 Mobile dropdown - WebView detected, showing Open App button');
+                        debugLog('📱 Mobile dropdown - WebView detected, using iframe');
 
                         let appUrl = tenantUrl + '/sense/app/' + selectedApp.appId;
 
-                        const webViewHtml = '<div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; background: linear-gradient(135deg, #f5f7fa 0%, #e4e8ec 100%); padding: 20px; text-align: center;">' +
-                            '<div style="background: white; border-radius: 16px; padding: 32px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); max-width: 400px;">' +
-                            '<div style="font-size: 48px; margin-bottom: 16px;">📱</div>' +
-                            '<h3 style="margin: 0 0 12px 0; color: #1a1a2e; font-size: 18px;">ODAG App Ready</h3>' +
-                            '<p style="margin: 0 0 20px 0; color: #666; font-size: 14px; line-height: 1.5;">' + (selectedApp.name || 'Generated App') + '</p>' +
-                            '<a href="' + appUrl + '" style="display: inline-block; background: #009845; color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 16px;">' +
-                            '🚀 Open App</a>' +
-                            '</div></div>';
+                        const iframeHtml = '<iframe src="' + appUrl + '" ' +
+                            'style="width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0;" ' +
+                            'allow="fullscreen" ' +
+                            'sandbox="allow-same-origin allow-scripts allow-popups allow-forms allow-modals">' +
+                            '</iframe>';
 
                         if (mobileIframeContainer) {
                             DOM.show(mobileIframeContainer);
-                            DOM.setHTML(mobileIframeContainer, webViewHtml);
+                            DOM.setHTML(mobileIframeContainer, iframeHtml);
                         }
                     } else {
-                        // Standard browser: Use qlik-embed
+                        // Mobile browser: Use qlik-embed
+                        debugLog('📱 Mobile dropdown - using qlik-embed');
+
                         const embedMode = 'classic/app';
                         const allowInteractions = odagConfig.allowInteractions !== false;
                         const hostName = window.location.hostname;
-
-                        debugLog('Mobile: Embedding app in classic/app mode:', selectedApp.appId);
-
                         const embedKey = 'mobile-embed-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
 
                         let embedElement = '<qlik-embed ' +
                             'key="' + embedKey + '" ' +
                             'ui="' + embedMode + '" ' +
-                            'app-id="' + selectedApp.appId + '" ';
-
-                        embedElement += 'host="' + hostName + '" ' +
+                            'app-id="' + selectedApp.appId + '" ' +
+                            'host="' + hostName + '" ' +
                             'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
 
-                        const context = {
-                            interactions: {
-                                select: allowInteractions,
-                                edit: false
-                            }
-                        };
+                        const context = { interactions: { select: allowInteractions, edit: false } };
                         embedElement += "context___json='" + JSON.stringify(context) + "' ";
                         embedElement += '></qlik-embed>';
 
                         setTimeout(function() {
                             if (mobileIframeContainer) DOM.show(mobileIframeContainer);
-
                             const embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">' +
-                                embedElement +
-                                '</div>';
-
-                            debugLog('Mobile: Setting embed HTML');
+                                embedElement + '</div>';
                             if (mobileIframeContainer) DOM.setHTML(mobileIframeContainer, embedHtml);
                         }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
                     }
