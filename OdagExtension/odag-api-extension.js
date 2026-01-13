@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v8.0.0 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.1.1 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -756,6 +756,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             // Use whatever view mode is configured - no mobile restrictions
             const isDynamicView = odagConfig.viewMode === 'dynamicView';
             const effectiveEmbedMode = odagConfig.embedMode || 'classic/app';
+
+            // CRITICAL: Always store current view mode at window level so selection listeners can check it
+            // This ensures listeners bound in Dynamic View mode don't fire when user switches to List View
+            const viewModeKey = 'odagViewMode_' + layout.qInfo.qId;
+            window[viewModeKey] = isDynamicView ? 'dynamicView' : 'listView';
 
             debugLog('ODAG Extension: isEditMode =', isEditMode, 'isDynamicView =', isDynamicView, 'isMobile =', isMobile, 'effectiveEmbedMode =', effectiveEmbedMode, 'odagLinkId =', odagConfig.odagLinkId);
 
@@ -1595,10 +1600,26 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 initDynamicView = function(debugLog) {
                 let latestAppId = null;
                 let latestAppName = null;
-                let isGenerating = false;
                 let checkStatusInterval = null;
                 let currentRequestId = null;
-                let deletedApps = new Set(); // Track deleted apps to avoid duplicate deletions
+
+                // Use window-level keys to store state that must persist across paint() calls
+                const isGeneratingKey = 'odagIsGenerating_' + odagConfig.odagLinkId;
+                const deleteIntervalKey = 'odagDeleteInterval_' + odagConfig.odagLinkId;
+                const deletedAppsKey = 'odagDeletedApps_' + odagConfig.odagLinkId;
+                // CRITICAL: Track view mode at window level so selection listeners can check if we're still in Dynamic View
+                const viewModeKey = 'odagViewMode_' + layout.qInfo.qId;
+                window[viewModeKey] = 'dynamicView'; // Set to dynamicView when initDynamicView runs
+                const getViewMode = function() { return window[viewModeKey] || 'listView'; };
+
+                // CRITICAL: Use window-level isGenerating to prevent duplicate generations across paint() calls
+                // This was previously a local variable that got reset to false on each initDynamicView call
+                const getIsGenerating = function() { return window[isGeneratingKey] || false; };
+                const setIsGenerating = function(value) { window[isGeneratingKey] = value; };
+
+                // Restore deletedApps from window (persists across paint calls) or create new Set
+                let deletedApps = window[deletedAppsKey] || new Set();
+                window[deletedAppsKey] = deletedApps; // Store reference for persistence
 
                 // Create stable storage keys for sessionStorage (appId + odagLinkId doesn't change between page loads)
                 const stableStorageKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_lastGeneratedPayload';
@@ -1685,19 +1706,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Function to generate new ODAG app
                 const generateNewODAGApp = async function() {
-                    if (isGenerating) {
+                    if (getIsGenerating()) {
                         debugLog('Already generating an app, please wait...');
                         return;
                     }
 
-                    isGenerating = true;
+                    setIsGenerating(true);
 
                     // CRITICAL: Cancel any pending auto-refresh to prevent race conditions
-                    if (autoRefreshDebounceTimer) {
-                        clearTimeout(autoRefreshDebounceTimer);
-                        autoRefreshDebounceTimer = null;
-                        debugLog('🛑 Cancelled pending auto-refresh timer');
-                    }
+                    clearAutoRefreshTimer();
+                    debugLog('🛑 Cancelled pending auto-refresh timer');
 
                     updateDynamicStatus(
                         getStatusHTML('generating', messages.progress.generatingApp, true)
@@ -1714,9 +1732,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                     // Safety timeout: Clear loading state after 60 seconds if stuck
                     const safetyTimeoutId = setTimeout(function() {
-                        if (isGenerating) {
+                        if (getIsGenerating()) {
                             debugLog('⏱️ Safety timeout: Clearing stuck loading state after 60s');
-                            isGenerating = false;
+                            setIsGenerating(false);
                             hideCancelButton();
                             updateDynamicStatus(
                                 getStatusHTML('error', messages.errors.generationTimeout)
@@ -1842,7 +1860,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             // If there are missing required fields, alert user and stop
                             if (missingRequiredFields.length > 0) {
                                 debugLog('❌ [Dynamic View] Missing required selections in fields:', missingRequiredFields);
-                                isGenerating = false;
+                                setIsGenerating(false);
                                 hideCancelButton();
 
                                 // Short message for dynamic view status bar
@@ -1889,7 +1907,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                         // Check if generation is allowed based on row estimation
                         if (!rowEstResult.canGenerate) {
-                            isGenerating = false;
+                            setIsGenerating(false);
                             hideCancelButton();
                             alert(rowEstResult.message);
                             return;
@@ -1930,6 +1948,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             if (oldRequestIds.length > 0) {
                                 debugLog('Will delete ' + oldRequestIds.length + ' old app(s) after new one is ready:', oldRequestIds);
 
+                                // Clear any existing delete interval to prevent race conditions
+                                if (window[deleteIntervalKey]) {
+                                    debugLog('Clearing previous delete interval:', window[deleteIntervalKey]);
+                                    clearInterval(window[deleteIntervalKey]);
+                                    window[deleteIntervalKey] = null;
+                                }
+
                                 // Wait and check periodically if new app is ready
                                 // NOTE: Do NOT add to CleanupManager - we want this to survive paint() calls
                                 const deleteCheckInterval = setInterval(function() {
@@ -1942,6 +1967,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     }).then(function(newStatus) {
                                         if (newStatus && newStatus.state === 'succeeded') {
                                             clearInterval(deleteCheckInterval);
+                                            window[deleteIntervalKey] = null; // Clear window reference
 
                                             // Delete all old apps
                                             oldRequestIds.forEach(function(oldRequestId) {
@@ -1980,6 +2006,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         // Silently ignore polling errors - will retry on next interval
                                     });
                                 }, 3000);
+
+                                // Store interval ID in window for persistence and cleanup
+                                window[deleteIntervalKey] = deleteCheckInterval;
+                                debugLog('Stored delete interval:', deleteCheckInterval);
                             }
 
                             // Store for next refresh
@@ -2009,7 +2039,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         hideCancelButton();
                     } finally {
                         // Always clear loading state and safety timeout
-                        isGenerating = false;
+                        setIsGenerating(false);
                         clearTimeout(safetyTimeoutId);
                         debugLog('✅ [Dynamic View] Generation complete, loading state cleared');
                     }
@@ -2032,7 +2062,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             debugLog('loadLatestODAGApp received response:', {
                                 resultLength: result ? result.length : 0,
                                 currentRequestId: currentRequestId,
-                                isGenerating: isGenerating,
+                                isGenerating: getIsGenerating(),
                                 results: result
                             });
 
@@ -2313,7 +2343,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 '3. Copy ONLY the ID after /sheet/ in the URL\n' +
                                 '   (before /state/analysis)';
 
-                            DOM.setHTML(element, 
+                            DOM.setHTML(element,
                                 '<div style="padding: 20px; color: #d32f2f; background: #ffebee; border: 2px solid #d32f2f; border-radius: 8px; font-family: monospace; white-space: pre-wrap; line-height: 1.6;">' +
                                 errorMsg +
                                 '</div>'
@@ -2377,14 +2407,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     debugLog('Dynamic view refreshed with new ODAG app:', {
                         appId: appId,
                         appName: appName,
-                        sheetId: odagConfig.templateSheetId || 'Full App',
-                        embedKey: embedKey
+                        sheetId: sheetId || 'Full App',
+                        embedMode: embedMode,
+                        allowInteractions: allowInteractions
                     });
 
                     // Force refresh of the qlik-embed component
                     const newEmbed = container ? DOM.get('qlik-embed', container) : null;
                     if (newEmbed) {
-                        // Dispatch refresh event to force update
                         newEmbed.dispatchEvent(new CustomEvent('refresh'));
                     }
 
@@ -2528,14 +2558,26 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         debugLog('📊 Baseline selections:', lastGeneratedPayload.bindSelectionState);
 
                                         // Auto-trigger refresh on page load when selections changed
-                                        debugLog('🔄 Auto-triggering refresh on page load due to selection changes');
-                                        setTimeout(function() {
-                                            const refreshBtn = DOM.get('#refresh-btn-' + layout.qInfo.qId);
-                                            if (refreshBtn) {
-                                                refreshBtn.click();
-                                                debugLog('✅ Auto-clicked refresh button after detecting stored selection changes');
-                                            }
-                                        }, 1000);
+                                        // But only if not already generating
+                                        if (!getIsGenerating()) {
+                                            debugLog('🔄 Auto-triggering refresh on page load due to selection changes');
+                                            // Clear any pending auto-refresh timers to prevent duplicate generations
+                                            clearAutoRefreshTimer();
+                                            setTimeout(function() {
+                                                // Double-check before clicking
+                                                if (!getIsGenerating()) {
+                                                    const refreshBtn = DOM.get('#refresh-btn-' + layout.qInfo.qId);
+                                                    if (refreshBtn) {
+                                                        refreshBtn.click();
+                                                        debugLog('✅ Auto-clicked refresh button after detecting stored selection changes');
+                                                    }
+                                                } else {
+                                                    debugLog('⏭️ Skipped auto-click - generation already in progress');
+                                                }
+                                            }, 1000);
+                                        } else {
+                                            debugLog('⏭️ Skipped auto-trigger - generation already in progress');
+                                        }
                                     }
                                 } else {
                                     // No stored selections - call checkSelectionsChanged to build fresh payload
@@ -2558,7 +2600,19 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 let isSavingSelections = false; // Flag to prevent concurrent saves
                 let pendingCheck = false; // Flag to queue another check after current one completes
                 let selectionDebounceTimer = null;
-                let autoRefreshDebounceTimer = null; // Debounce for auto-generation
+
+                // CRITICAL: Use window-level key for autoRefreshDebounceTimer to prevent multiple timers across paint() calls
+                const autoRefreshTimerKey = 'odagAutoRefreshTimer_' + odagConfig.odagLinkId;
+                const getAutoRefreshTimer = function() { return window[autoRefreshTimerKey] || null; };
+                const setAutoRefreshTimer = function(timerId) { window[autoRefreshTimerKey] = timerId; };
+                const clearAutoRefreshTimer = function() {
+                    const existingTimer = window[autoRefreshTimerKey];
+                    if (existingTimer) {
+                        clearTimeout(existingTimer);
+                        window[autoRefreshTimerKey] = null;
+                    }
+                };
+
                 const SELECTION_DEBOUNCE_MS = 300; // Wait 300ms for UI update (reduced from 500ms)
                 const AUTO_REFRESH_DEBOUNCE_MS = 1500; // Wait 1.5s for auto-regeneration (let user finish selecting)
 
@@ -2598,6 +2652,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Debounced wrapper - saves immediately, then debounces UI update
                 const debouncedCheckSelections = function() {
+                    // CRITICAL: Check if we're still in Dynamic View mode before processing
+                    // Selection listeners persist even when user switches to List View
+                    if (getViewMode() !== 'dynamicView') {
+                        debugLog('⏭️ Skipping selection check - not in Dynamic View mode (current:', getViewMode(), ')');
+                        return;
+                    }
+
                     // IMMEDIATELY save current selections (don't wait for debounce)
                     saveCurrentSelectionsImmediately();
 
@@ -2609,6 +2670,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // Debounce only the UI update (top bar, comparison)
                     selectionDebounceTimer = setTimeout(function() {
                         selectionDebounceTimer = null;
+
+                        // Double-check view mode after debounce (user could have switched during debounce)
+                        if (getViewMode() !== 'dynamicView') {
+                            debugLog('⏭️ Skipping selection check after debounce - not in Dynamic View mode');
+                            return;
+                        }
 
                         if (isCheckingSelections) {
                             // A check is in progress, queue another one when it completes
@@ -2624,6 +2691,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Function to check if current selections differ from last generated payload
                 const checkSelectionsChanged = async function() {
+                    // CRITICAL: Verify we're still in Dynamic View mode before proceeding
+                    if (getViewMode() !== 'dynamicView') {
+                        debugLog('⏭️ Skipping checkSelectionsChanged - not in Dynamic View mode');
+                        return;
+                    }
+
                     // Prevent concurrent checks
                     if (isCheckingSelections) {
                         debugLog('⏭️ Already checking, will queue pending check');
@@ -2640,8 +2713,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             lastGeneratedPayload = storedPayload;
                         }
 
-                        debugLog('🔍 checkSelectionsChanged called - isGenerating:', isGenerating, 'lastGeneratedPayload:', !!lastGeneratedPayload);
-                        if (isGenerating) {
+                        debugLog('🔍 checkSelectionsChanged called - isGenerating:', getIsGenerating(), 'lastGeneratedPayload:', !!lastGeneratedPayload);
+                        if (getIsGenerating()) {
                             debugLog('⏭️ Skipping check - currently generating');
                             return; // Don't check while generating
                         }
@@ -2692,16 +2765,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             const autoRefreshEnabled = odagConfig.autoRefreshOnSelectionChange !== false; // Default true
 
                             if (autoRefreshEnabled) {
-                                if (autoRefreshDebounceTimer) {
-                                    clearTimeout(autoRefreshDebounceTimer);
-                                }
+                                // Clear any existing timer before setting a new one
+                                clearAutoRefreshTimer();
 
                                 debugLog('🔄 Selections changed - scheduling auto-refresh in', AUTO_REFRESH_DEBOUNCE_MS, 'ms');
-                                autoRefreshDebounceTimer = CleanupManager.addTimeout(setTimeout(function() {
-                                    autoRefreshDebounceTimer = null;
+                                const newTimer = CleanupManager.addTimeout(setTimeout(function() {
+                                    setAutoRefreshTimer(null);
 
                                     // Double-check we're not already generating
-                                    if (isGenerating) {
+                                    if (getIsGenerating()) {
                                         debugLog('⏭️ Auto-refresh skipped - already generating');
                                         return;
                                     }
@@ -2719,6 +2791,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     // Trigger generation
                                     generateNewODAGApp();
                                 }, AUTO_REFRESH_DEBOUNCE_MS));
+                                setAutoRefreshTimer(newTimer);
                             } else {
                                 // Auto-refresh disabled - just show warning
                                 debugLog('🔔 State changed - showing top bar with refresh warning (auto-refresh disabled)');
@@ -2751,17 +2824,22 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 // Listen for selection changes using selection state subscription
                 // This also triggers when variables change (Qlik treats variable changes as selection changes)
                 const listenerKey = 'selectionListener_' + layout.qInfo.qId;
-                try {
-                    app.selectionState().OnData.bind(function() {
-                        debugLog('Selection state changed - debouncing check...');
-                        debouncedCheckSelections();
-                    });
-                    window[listenerKey] = true;
-                    debugLog('✅ Selection listener bound and marked in window.' + listenerKey);
-                } catch (error) {
-                    console.error('⚠️ Failed to bind selectionState listener on initialization (error code:', error.code || error, ')');
-                    console.error('This is usually due to WebSocket connection issues or session expiry.');
-                    // Don't mark as bound so it will retry on next paint
+                // CRITICAL: Only bind if not already bound - prevents multiple listeners causing duplicate generations
+                if (!window[listenerKey]) {
+                    try {
+                        app.selectionState().OnData.bind(function() {
+                            debugLog('Selection state changed - debouncing check...');
+                            debouncedCheckSelections();
+                        });
+                        window[listenerKey] = true;
+                        debugLog('✅ Selection listener bound and marked in window.' + listenerKey);
+                    } catch (error) {
+                        console.error('⚠️ Failed to bind selectionState listener on initialization (error code:', error.code || error, ')');
+                        console.error('This is usually due to WebSocket connection issues or session expiry.');
+                        // Don't mark as bound so it will retry on next paint
+                    }
+                } else {
+                    debugLog('ℹ️ Selection listener already bound, skipping');
                 }
 
                 // CRITICAL: Add variable change listeners for mapped variables
@@ -2797,7 +2875,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 // Store generateNewODAGApp function in StateManager for restoreDynamicView to access
                 StateManager.set(extensionId, 'generateNewODAGApp', function() {
                     // Prevent multiple simultaneous clicks
-                    if (isGenerating) {
+                    if (getIsGenerating()) {
                         debugLog('Generation already in progress, ignoring click');
                         return;
                     }
@@ -2823,7 +2901,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     getStatusHTML('none', 'Generation cancelled', false)
                                 );
                                 hideCancelButton();
-                                isGenerating = false;
+                                setIsGenerating(false);
                                 currentRequestId = null;
 
                                 // Reload to get the latest completed app
@@ -2836,7 +2914,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     getStatusHTML('error', messages.errors.cancelFailed, false)
                                 );
                                 hideCancelButton();
-                                isGenerating = false;
+                                setIsGenerating(false);
                             });
                     }
                 });
@@ -3368,14 +3446,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                 embedElement += 'host="' + hostName + '" ';
                                 embedElement += 'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
-
-                                const context = {
-                                    interactions: {
-                                        select: allowInteractions,
-                                        edit: false
-                                    }
-                                };
-                                embedElement += "context___json='" + JSON.stringify(context) + "'";
+                                // Use context___json to control interactions
+                                if (!allowInteractions) {
+                                    embedElement += 'context___json="{interactions:{active:false,select:false}}" ';
+                                }
                                 embedElement += '></qlik-embed>';
                             } else {
                                 // Show generated ODAG app (default)
@@ -3390,15 +3464,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 embedElement += 'app-id="' + embedAppId + '" ';
                                 embedElement += 'host="' + hostName + '" ';
                                 embedElement += 'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
-
-                                // Add context for interactions (no theme - use app default)
-                                const context = {
-                                    interactions: {
-                                        select: allowInteractions,
-                                        edit: false
-                                    }
-                                };
-                                embedElement += "context___json='" + JSON.stringify(context) + "' ";
+                                // Use context___json to control interactions
+                                if (!allowInteractions) {
+                                    embedElement += 'context___json="{interactions:{active:false,select:false}}" ';
+                                }
                                 embedElement += '></qlik-embed>';
                             }
 
@@ -3469,11 +3538,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     if (iframeContainer) DOM.setHTML(iframeContainer, getLoadingPlaceholder(messages.progress.loadingApp));
 
                                     setTimeout(function() {
+                                        // Add wrapper with transparent overlay when interactions disabled
                                         let embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">';
                                         embedHtml += embedElement;
+                                        // Add transparent overlay on top when interactions disabled
+                                        if (!allowInteractions) {
+                                            embedHtml += '<div class="qlik-embed-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: transparent; cursor: default;"></div>';
+                                        }
                                         embedHtml += '</div>';
 
-                                        debugLog('LIST VIEW - Setting container HTML');
+                                        debugLog('LIST VIEW - Setting container HTML, interactions:', allowInteractions ? 'ENABLED' : 'DISABLED');
                                         if (iframeContainer) DOM.setHTML(iframeContainer, embedHtml);
 
                                         debugLog('Created new qlik-embed element:', {
@@ -4060,14 +4134,22 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         'host="' + hostName + '" ' +
                         'style="height: 100%; width: 100%; position: absolute; top: 0; left: 0;" ';
 
-                    const context = { interactions: { select: allowInteractions, edit: false } };
-                    embedElement += "context___json='" + JSON.stringify(context) + "' ";
+                    // Use context___json to control interactions
+                    if (!allowInteractions) {
+                        embedElement += 'context___json="{interactions:{active:false,select:false}}" ';
+                    }
                     embedElement += '></qlik-embed>';
 
                     setTimeout(function() {
                         if (mobileIframeContainer) DOM.show(mobileIframeContainer);
-                        const embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">' +
-                            embedElement + '</div>';
+                        // Add wrapper with transparent overlay when interactions disabled
+                        let embedHtml = '<div class="qlik-embed-wrapper" style="position: relative; height: 100%; width: 100%; overflow: hidden;">';
+                        embedHtml += embedElement;
+                        // Add transparent overlay on top when interactions disabled - blocks ALL touch events on mobile
+                        if (!allowInteractions) {
+                            embedHtml += '<div class="qlik-embed-overlay" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; background: transparent; cursor: default;"></div>';
+                        }
+                        embedHtml += '</div>';
                         if (mobileIframeContainer) DOM.setHTML(mobileIframeContainer, embedHtml);
                     }, CONSTANTS.TIMING.PAINT_DEBOUNCE_MS);
                 });
