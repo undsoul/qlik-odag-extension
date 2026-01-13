@@ -531,22 +531,33 @@ Usage:
 
 ### Known Mobile Issues
 
-#### Qlik Cloud Mobile App - Embed Mode Limitation
+#### Qlik Cloud Mobile App - Required Settings
 
-**Issue:** When using the Qlik Cloud mobile app (iOS/Android), the `classic/app` embed mode causes strange popup behavior and navigation issues.
-
-**Solution:** Use `analytics/sheet` embed mode instead of `classic/app` for mobile compatibility.
+**For mobile compatibility, you MUST use these settings:**
 
 ```
-Settings for Mobile:
+Required Settings for Mobile:
+- View Mode: Dynamic View (NOT List View)
 - Embed Mode: analytics/sheet (NOT classic/app)
-- Template Sheet ID: [your sheet ID]
+- Template Sheet ID: [your sheet ID] (REQUIRED)
 ```
 
-**Why this happens:**
+#### Why List View Doesn't Work on Mobile
+- List View layout is not optimized for small screens
+- Side-by-side panels don't fit on mobile devices
+- Use **Dynamic View** instead for a clean, full-screen experience
+
+#### Why `classic/app` Mode Doesn't Work on Mobile
 - The `classic/app` mode embeds the full Qlik Sense client with complex navigation
 - The mobile app intercepts internal URLs and attempts to open them as separate apps
-- The `analytics/sheet` mode is a lighter embed focused on a single sheet, avoiding these issues
+- This causes strange popup behavior and navigation issues
+
+#### Why `analytics/sheet` Mode Works
+- Lighter embed focused on a single sheet
+- No complex navigation that mobile app can intercept
+- Clean, mobile-friendly rendering
+
+**Important:** You MUST provide a Template Sheet ID when using `analytics/sheet` mode.
 
 **Note:** This is a Qlik platform limitation. According to Qlik documentation: "Embed sheet and Embed chart features are not available on devices with a small screen."
 
