@@ -1,0 +1,35 @@
+{
+    "name": "ODAG Extension (BETA)",
+    "description": "BETA VERSION - Testing iframe for mobile. Cookie-based auth only (no OAuth/Web Integration).",
+    "type": "visualization",
+    "version": "9.1.1-beta",
+    "icon": "extension",
+    "author": "MuchachoAI",
+    "homepage": "https://github.com/undsoul/qlik-odag-extension",
+    "keywords": [
+        "qlik-sense",
+        "odag",
+        "on-demand",
+        "variable",
+        "extension",
+        "beta"
+    ],
+    "license": "MIT",
+    "repository": "https://github.com/undsoul/qlik-odag-extension",
+    "dependencies": {
+        "qlik-sense": ">=3.2.x"
+    },
+    "support": {
+        "email": "onderaltinbilek@bitechnology.com"
+    },
+    "preview": "preview.png",
+    "supportsSnapshot": false,
+    "exportEnabled": false,
+    "importEnabled": false,
+    "supportsProxyMode": true,
+    "bundle": {
+        "id": "odag-extension-beta",
+        "name": "ODAG Extension BETA",
+        "description": "Beta version for testing"
+    }
+}
