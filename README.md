@@ -2,7 +2,7 @@
 
 A powerful, production-ready Qlik Sense extension for managing On-Demand App Generation (ODAG) with enterprise features including Dynamic View mode, variable mapping, real-time status monitoring, and intelligent app lifecycle management.
 
-[![Version](https://img.shields.io/badge/version-8.0.35-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
+[![Version](https://img.shields.io/badge/version-8.0.41-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
 [![Qlik Cloud](https://img.shields.io/badge/Qlik-Cloud-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![On-Premise](https://img.shields.io/badge/Qlik-On--Premise-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -645,7 +645,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Version History
 
-### v8.0.35 (Current)
+### v8.0.41 (Current)
+- 🎨 **Clean Validation UI**: Hide "Loading app..." spinner when validation fails
+- ✨ **Better UX**: Only show validation message, no confusing loading indicator
+- 🧹 **Code Cleanup**: Removed unnecessary documentation files from repository
+
+### v8.0.35
 - 🔄 **Auto-Refresh on Selection Change**: Automatically regenerates ODAG app when selections change (1.5s debounce)
 - ⚙️ **Configurable Auto-Refresh**: New property "Auto Refresh on Selection Change" (default: enabled)
 - 🐛 **Race Condition Fix**: Prevented duplicate generations when making rapid selections
