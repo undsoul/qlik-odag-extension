@@ -2,7 +2,7 @@
 
 A powerful, production-ready Qlik Sense extension for managing On-Demand App Generation (ODAG) with enterprise features including Dynamic View mode, variable mapping, real-time status monitoring, and intelligent app lifecycle management.
 
-[![Version](https://img.shields.io/badge/version-8.0.41-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
+[![Version](https://img.shields.io/badge/version-9.1.1-blue.svg)](https://github.com/undsoul/qlik-odag-extension/releases)
 [![Qlik Cloud](https://img.shields.io/badge/Qlik-Cloud-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![On-Premise](https://img.shields.io/badge/Qlik-On--Premise-green.svg)](https://www.qlik.com/us/products/qlik-sense)
 [![License](https://img.shields.io/badge/license-MIT-orange.svg)](LICENSE)
@@ -529,6 +529,29 @@ Usage:
 
 ## 🐛 Troubleshooting
 
+### Known Mobile Issues
+
+#### Qlik Cloud Mobile App - Embed Mode Limitation
+
+**Issue:** When using the Qlik Cloud mobile app (iOS/Android), the `classic/app` embed mode causes strange popup behavior and navigation issues.
+
+**Solution:** Use `analytics/sheet` embed mode instead of `classic/app` for mobile compatibility.
+
+```
+Settings for Mobile:
+- Embed Mode: analytics/sheet (NOT classic/app)
+- Template Sheet ID: [your sheet ID]
+```
+
+**Why this happens:**
+- The `classic/app` mode embeds the full Qlik Sense client with complex navigation
+- The mobile app intercepts internal URLs and attempts to open them as separate apps
+- The `analytics/sheet` mode is a lighter embed focused on a single sheet, avoiding these issues
+
+**Note:** This is a Qlik platform limitation. According to Qlik documentation: "Embed sheet and Embed chart features are not available on devices with a small screen."
+
+---
+
 ### Common Issues
 
 #### "Access denied" Error in Published Apps
@@ -645,7 +668,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📊 Version History
 
-### v8.0.41 (Current)
+### v9.1.1 (Current)
+- 📱 **Mobile Compatibility**: Documented known issue with `classic/app` mode on Qlik Cloud mobile app
+- ✅ **Recommended**: Use `analytics/sheet` mode for mobile compatibility
+- 🔧 **context___json**: Proper Allow Interactions control via qlik-embed
+- 📝 **Sheet ID Validation**: Helpful error messages for invalid sheet ID formats
+
+### v8.0.41
 - 🎨 **Clean Validation UI**: Hide "Loading app..." spinner when validation fails
 - ✨ **Better UX**: Only show validation message, no confusing loading indicator
 - 🧹 **Code Cleanup**: Removed unnecessary documentation files from repository
