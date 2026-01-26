@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.1.1 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.1.3 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -1713,6 +1713,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                     setIsGenerating(true);
 
+                    // CRITICAL: Record generation start time to prevent duplicate generations
+                    window[lastGenerationKey] = Date.now();
+                    debugLog('📍 Generation started at', new Date().toISOString());
+
                     // CRITICAL: Cancel any pending auto-refresh to prevent race conditions
                     clearAutoRefreshTimer();
                     debugLog('🛑 Cancelled pending auto-refresh timer');
@@ -2616,6 +2620,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 const SELECTION_DEBOUNCE_MS = 300; // Wait 300ms for UI update (reduced from 500ms)
                 const AUTO_REFRESH_DEBOUNCE_MS = 1500; // Wait 1.5s for auto-regeneration (let user finish selecting)
 
+                // CRITICAL: Track last generation time to prevent duplicate generations
+                const lastGenerationKey = 'odagLastGenerationTime_' + odagConfig.odagLinkId;
+                const GENERATION_COOLDOWN_MS = 3000; // Prevent generation within 3 seconds of last one
+
                 // IMMEDIATE save function - saves current selections to sessionStorage right away
                 // This ensures selections are captured even if user navigates immediately
                 const saveCurrentSelectionsImmediately = async function() {
@@ -2652,15 +2660,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Debounced wrapper - saves immediately, then debounces UI update
                 const debouncedCheckSelections = function() {
-                    // CRITICAL: Check if we're still in Dynamic View mode before processing
-                    // Selection listeners persist even when user switches to List View
+                    // ALWAYS save current selections first (don't skip based on view mode)
+                    // This ensures selections are captured even during page navigation
+                    saveCurrentSelectionsImmediately();
+
+                    // Only skip UI updates if not in Dynamic View mode
+                    // But selections should ALWAYS be saved above
                     if (getViewMode() !== 'dynamicView') {
-                        debugLog('⏭️ Skipping selection check - not in Dynamic View mode (current:', getViewMode(), ')');
+                        debugLog('⏭️ Skipping UI update - not in Dynamic View mode (current:', getViewMode(), '), but selections were saved');
                         return;
                     }
-
-                    // IMMEDIATELY save current selections (don't wait for debounce)
-                    saveCurrentSelectionsImmediately();
 
                     // Clear any pending debounce timer
                     if (selectionDebounceTimer) {
@@ -2691,10 +2700,20 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Function to check if current selections differ from last generated payload
                 const checkSelectionsChanged = async function() {
-                    // CRITICAL: Verify we're still in Dynamic View mode before proceeding
-                    if (getViewMode() !== 'dynamicView') {
-                        debugLog('⏭️ Skipping checkSelectionsChanged - not in Dynamic View mode');
-                        return;
+                    // Check view mode - but be more lenient since we're inside initDynamicView
+                    // The view mode might be incorrectly set to 'listView' due to timing issues in paint()
+                    const currentViewMode = getViewMode();
+                    if (currentViewMode !== 'dynamicView') {
+                        // If we're here, we were initialized as Dynamic View, so the mode check might be wrong
+                        // Check if the extension is actually configured for Dynamic View
+                        const actualConfig = odagConfig.viewMode;
+                        if (actualConfig === 'dynamicView') {
+                            debugLog('⚠️ View mode mismatch detected - correcting from', currentViewMode, 'to dynamicView');
+                            window[viewModeKey] = 'dynamicView'; // Fix the mode
+                        } else {
+                            debugLog('⏭️ Skipping checkSelectionsChanged - not in Dynamic View mode');
+                            return;
+                        }
                     }
 
                     // Prevent concurrent checks
@@ -2775,6 +2794,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     // Double-check we're not already generating
                                     if (getIsGenerating()) {
                                         debugLog('⏭️ Auto-refresh skipped - already generating');
+                                        return;
+                                    }
+
+                                    // CRITICAL: Check cooldown to prevent duplicate generations
+                                    const lastGenTime = window[lastGenerationKey] || 0;
+                                    const timeSinceLastGen = Date.now() - lastGenTime;
+                                    if (timeSinceLastGen < GENERATION_COOLDOWN_MS) {
+                                        debugLog('⏭️ Auto-refresh skipped - cooldown active (' + timeSinceLastGen + 'ms since last generation, need ' + GENERATION_COOLDOWN_MS + 'ms)');
                                         return;
                                     }
 
