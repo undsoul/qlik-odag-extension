@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.1.4 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.1.5 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -1717,14 +1717,19 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     window[lastGenerationKey] = Date.now();
                     debugLog('📍 Generation started at', new Date().toISOString());
 
-                    // CRITICAL: Apply blur immediately to show user that generation is starting
-                    // This must happen BEFORE any async operations
+                    // CRITICAL: Clear old embed and show loading overlay
+                    // This prevents showing stale data (e.g., from previous Section Access user)
                     const embedContainer = getDynamicEmbedContainer();
                     if (embedContainer) {
-                        embedContainer.style.filter = 'blur(3px)';
-                        embedContainer.style.pointerEvents = 'none';
-                        embedContainer.style.opacity = '0.6';
-                        debugLog('✅ Applied blur to embed container at generation start');
+                        // Remove all existing qlik-embed elements to prevent cache
+                        const existingEmbeds = embedContainer.querySelectorAll('qlik-embed');
+                        existingEmbeds.forEach(function(embed) {
+                            embed.remove();
+                        });
+
+                        // Show loading overlay instead of old content
+                        embedContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; background: rgba(255,255,255,0.95); color: #666; font-size: 16px;">⏳ Generating new app...</div>';
+                        debugLog('✅ Cleared old embed and showing loading overlay');
                     }
 
                     // CRITICAL: Cancel any pending auto-refresh to prevent race conditions
