@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.1.3 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.1.4 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -1717,6 +1717,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     window[lastGenerationKey] = Date.now();
                     debugLog('📍 Generation started at', new Date().toISOString());
 
+                    // CRITICAL: Apply blur immediately to show user that generation is starting
+                    // This must happen BEFORE any async operations
+                    const embedContainer = getDynamicEmbedContainer();
+                    if (embedContainer) {
+                        embedContainer.style.filter = 'blur(3px)';
+                        embedContainer.style.pointerEvents = 'none';
+                        embedContainer.style.opacity = '0.6';
+                        debugLog('✅ Applied blur to embed container at generation start');
+                    }
+
                     // CRITICAL: Cancel any pending auto-refresh to prevent race conditions
                     clearAutoRefreshTimer();
                     debugLog('🛑 Cancelled pending auto-refresh timer');
@@ -2807,15 +2817,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                     debugLog('🚀 AUTO-REFRESH: Triggering ODAG generation due to selection change');
 
-                                    // Blur the current embed to indicate refresh
-                                    const embedContainer = getDynamicEmbedContainer();
-                                    if (embedContainer) {
-                                        embedContainer.style.filter = 'blur(3px)';
-                                        embedContainer.style.pointerEvents = 'none';
-                                        embedContainer.style.opacity = '0.6';
-                                    }
-
-                                    // Trigger generation
+                                    // Blur will be applied automatically inside generateNewODAGApp
                                     generateNewODAGApp();
                                 }, AUTO_REFRESH_DEBOUNCE_MS));
                                 setAutoRefreshTimer(newTimer);
@@ -2955,14 +2957,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         // Reset the manually closed flag - normal behavior resumes after refresh
                         topBarManuallyClosed = false;
 
-                        // Add blur overlay to the embed
-                        const embedContainer = getDynamicEmbedContainer();
-                        if (embedContainer) {
-                            embedContainer.style.filter = 'blur(3px)';
-                            embedContainer.style.pointerEvents = 'none';
-                            embedContainer.style.opacity = '0.6';
-                        }
-
+                        // Blur will be applied automatically inside generateNewODAGApp
                         const generateFunc = StateManager.get(extensionId, 'generateNewODAGApp');
                         if (generateFunc) generateFunc();
                     });
@@ -2996,12 +2991,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     if (refreshBtnRestored && generateFunc) {
                         DOM.on(refreshBtnRestored, 'click', function() {
                             debugLog('Refresh clicked (restored handler)');
-                            const embedContainer = getDynamicEmbedContainer();
-                            if (embedContainer) {
-                                embedContainer.style.filter = 'blur(3px)';
-                                embedContainer.style.pointerEvents = 'none';
-                                embedContainer.style.opacity = '0.6';
-                            }
+                            // Blur will be applied automatically inside generateNewODAGApp
                             generateFunc();
                         });
                     }
