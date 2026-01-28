@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.2.0 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.2.1 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -2458,17 +2458,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         } else {
                             // We found an existing app
                             // When no stored baseline exists, we CAN'T know what selections were used
-                            // to generate the existing app. Show refresh warning by default.
+                            // to generate the existing app. AUTO-GENERATE new app with current selections.
                             if (!lastGeneratedPayload) {
-                                debugLog('📝 Found existing app but no stored payload - showing refresh warning');
-                                debugLog('⚠️ We cannot know if current selections match the app - user should refresh');
+                                debugLog('📝 Found existing app but no stored payload - will auto-generate with current selections');
 
                                 try {
                                     const buildResult = await buildPayload(app, odagConfig, layout);
                                     const currentPayload = buildResult.payload;
-
-                                    // Get current variable values
-                                    const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
 
                                     // Check if there are ANY selections in binding fields
                                     const hasBindingSelections = currentPayload.bindSelectionState &&
@@ -2476,31 +2472,36 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                             binding.values && binding.values.length > 0
                                         );
 
-                                    // Store current selections for cross-page tracking
-                                    const currentSelections = {
-                                        bindSelections: currentPayload.bindSelectionState,
-                                        variables: currentVariableValues
-                                    };
-                                    StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
-
-                                    // Set baseline to EMPTY so ANY selection triggers refresh warning
-                                    // This is safer than assuming current selections match the app
-                                    lastGeneratedPayload = {
-                                        bindSelectionState: [],
-                                        selectionState: [],
-                                        variableState: []
-                                    };
-                                    StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
-                                    debugLog('💾 Set EMPTY baseline - any selections will trigger refresh warning');
-
-                                    // If user already has selections, show refresh warning immediately
-                                    if (hasBindingSelections || currentVariableValues.length > 0) {
-                                        debugLog('🔔 User has selections but no baseline - showing refresh warning');
-                                        DOM.addClass('needs-refresh');
-                                        topBarManuallyClosed = false;
+                                    // CRITICAL FIX: If user has selections, auto-generate new app
+                                    // Don't show stale data from a previous session
+                                    if (hasBindingSelections && currentPayload.canGenerate) {
+                                        debugLog('🚀 Fresh session with selections - auto-generating new app to ensure correct data');
+                                        // Small delay to let UI settle
                                         setTimeout(function() {
-                                            showTopBar(false, true);
+                                            if (!getIsGenerating()) {
+                                                generateNewODAGApp();
+                                            }
                                         }, 500);
+                                    } else {
+                                        // No selections or can't generate - just show existing app with warning
+                                        debugLog('⚠️ No selections or cannot generate - showing existing app');
+                                        // Get current variable values
+                                        const currentVariableValues = await getVariableValues(app, odagConfig.variableMappings || []);
+
+                                        // Store current selections for cross-page tracking
+                                        const currentSelections = {
+                                            bindSelections: currentPayload.bindSelectionState,
+                                            variables: currentVariableValues
+                                        };
+                                        StateManager.set(extensionId, 'currentBindSelections', currentSelections, true, currentSelectionsKey);
+
+                                        // Set baseline to EMPTY so ANY selection triggers refresh
+                                        lastGeneratedPayload = {
+                                            bindSelectionState: [],
+                                            selectionState: [],
+                                            variableState: []
+                                        };
+                                        StateManager.set(extensionId, 'lastGeneratedPayload', lastGeneratedPayload, false, stableStorageKey);
                                     }
                                 } catch (error) {
                                     console.error('Error checking initial selections:', error);
