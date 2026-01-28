@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.1.7 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.1.9 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -61,11 +61,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
             // Don't create duplicate subscriptions
             if (window[subscriptionKey]) {
-                debugLog('📡 Selection subscriptions already active for', odagLinkId);
-                return;
+                return; // Silently skip - already active
             }
 
-            debugLog('📡 Setting up real-time selection subscriptions for', bindings.length, 'binding fields');
+            debugLog('📡 Setting up selection subscriptions for', bindings.length, 'fields');
 
             // Initialize cache
             window[cacheKey] = {};
@@ -76,8 +75,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             bindings.forEach(function(binding) {
                 const fieldName = binding.selectAppParamName || binding.selectionAppParamName || binding.fieldName || binding.name;
                 if (!fieldName) return;
-
-                debugLog('📡 Creating subscription for field:', fieldName);
 
                 // Create a persistent session object for this field
                 enigmaApp.createSessionObject({
@@ -102,21 +99,17 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     });
 
                     // Subscribe to changes - this is the KEY part!
-                    // When selection changes, Qlik automatically invalidates and calls this
                     listObj.on('changed', function() {
-                        debugLog('📡 [SUBSCRIPTION] Field changed:', fieldName);
                         listObj.getLayout().then(function(layout) {
                             updateFieldCache(fieldName, layout);
                         });
                     });
-
-                    debugLog('✅ Subscription active for field:', fieldName);
                 }).catch(function(err) {
-                    debugLog('⚠️ Failed to create subscription for field:', fieldName, err.message);
+                    debugLog('⚠️ Subscription failed for:', fieldName, err.message);
                 });
             });
 
-            // Helper function to update cache from ListObject layout
+            // Helper function to update cache from ListObject layout (silent - no logging)
             function updateFieldCache(fieldName, layout) {
                 const values = [];
                 if (layout.qListObject && layout.qListObject.qDataPages && layout.qListObject.qDataPages[0]) {
@@ -138,8 +131,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     hasSelection: values.length > 0,
                     timestamp: Date.now()
                 };
-
-                debugLog('📡 [CACHE] Updated', fieldName, ':', values.length, 'selected values');
             }
     }
 
@@ -193,16 +184,21 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             const selectedLanguage = odagConfig.language || 'en';
             const messages = Language.getMessages(selectedLanguage);
 
-            // Debug logger - only logs when debug mode is enabled
+            // Debug logger with levels - level 1: errors, level 2: important (default), level 3: verbose
+            const debugLevel = odagConfig.debugLevel || 2; // Default to important only
             const debugLog = function() {
-                if (odagConfig.enableDebug) {
+                if (odagConfig.enableDebug && debugLevel >= 2) {
+                    console.log.apply(console, arguments);
+                }
+            };
+            // Verbose logger - only logs at level 3 (verbose)
+            const verboseLog = function() {
+                if (odagConfig.enableDebug && debugLevel >= 3) {
                     console.log.apply(console, arguments);
                 }
             };
 
-            debugLog('ODAG Extension: paint() called');
-            debugLog('ODAG Extension: odagConfig =', odagConfig);
-            debugLog('ODAG Extension: selected language =', selectedLanguage);
+            verboseLog('paint() called, linkId:', odagConfig.odagLinkId || 'none');
 
             // Validate ODAG Link ID early to prevent issues
             if (odagConfig.odagLinkId) {
@@ -530,19 +526,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             window[linkDataCacheKey] = linkData;
 
                             // Cache row estimation config from ODAG link
-                            // Check multiple possible locations for curRowEstHighBound
                             const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
-                            debugLog('🔍 [PAINT] Full link data structure:', JSON.stringify(linkData, null, 2));
-                            debugLog('🔍 [PAINT] Checking rowEstExpr locations:', {
-                                'linkData.rowEstExpr': linkData.rowEstExpr,
-                                'linkData.link.rowEstExpr': linkData.link && linkData.link.rowEstExpr,
-                                'response[0].rowEstExpr': response[0].rowEstExpr
-                            });
-                            debugLog('🔍 [PAINT] Checking curRowEstHighBound locations:', {
-                                'linkData.curRowEstHighBound': linkData.curRowEstHighBound,
-                                'linkData.link.curRowEstHighBound': linkData.link && linkData.link.curRowEstHighBound,
-                                'response[0].curRowEstHighBound': response[0].curRowEstHighBound
-                            });
 
                             // Extract curRowEstHighBound - check all possible locations
                             let curRowEstHighBound = null;
@@ -570,15 +554,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 curRowEstHighBound: curRowEstHighBound
                             };
 
-                            debugLog('🔍 [PAINT] Extracted row estimation config:', {
-                                rowEstExpr: rowEstExpr,
-                                curRowEstHighBound: curRowEstHighBound,
-                                source: curRowEstHighBound ? 'found' : 'NOT FOUND - check ODAG Link configuration'
-                            });
-
-                            debugLog('✅ [PAINT] Cloud bindings cached:', bindings.length, 'bindings');
-                            debugLog('✅ [PAINT] Cloud bindings array:', JSON.stringify(bindings, null, 2));
-                            debugLog('✅ [PAINT] Row estimation config:', window[rowEstCacheKey]);
+                            debugLog('✅ Cloud: cached', bindings.length, 'bindings, rowLimit:', curRowEstHighBound || 'none');
 
                             // Setup real-time selection subscriptions (chart-like behavior)
                             setupSelectionSubscriptions(app, bindings, odagConfig.odagLinkId, debugLog);
@@ -596,10 +572,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         if (props.odagConfig) {
                                             props.odagConfig._cachedBindingFields = fieldNames.join(', ');
                                         }
-                                        model.setProperties(props).catch(function(err) {
-                                            debugLog('Could not save bindings to layout (expected in published apps):', err.message);
+                                        model.setProperties(props).catch(function() {
+                                            // Expected in published apps - silently ignore
                                         });
-                                        debugLog('✅ Saved bindings to layout:', fieldNames.join(', '));
                                     });
                                 });
                             }
@@ -643,10 +618,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     },
                     timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS
                 }).then(function(linkDetails) {
-                    debugLog('🔍 [PAINT] FULL On-Premise link details response:', linkDetails);
-
                     // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
-                    // Bindings are inside objectDef, not at top level
                     let bindings = null;
 
                     if (linkDetails && linkDetails.objectDef && linkDetails.objectDef.bindings) {
@@ -655,17 +627,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         bindings = linkDetails.bindings;
                     }
 
-                    debugLog('🔍 [PAINT] Extracted bindings:', bindings);
-
                     if (bindings && Array.isArray(bindings) && bindings.length > 0) {
                         window[bindingsCacheKey] = bindings;
-                        debugLog('✅ [PAINT] On-Premise bindings cached:', bindings.length, 'bindings');
-                        debugLog('✅ [PAINT] Bindings array:', JSON.stringify(bindings, null, 2));
 
                             // Cache full link data (including properties like genAppLimit) for On-Premise
                             const linkDataCacheKey = 'odagLinkData_' + odagConfig.odagLinkId;
                             window[linkDataCacheKey] = linkDetails.objectDef || linkDetails;
-                            debugLog('✅ [PAINT] On-Premise full link data cached for app limit validation');
 
                             // Cache row estimation config from ODAG link (On-Premise)
                             const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
@@ -675,8 +642,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 // Extract rowEstExpr and curRowEstHighBound from On-Premise structure
                                 let rowEstExpr = null;
                                 let curRowEstHighBound = null;
-
-                                debugLog('🔍 [PAINT] On-Premise objectDef structure:', JSON.stringify(objectDef, null, 2));
 
                                 // Try multiple locations for rowEstExpr
                                 rowEstExpr = objectDef.rowEstExpr || objectDef.properties?.rowEstExpr;
@@ -698,12 +663,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     curRowEstHighBound: curRowEstHighBound
                                 };
 
-                                debugLog('✅ [PAINT] On-Premise row estimation config:', window[rowEstCacheKey]);
-                                debugLog('🔍 [PAINT] Extracted values:', {
-                                    rowEstExpr: rowEstExpr,
-                                    curRowEstHighBound: curRowEstHighBound,
-                                    source: curRowEstHighBound ? 'found' : 'NOT FOUND - check ODAG Link configuration in QMC'
-                                });
+                                debugLog('✅ On-Premise: cached', bindings.length, 'bindings, rowLimit:', curRowEstHighBound || 'none');
                             }
 
                             // Setup real-time selection subscriptions (chart-like behavior)
@@ -722,10 +682,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         if (props.odagConfig) {
                                             props.odagConfig._cachedBindingFields = fieldNames.join(', ');
                                         }
-                                        model.setProperties(props).catch(function(err) {
-                                            debugLog('Could not save bindings to layout (expected in published apps):', err.message);
+                                        model.setProperties(props).catch(function() {
+                                            // Expected in published apps - silently ignore
                                         });
-                                        debugLog('✅ Saved bindings to layout:', fieldNames.join(', '));
                                     });
                                 });
                             }
@@ -1580,12 +1539,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 // Create stable storage keys for sessionStorage (appId + odagLinkId doesn't change between page loads)
                 const stableStorageKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_lastGeneratedPayload';
                 const currentSelectionsKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_currentBindSelections';
-                debugLog('📍 Using stable storage key for lastGeneratedPayload:', stableStorageKey);
-                debugLog('📍 Using stable storage key for currentBindSelections:', currentSelectionsKey);
 
                 // Get lastGeneratedPayload from StateManager (persists across page navigation via sessionStorage)
                 let lastGeneratedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
-                debugLog('🔄 Retrieved lastGeneratedPayload from StateManager:', !!lastGeneratedPayload);
 
                 // Store deletedApps in StateManager so restoreDynamicView can access it
                 StateManager.set(extensionId, 'deletedApps', deletedApps);
@@ -1598,8 +1554,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     const apiUrl = isCloud
                         ? tenantUrl + '/api/v1/odaglinks/' + odagConfig.odagLinkId + '/requests?pending=true'
                         : tenantUrl + '/api/odag/v1/links/' + odagConfig.odagLinkId + '/requests?pending=true&xrfkey=' + xrfkey;
-
-                    debugLog('Deleting old ODAG apps (keeping latest:', keepRequestId, ')...');
 
                     const headers = {
                         'Accept': 'application/json',
@@ -1622,11 +1576,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 });
 
                                 if (appsToDelete.length === 0) {
-                                    debugLog('No old apps to delete (only latest exists)');
                                     return;
                                 }
 
-                                debugLog('Found', appsToDelete.length, 'old app(s) to delete');
+                                verboseLog('Cleaning up', appsToDelete.length, 'old app(s)');
 
                                 appsToDelete.forEach(function(request) {
                                     // Mark as deleted to prevent duplicate deletion attempts
@@ -1634,22 +1587,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                     // Delete the generated app
                                     ApiService.deleteApp(request.id)
-                                        .then(function() {
-                                            debugLog('Deleted old app:', request.generatedAppName || request.id);
-                                        })
                                         .catch(function(error) {
-                                            if (error.status === 404) {
-                                                debugLog('Old app already deleted:', request.id);
-                                            } else if (error.status === 403) {
-                                                debugLog('No permission to delete app:', request.id, '(this is OK, will be cleaned up by Qlik retention policy)');
-                                            } else {
-                                                console.error('Failed to delete old app:', request.id, error.status);
+                                            // 404 = already deleted, 403 = no permission (OK, will be cleaned by retention)
+                                            if (error.status !== 404 && error.status !== 403) {
+                                                console.error('Delete app failed:', request.id, error.status);
                                             }
-                                            // Continue even if delete fails - not critical
                                         });
                                 });
-                            } else {
-                                debugLog('No old apps to delete');
                             }
                         })
                         .catch(function(error) {
@@ -1666,7 +1610,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     const lastGenTime = window[lastGenerationKey] || 0;
                     const timeSinceLastGen = Date.now() - lastGenTime;
                     if (timeSinceLastGen < GENERATION_COOLDOWN_MS) {
-                        debugLog('⏭️ Generation blocked - cooldown active (' + timeSinceLastGen + 'ms < ' + GENERATION_COOLDOWN_MS + 'ms)');
+                        // Generation blocked - cooldown active
                         return;
                     }
 
@@ -2001,14 +1945,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             // CRITICAL: Clear any existing polling interval before starting new one
                             if (window[pollingIntervalKey]) {
                                 clearInterval(window[pollingIntervalKey]);
-                                debugLog('🧹 Cleared existing polling interval');
                             }
 
                             // Start checking for completion - store in window for persistence
                             window[pollingIntervalKey] = setInterval(function() {
                                 loadLatestODAGApp();
                             }, 1000);
-                            debugLog('✅ Started new polling interval:', window[pollingIntervalKey]);
                         } else {
                             updateDynamicStatus(
                                 getStatusHTML('failed', 'Failed to generate app', false)
@@ -2049,13 +1991,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             'Content-Type': 'application/json'
                         }
                     }).then(function(result) {
-                            debugLog('loadLatestODAGApp received response:', {
-                                resultLength: result ? result.length : 0,
-                                currentRequestId: currentRequestId,
-                                isGenerating: getIsGenerating(),
-                                results: result
-                            });
-
                             if (result && Array.isArray(result) && result.length > 0) {
                                 // Sort by date to get the latest
                                 result.sort(function(a, b) {
@@ -2065,8 +2000,6 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 // If we're currently generating, ONLY look for that specific request
                                 let latestApp = null;
                                 if (currentRequestId) {
-                                    debugLog('Looking for specific request:', currentRequestId);
-
                                     // Find the specific request we're waiting for
                                     latestApp = result.find(req =>
                                         req.id === currentRequestId &&
@@ -2075,15 +2008,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         !deletedApps.has(req.id)
                                     );
 
-                                    debugLog('Found matching succeeded app?', latestApp ? 'YES' : 'NO');
-
                                     if (!latestApp) {
-                                        // Still pending, check status
+                                        // Still pending, check status (silent - don't log every poll cycle)
                                         const pendingApp = result.find(req => req.id === currentRequestId);
-                                        if (pendingApp) {
-                                            debugLog('Waiting for new app:', currentRequestId, 'Status:', pendingApp.state, 'generatedApp:', pendingApp.generatedApp);
-                                        } else {
-                                            debugLog('WARNING: Current request ID not found in results!', currentRequestId);
+                                        if (!pendingApp) {
+                                            debugLog('⚠️ Request not found:', currentRequestId);
                                         }
                                     }
                                 } else {
@@ -2112,7 +2041,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         if (window[pollingIntervalKey]) {
                                             clearInterval(window[pollingIntervalKey]);
                                             window[pollingIntervalKey] = null;
-                                            debugLog('🛑 Stopped polling - app succeeded');
+                                            // Polling stopped - app succeeded
                                         }
 
                                         // Hide cancel button
@@ -2207,7 +2136,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 if (window[pollingIntervalKey]) {
                                     clearInterval(window[pollingIntervalKey]);
                                     window[pollingIntervalKey] = null;
-                                    debugLog('🛑 Stopped polling - no apps');
+                                    // Polling stopped - no apps
                                 }
                             }
                         }).catch(function(error) {
@@ -2220,7 +2149,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             if (window[pollingIntervalKey]) {
                                 clearInterval(window[pollingIntervalKey]);
                                 window[pollingIntervalKey] = null;
-                                debugLog('🛑 Stopped polling - error');
+                                // Polling stopped - error
                             }
                         });
                 };
@@ -2545,15 +2474,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     const lastStateStr = JSON.stringify(lastState);
                                     const hasChanged = currentStateStr !== lastStateStr;
 
-                                    debugLog('🔍 Comparing stored selections with baseline after page reload - changed:', hasChanged);
                                     if (hasChanged) {
-                                        debugLog('📊 Stored selections:', storedCurrentSelections.bindSelections);
-                                        debugLog('📊 Baseline selections:', lastGeneratedPayload.bindSelectionState);
+                                        debugLog('🔄 Page reload: selections changed, triggering refresh');
 
                                         // Auto-trigger refresh on page load when selections changed
                                         // But only if not already generating
                                         if (!getIsGenerating()) {
-                                            debugLog('🔄 Auto-triggering refresh on page load due to selection changes');
                                             // Clear any pending auto-refresh timers to prevent duplicate generations
                                             clearAutoRefreshTimer();
                                             setTimeout(function() {
@@ -2562,23 +2488,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                                     const refreshBtn = DOM.get('#refresh-btn-' + layout.qInfo.qId);
                                                     if (refreshBtn) {
                                                         refreshBtn.click();
-                                                        debugLog('✅ Auto-clicked refresh button after detecting stored selection changes');
                                                     }
-                                                } else {
-                                                    debugLog('⏭️ Skipped auto-click - generation already in progress');
                                                 }
                                             }, 1000);
-                                        } else {
-                                            debugLog('⏭️ Skipped auto-trigger - generation already in progress');
                                         }
                                     }
                                 } else {
                                     // No stored selections - call checkSelectionsChanged to build fresh payload
-                                    debugLog('⚠️ No stored selections - will check fresh selections after function initialization');
                                     setTimeout(function() {
                                         const checkFunc = StateManager.get(extensionId, 'checkSelectionsChanged');
                                         if (checkFunc) {
-                                            debugLog('🔍 Calling checkSelectionsChanged after page reload with stored payload');
                                             checkFunc();
                                         }
                                     }, 500);
@@ -2615,7 +2534,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 // This ensures selections are captured even if user navigates immediately
                 const saveCurrentSelectionsImmediately = async function() {
                     if (isSavingSelections) {
-                        debugLog('⏭️ Already saving selections, skipping...');
+                        // Saving in progress - skip
                         return;
                     }
                     isSavingSelections = true;
@@ -2652,9 +2571,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     saveCurrentSelectionsImmediately();
 
                     // Only skip UI updates if not in Dynamic View mode
-                    // But selections should ALWAYS be saved above
                     if (getViewMode() !== 'dynamicView') {
-                        debugLog('⏭️ Skipping UI update - not in Dynamic View mode (current:', getViewMode(), '), but selections were saved');
                         return;
                     }
 
@@ -2667,22 +2584,17 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     selectionDebounceTimer = setTimeout(function() {
                         selectionDebounceTimer = null;
 
-                        // Double-check view mode after debounce (user could have switched during debounce)
+                        // Double-check view mode after debounce
                         if (getViewMode() !== 'dynamicView') {
-                            debugLog('⏭️ Skipping selection check after debounce - not in Dynamic View mode');
                             return;
                         }
 
                         if (isCheckingSelections) {
-                            // A check is in progress, queue another one when it completes
-                            debugLog('⏳ Check in progress, queuing another check...');
                             pendingCheck = true;
                         } else {
                             checkSelectionsChanged();
                         }
                     }, SELECTION_DEBOUNCE_MS);
-
-                    debugLog('⏱️ Selections saved, UI update debounced for', SELECTION_DEBOUNCE_MS, 'ms');
                 };
 
                 // Function to check if current selections differ from last generated payload
@@ -2698,14 +2610,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             debugLog('⚠️ View mode mismatch detected - correcting from', currentViewMode, 'to dynamicView');
                             window[viewModeKey] = 'dynamicView'; // Fix the mode
                         } else {
-                            debugLog('⏭️ Skipping checkSelectionsChanged - not in Dynamic View mode');
+                            // Not in Dynamic View mode - skip
                             return;
                         }
                     }
 
                     // Prevent concurrent checks
                     if (isCheckingSelections) {
-                        debugLog('⏭️ Already checking, will queue pending check');
+                        // Check in progress - queuing
                         pendingCheck = true;
                         return;
                     }
@@ -2721,11 +2633,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                         debugLog('🔍 checkSelectionsChanged called - isGenerating:', getIsGenerating(), 'lastGeneratedPayload:', !!lastGeneratedPayload);
                         if (getIsGenerating()) {
-                            debugLog('⏭️ Skipping check - currently generating');
+                            // Skip check - generating
                             return; // Don't check while generating
                         }
                         if (!lastGeneratedPayload) {
-                            debugLog('⏭️ Skipping check - no previous payload to compare');
+                            // Skip check - no previous payload
                             return; // No previous payload to compare
                         }
 
@@ -2756,31 +2668,23 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         const lastStateStr = JSON.stringify(lastState);
 
                         const hasChanged = currentStateStr !== lastStateStr;
-                        debugLog('🔍 Checking state changed (binding selections + variables):', hasChanged);
                         if (hasChanged) {
-                            debugLog('📊 Current binding selections:', currentPayload.bindSelectionState);
-                            debugLog('📊 Last binding selections:', lastGeneratedPayload.bindSelectionState);
-                            debugLog('📊 Current variable values:', currentVariableValues);
-                            debugLog('📊 Last variable values:', lastGeneratedPayload.variableState);
+                            debugLog('🔄 State changed - scheduling auto-refresh');
 
                             // State changed - highlight refresh button
                             DOM.addClass('needs-refresh');
 
                             // AUTO-REFRESH: Debounce and trigger generation automatically (if enabled)
-                            // This makes it work like a chart - selections change, content updates
                             const autoRefreshEnabled = odagConfig.autoRefreshOnSelectionChange !== false; // Default true
 
                             if (autoRefreshEnabled) {
                                 // Clear any existing timer before setting a new one
                                 clearAutoRefreshTimer();
-
-                                debugLog('🔄 Selections changed - scheduling auto-refresh in', AUTO_REFRESH_DEBOUNCE_MS, 'ms');
                                 const newTimer = CleanupManager.addTimeout(setTimeout(function() {
                                     setAutoRefreshTimer(null);
 
                                     // Double-check we're not already generating
                                     if (getIsGenerating()) {
-                                        debugLog('⏭️ Auto-refresh skipped - already generating');
                                         return;
                                     }
 
@@ -2788,19 +2692,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     const lastGenTime = window[lastGenerationKey] || 0;
                                     const timeSinceLastGen = Date.now() - lastGenTime;
                                     if (timeSinceLastGen < GENERATION_COOLDOWN_MS) {
-                                        debugLog('⏭️ Auto-refresh skipped - cooldown active (' + timeSinceLastGen + 'ms since last generation, need ' + GENERATION_COOLDOWN_MS + 'ms)');
                                         return;
                                     }
 
-                                    debugLog('🚀 AUTO-REFRESH: Triggering ODAG generation due to selection change');
-
-                                    // Blur will be applied automatically inside generateNewODAGApp
+                                    debugLog('🚀 Auto-refresh: generating new app');
                                     generateNewODAGApp();
                                 }, AUTO_REFRESH_DEBOUNCE_MS));
                                 setAutoRefreshTimer(newTimer);
                             } else {
                                 // Auto-refresh disabled - just show warning
-                                debugLog('🔔 State changed - showing top bar with refresh warning (auto-refresh disabled)');
                                 topBarManuallyClosed = false;
                                 showTopBar(false, true);
                             }
@@ -2809,13 +2709,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             DOM.removeClass('needs-refresh');
                         }
                     } catch (error) {
-                        debugLog('Error checking state changes:', error);
+                        console.error('Error checking state changes:', error);
                     } finally {
                         isCheckingSelections = false;
 
                         // If a check was queued while we were checking, run it now
                         if (pendingCheck) {
-                            debugLog('🔄 Running queued pending check...');
                             pendingCheck = false;
                             // Use setTimeout to avoid deep recursion
                             setTimeout(checkSelectionsChanged, 50);
@@ -2897,7 +2796,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         if (window[pollingIntervalKey]) {
                             clearInterval(window[pollingIntervalKey]);
                             window[pollingIntervalKey] = null;
-                            debugLog('🛑 Stopped polling - cancelled');
+                            // Polling stopped - cancelled
                         }
 
                         // Cancel via API
@@ -3664,9 +3563,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         curRowEstHighBound: curRowEstHighBound
                                     };
 
-                                    debugLog('✅ Cloud bindings cached for generation:', bindings.length, 'bindings');
-                                    debugLog('✅ Bindings:', JSON.stringify(bindings, null, 2));
-                                    debugLog('✅ Row estimation config:', window[rowEstCacheKey]);
+                                    verboseLog('✅ Cloud bindings cached:', bindings.length);
                                     resolve();
                                 } else {
                                     console.error('❌ Unexpected Cloud bindings response format');
@@ -3700,10 +3597,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 },
                                 timeout: CONSTANTS.TIMING.AJAX_TIMEOUT_MS * 2 // Longer timeout for link details
                             }).then(function(linkDetails) {
-                                    debugLog('🔍 FULL On-Premise link details response:', linkDetails);
-
                                     // On-Premise response format: {objectDef: {bindings: [...], ...}, feedback: [...]}
-                                    // Bindings are inside objectDef, not at top level
                                     let bindings = null;
 
                                     if (linkDetails && linkDetails.objectDef && linkDetails.objectDef.bindings) {
@@ -3712,12 +3606,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         bindings = linkDetails.bindings;
                                     }
 
-                                    debugLog('🔍 Extracted bindings:', bindings);
-
                                     if (bindings && Array.isArray(bindings) && bindings.length > 0) {
                                         window[bindingsCacheKey] = bindings;
-                                        debugLog('✅ On-Premise bindings cached:', bindings.length, 'bindings');
-                                        debugLog('✅ Bindings array:', JSON.stringify(bindings, null, 2));
 
                                         // Cache row estimation config from ODAG link (On-Premise)
                                         const rowEstCacheKey = 'odagRowEstConfig_' + odagConfig.odagLinkId;
