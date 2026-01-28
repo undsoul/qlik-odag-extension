@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.1.9 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.2.0 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -1539,9 +1539,28 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 // Create stable storage keys for sessionStorage (appId + odagLinkId doesn't change between page loads)
                 const stableStorageKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_lastGeneratedPayload';
                 const currentSelectionsKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_currentBindSelections';
+                const pendingRequestKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_pendingRequestId';
 
                 // Get lastGeneratedPayload from StateManager (persists across page navigation via sessionStorage)
                 let lastGeneratedPayload = StateManager.get(extensionId, 'lastGeneratedPayload', null, stableStorageKey);
+
+                // CRITICAL: Restore pending request ID from sessionStorage (survives page navigation)
+                const storedPendingRequest = sessionStorage.getItem(pendingRequestKey);
+                if (storedPendingRequest) {
+                    try {
+                        const pending = JSON.parse(storedPendingRequest);
+                        // Only restore if less than 5 minutes old (app generation shouldn't take longer)
+                        if (pending.timestamp && (Date.now() - pending.timestamp) < 300000) {
+                            currentRequestId = pending.requestId;
+                            debugLog('🔄 Restored pending request from sessionStorage:', currentRequestId);
+                        } else {
+                            // Too old, clear it
+                            sessionStorage.removeItem(pendingRequestKey);
+                        }
+                    } catch (e) {
+                        sessionStorage.removeItem(pendingRequestKey);
+                    }
+                }
 
                 // Store deletedApps in StateManager so restoreDynamicView can access it
                 StateManager.set(extensionId, 'deletedApps', deletedApps);
@@ -1860,6 +1879,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             const odagData = result.data;
                             currentRequestId = odagData.id;
 
+                            // CRITICAL: Persist pending request to sessionStorage so polling survives page navigation
+                            sessionStorage.setItem(pendingRequestKey, JSON.stringify({
+                                requestId: currentRequestId,
+                                timestamp: Date.now(),
+                                appName: odagData.generatedAppName
+                            }));
+                            debugLog('💾 Stored pending request to sessionStorage:', currentRequestId);
+
                             debugLog('Dynamic View - New ODAG app generation started:', {
                                 newRequestId: odagData.id,
                                 appName: odagData.generatedAppName,
@@ -2049,6 +2076,9 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                         // Clear current request ID since we found it
                                         currentRequestId = null;
+                                        // Clear pending request from sessionStorage
+                                        sessionStorage.removeItem(pendingRequestKey);
+                                        debugLog('✅ Cleared pending request - app succeeded');
 
                                         // Update to show the latest app
                                         latestAppId = appId;
@@ -2399,6 +2429,25 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 } else {
                     // Subsequent loads in same session - check for existing app or generate
                     debugLog('ODAG Extension: Subsequent Dynamic View load - checking for existing app...');
+
+                    // CRITICAL: If we restored a pending request, start polling for it
+                    if (currentRequestId) {
+                        debugLog('🔄 Resuming polling for pending request:', currentRequestId);
+                        // Clear any existing polling interval
+                        if (window[pollingIntervalKey]) {
+                            clearInterval(window[pollingIntervalKey]);
+                        }
+                        // Start polling to wait for the pending app
+                        window[pollingIntervalKey] = setInterval(function() {
+                            loadLatestODAGApp();
+                        }, 1000);
+                        // Show generating status
+                        updateDynamicStatus(
+                            getStatusHTML('generating', 'Waiting for app...', true)
+                        );
+                        showCancelButton();
+                    }
+
                     loadLatestODAGApp();
 
                     // Store initial selection state after a delay
