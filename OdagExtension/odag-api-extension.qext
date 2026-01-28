@@ -2,7 +2,7 @@
     "name": "ODAG Extension",
     "description": "Generate On-Demand Apps with variable support and dynamic field mapping. Modern vanilla JS implementation with enhanced security.",
     "type": "visualization",
-    "version": "9.1.5",
+    "version": "9.1.6",
     "icon": "extension",
     "author": "MuchachoAI",
     "homepage": "https://github.com/undsoul/qlik-odag-extension",

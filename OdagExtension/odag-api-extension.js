@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.1.5 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.1.6 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -4047,9 +4047,18 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         qId: layout.qInfo.qId
                     });
 
+                    // CRITICAL: Check if generation is in progress
+                    // If so, don't reinitialize - the embed was intentionally cleared for loading overlay
+                    const isGeneratingKey = 'odagIsGenerating_' + odagConfig.odagLinkId;
+                    const isCurrentlyGenerating = window[isGeneratingKey] === true;
+
                     if (existingEmbed) {
                         debugLog('Dynamic View already initialized with embed, restoring state');
                         return restoreDynamicView(debugLog);
+                    } else if (isCurrentlyGenerating) {
+                        // Generation in progress - embed was cleared intentionally, don't reinitialize
+                        debugLog('⏳ Generation in progress, keeping loading overlay (not reinitializing)');
+                        return qlik.Promise.resolve();
                     } else {
                         // Embed was destroyed (e.g., by NebulaApp error during mode switch or edit/analysis transition)
                         // Reinitialize instead of waiting indefinitely
