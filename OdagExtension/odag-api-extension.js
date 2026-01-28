@@ -979,55 +979,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 checkSelectionsFunc();
                             }, 2000);
 
-                            // CRITICAL: Re-bind selection listener in case it was lost during page navigation
-                            const listenerKey = 'selectionListener_' + layout.qInfo.qId;
-                            if (!window[listenerKey]) {
-                                try {
-                                    debugLog('🔄 Re-binding selectionState listener after page navigation...');
-                                    app.selectionState().OnData.bind(function() {
-                                        debugLog('Selection state changed (re-bound listener) - debouncing...');
-                                        // Use debounced version if available, fallback to direct call
-                                        if (debouncedCheckFunc) {
-                                            debouncedCheckFunc();
-                                        } else {
-                                            checkSelectionsFunc();
-                                        }
-                                    });
-                                    window[listenerKey] = true;
-                                } catch (error) {
-                                    debugLog('⚠️ Failed to bind selectionState listener (error code:', error.code || error, ')');
-                                    // Don't mark as bound so it will retry on next paint
-                                }
-                            }
-
-                            // CRITICAL: Re-bind variable listeners for mapped variables
-                            const variableListenerKey = 'variableListeners_' + layout.qInfo.qId;
-                            if (!window[variableListenerKey] && odagConfig.variableMappings && odagConfig.variableMappings.length > 0) {
-                                debugLog('🔄 Re-binding variable listeners after page navigation...');
-                                window[variableListenerKey] = [];
-                                odagConfig.variableMappings.forEach(function(mapping) {
-                                    if (mapping.variableName) {
-                                        app.variable.getByName(mapping.variableName).then(function(variable) {
-                                            if (variable) {
-                                                try {
-                                                    variable.OnChanged.bind(function() {
-                                                        debugLog('📊 Variable changed (re-bound):', mapping.variableName);
-                                                        // Use debounced version if available
-                                                        if (debouncedCheckFunc) {
-                                                            debouncedCheckFunc();
-                                                        } else {
-                                                            checkSelectionsFunc();
-                                                        }
-                                                    });
-                                                    window[variableListenerKey].push(mapping.variableName);
-                                                } catch (e) {
-                                                    debugLog('⚠️ Failed to re-bind variable listener:', mapping.variableName);
-                                                }
-                                            }
-                                        }).catch(function() {});
-                                    }
-                                });
-                            }
+                            // NOTE: Listeners are bound ONCE in initDynamicView
+                            // No need to re-bind here - that causes duplicate listeners!
                         } else {
                             debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
                         }
@@ -1600,12 +1553,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 initDynamicView = function(debugLog) {
                 let latestAppId = null;
                 let latestAppName = null;
-                let checkStatusInterval = null;
                 let currentRequestId = null;
 
                 // Use window-level keys to store state that must persist across paint() calls
                 const isGeneratingKey = 'odagIsGenerating_' + odagConfig.odagLinkId;
                 const deleteIntervalKey = 'odagDeleteInterval_' + odagConfig.odagLinkId;
+                const pollingIntervalKey = 'odagPollingInterval_' + odagConfig.odagLinkId;
+                const lastGenerationKey = 'odagLastGenerationTime_' + odagConfig.odagLinkId;
+                const listenerBoundKey = 'odagListenerBound_' + odagConfig.odagLinkId;
+                const GENERATION_COOLDOWN_MS = 3000; // Prevent generation within 3 seconds
                 const deletedAppsKey = 'odagDeletedApps_' + odagConfig.odagLinkId;
                 // CRITICAL: Track view mode at window level so selection listeners can check if we're still in Dynamic View
                 const viewModeKey = 'odagViewMode_' + layout.qInfo.qId;
@@ -1706,6 +1662,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                 // Function to generate new ODAG app
                 const generateNewODAGApp = async function() {
+                    // CRITICAL: Check cooldown FIRST to prevent duplicate generations
+                    const lastGenTime = window[lastGenerationKey] || 0;
+                    const timeSinceLastGen = Date.now() - lastGenTime;
+                    if (timeSinceLastGen < GENERATION_COOLDOWN_MS) {
+                        debugLog('⏭️ Generation blocked - cooldown active (' + timeSinceLastGen + 'ms < ' + GENERATION_COOLDOWN_MS + 'ms)');
+                        return;
+                    }
+
                     if (getIsGenerating()) {
                         debugLog('Already generating an app, please wait...');
                         return;
@@ -1713,7 +1677,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                     setIsGenerating(true);
 
-                    // CRITICAL: Record generation start time to prevent duplicate generations
+                    // CRITICAL: Record generation start time IMMEDIATELY to prevent duplicate generations
                     window[lastGenerationKey] = Date.now();
                     debugLog('📍 Generation started at', new Date().toISOString());
 
@@ -2034,10 +1998,17 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             // Store for next refresh
                             previousRequestId = odagData.id;
 
-                            // Start checking for completion
-                            checkStatusInterval = CleanupManager.addInterval(setInterval(function() {
+                            // CRITICAL: Clear any existing polling interval before starting new one
+                            if (window[pollingIntervalKey]) {
+                                clearInterval(window[pollingIntervalKey]);
+                                debugLog('🧹 Cleared existing polling interval');
+                            }
+
+                            // Start checking for completion - store in window for persistence
+                            window[pollingIntervalKey] = setInterval(function() {
                                 loadLatestODAGApp();
-                            }, 1000));
+                            }, 1000);
+                            debugLog('✅ Started new polling interval:', window[pollingIntervalKey]);
                         } else {
                             updateDynamicStatus(
                                 getStatusHTML('failed', 'Failed to generate app', false)
@@ -2138,9 +2109,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         const isNewApp = (!latestAppId || latestAppId !== appId);
 
                                         // Stop checking if we have a succeeded app
-                                        if (checkStatusInterval) {
-                                            clearInterval(checkStatusInterval);
-                                            checkStatusInterval = null;
+                                        if (window[pollingIntervalKey]) {
+                                            clearInterval(window[pollingIntervalKey]);
+                                            window[pollingIntervalKey] = null;
+                                            debugLog('🛑 Stopped polling - app succeeded');
                                         }
 
                                         // Hide cancel button
@@ -2232,9 +2204,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 );
 
                                 // Stop checking if no apps
-                                if (checkStatusInterval) {
-                                    clearInterval(checkStatusInterval);
-                                    checkStatusInterval = null;
+                                if (window[pollingIntervalKey]) {
+                                    clearInterval(window[pollingIntervalKey]);
+                                    window[pollingIntervalKey] = null;
+                                    debugLog('🛑 Stopped polling - no apps');
                                 }
                             }
                         }).catch(function(error) {
@@ -2244,9 +2217,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             );
 
                             // Stop checking on error
-                            if (checkStatusInterval) {
-                                clearInterval(checkStatusInterval);
-                                checkStatusInterval = null;
+                            if (window[pollingIntervalKey]) {
+                                clearInterval(window[pollingIntervalKey]);
+                                window[pollingIntervalKey] = null;
+                                debugLog('🛑 Stopped polling - error');
                             }
                         });
                 };
@@ -2635,9 +2609,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 const SELECTION_DEBOUNCE_MS = 300; // Wait 300ms for UI update (reduced from 500ms)
                 const AUTO_REFRESH_DEBOUNCE_MS = 1500; // Wait 1.5s for auto-regeneration (let user finish selecting)
 
-                // CRITICAL: Track last generation time to prevent duplicate generations
-                const lastGenerationKey = 'odagLastGenerationTime_' + odagConfig.odagLinkId;
-                const GENERATION_COOLDOWN_MS = 3000; // Prevent generation within 3 seconds of last one
+                // NOTE: lastGenerationKey and GENERATION_COOLDOWN_MS are defined at top of initDynamicView
 
                 // IMMEDIATE save function - saves current selections to sessionStorage right away
                 // This ensures selections are captured even if user navigates immediately
@@ -2922,9 +2894,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         debugLog('Cancelling generation...');
 
                         // Stop checking
-                        if (checkStatusInterval) {
-                            clearInterval(checkStatusInterval);
-                            checkStatusInterval = null;
+                        if (window[pollingIntervalKey]) {
+                            clearInterval(window[pollingIntervalKey]);
+                            window[pollingIntervalKey] = null;
+                            debugLog('🛑 Stopped polling - cancelled');
                         }
 
                         // Cancel via API
@@ -2975,8 +2948,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     DOM.on(cancelBtn, 'click', cancelFunc);
                 }
 
-                // Load the latest ODAG app on initialization
-                loadLatestODAGApp();
+                // NOTE: loadLatestODAGApp is already called above in the if/else branches
+                // Do NOT call it again here - that causes duplicate polling intervals!
 
                 // No need to load regular apps list
                 return qlik.Promise.resolve();
@@ -4215,55 +4188,8 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                         checkSelectionsFunc();
                     }, 2000);
 
-                    // CRITICAL: Re-bind selection listener in case it was lost during page navigation
-                    const listenerKey = 'selectionListener_' + layout.qInfo.qId;
-                    if (!window[listenerKey]) {
-                        try {
-                            debugLog('🔄 Re-binding selectionState listener at end of paint...');
-                            app.selectionState().OnData.bind(function() {
-                                debugLog('Selection state changed (re-bound listener) - debouncing...');
-                                // Use debounced version if available
-                                if (debouncedCheckFunc) {
-                                    debouncedCheckFunc();
-                                } else {
-                                    checkSelectionsFunc();
-                                }
-                            });
-                            window[listenerKey] = true;
-                        } catch (error) {
-                            debugLog('⚠️ Failed to bind selectionState listener (error code:', error.code || error, ')');
-                            // Don't mark as bound so it will retry on next paint
-                        }
-                    }
-
-                    // CRITICAL: Re-bind variable listeners for mapped variables
-                    const variableListenerKey = 'variableListeners_' + layout.qInfo.qId;
-                    if (!window[variableListenerKey] && odagConfig.variableMappings && odagConfig.variableMappings.length > 0) {
-                        debugLog('🔄 Re-binding variable listeners at end of paint...');
-                        window[variableListenerKey] = [];
-                        odagConfig.variableMappings.forEach(function(mapping) {
-                            if (mapping.variableName) {
-                                app.variable.getByName(mapping.variableName).then(function(variable) {
-                                    if (variable) {
-                                        try {
-                                            variable.OnChanged.bind(function() {
-                                                debugLog('📊 Variable changed (re-bound at paint end):', mapping.variableName);
-                                                // Use debounced version if available
-                                                if (debouncedCheckFunc) {
-                                                    debouncedCheckFunc();
-                                                } else {
-                                                    checkSelectionsFunc();
-                                                }
-                                            });
-                                            window[variableListenerKey].push(mapping.variableName);
-                                        } catch (e) {
-                                            debugLog('⚠️ Failed to re-bind variable listener:', mapping.variableName);
-                                        }
-                                    }
-                                }).catch(function() {});
-                            }
-                        });
-                    }
+                    // NOTE: Listeners are bound ONCE in initDynamicView
+                    // No need to re-bind here - that causes duplicate listeners!
                 } else {
                     debugLog('⚠️ checkSelectionsFunc NOT found in StateManager');
                 }
