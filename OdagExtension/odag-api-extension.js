@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.1.6 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.1.7 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -4050,14 +4050,27 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // CRITICAL: Check if generation is in progress
                     // If so, don't reinitialize - the embed was intentionally cleared for loading overlay
                     const isGeneratingKey = 'odagIsGenerating_' + odagConfig.odagLinkId;
-                    const isCurrentlyGenerating = window[isGeneratingKey] === true;
+                    const lastGenKey = 'odagLastGenerationTime_' + odagConfig.odagLinkId;
+                    const isGeneratingFlag = window[isGeneratingKey] === true;
+                    const lastGenTime = window[lastGenKey] || 0;
+                    const timeSinceLastGen = Date.now() - lastGenTime;
+                    const STALE_THRESHOLD_MS = 60000; // 60 seconds - if flag is older, it's stale
+
+                    // Only consider "generating" if flag is true AND it started within last 60 seconds
+                    const isCurrentlyGenerating = isGeneratingFlag && timeSinceLastGen < STALE_THRESHOLD_MS;
+
+                    // Clear stale flag if it's been too long
+                    if (isGeneratingFlag && timeSinceLastGen >= STALE_THRESHOLD_MS) {
+                        debugLog('🧹 Clearing stale isGenerating flag (started', Math.round(timeSinceLastGen/1000), 'seconds ago)');
+                        window[isGeneratingKey] = false;
+                    }
 
                     if (existingEmbed) {
                         debugLog('Dynamic View already initialized with embed, restoring state');
                         return restoreDynamicView(debugLog);
                     } else if (isCurrentlyGenerating) {
                         // Generation in progress - embed was cleared intentionally, don't reinitialize
-                        debugLog('⏳ Generation in progress, keeping loading overlay (not reinitializing)');
+                        debugLog('⏳ Generation in progress (started', Math.round(timeSinceLastGen/1000), 's ago), keeping loading overlay');
                         return qlik.Promise.resolve();
                     } else {
                         // Embed was destroyed (e.g., by NebulaApp error during mode switch or edit/analysis transition)
