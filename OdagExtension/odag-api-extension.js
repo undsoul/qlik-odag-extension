@@ -793,12 +793,30 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             // Track deletion promises to update window.odagGeneratedApps after all deletions
                             const deletionPromises = [];
 
+                            // CRITICAL FIX v9.2.5: Track deleted generated app IDs to prevent race conditions
+                            const deletedAppIdsKey = 'odagDeletedAppIds_' + odagConfig.odagLinkId;
+                            if (!window[deletedAppIdsKey]) {
+                                window[deletedAppIdsKey] = new Set();
+                            }
+
                             appsToDelete.forEach(function(app) {
                                 const isCloud = window.qlikEnvironment === 'cloud';
                                 const xrfkey = CONSTANTS.API.XRF_KEY;
                                 const deleteHeaders = isCloud
                                     ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                     : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
+
+                                // CRITICAL FIX v9.2.5: Mark generated app ID as deleted BEFORE the DELETE request
+                                // This prevents embedding an app that was just deleted
+                                if (app.generatedApp) {
+                                    const genAppId = typeof app.generatedApp === 'string'
+                                        ? app.generatedApp
+                                        : (app.generatedApp.id || '');
+                                    if (genAppId) {
+                                        window[deletedAppIdsKey].add(genAppId);
+                                        debugLog('🗑️ Marked generated app as deleted:', genAppId);
+                                    }
+                                }
 
                                 // Build DELETE URL - only add xrfkey for On-Premise
                                 const deleteUrl = isCloud
@@ -1541,6 +1559,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 let deletedApps = window[deletedAppsKey] || new Set();
                 window[deletedAppsKey] = deletedApps; // Store reference for persistence
 
+                // CRITICAL FIX v9.2.5: Also track deleted GENERATED APP IDs (not just request IDs)
+                // This prevents embedding an app that was just deleted (race condition fix)
+                const deletedAppIdsKey = 'odagDeletedAppIds_' + odagConfig.odagLinkId;
+                let deletedAppIds = window[deletedAppIdsKey] || new Set();
+                window[deletedAppIdsKey] = deletedAppIds;
+
                 // Create stable storage keys for sessionStorage (appId + odagLinkId doesn't change between page loads)
                 const stableStorageKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_lastGeneratedPayload';
                 const currentSelectionsKey = 'odagState_' + app.id + '_' + odagConfig.odagLinkId + '_currentBindSelections';
@@ -1608,6 +1632,18 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 appsToDelete.forEach(function(request) {
                                     // Mark as deleted to prevent duplicate deletion attempts
                                     deletedApps.add(request.id);
+
+                                    // CRITICAL FIX v9.2.5: Also mark generated app ID as deleted
+                                    // This prevents embedding an app that was just deleted
+                                    if (request.generatedApp) {
+                                        const genAppId = typeof request.generatedApp === 'string'
+                                            ? request.generatedApp
+                                            : (request.generatedApp.id || '');
+                                        if (genAppId) {
+                                            deletedAppIds.add(genAppId);
+                                            debugLog('🗑️ Marked generated app as deleted:', genAppId);
+                                        }
+                                    }
 
                                     // Delete the generated app
                                     ApiService.deleteApp(request.id)
@@ -1736,9 +1772,24 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             .map(app => app.id)
                             .filter(id => id);
 
+                        // CRITICAL FIX v9.2.5: Also track mapping from request ID to generated app ID
+                        // This allows us to prevent embedding deleted apps (race condition fix)
+                        const requestToAppIdMap = {};
+                        existingApps.forEach(function(app) {
+                            if (app.id && app.generatedApp) {
+                                const genAppId = typeof app.generatedApp === 'string'
+                                    ? app.generatedApp
+                                    : (app.generatedApp.id || '');
+                                if (genAppId) {
+                                    requestToAppIdMap[app.id] = genAppId;
+                                }
+                            }
+                        });
+
                         debugLog('Fetched existing apps before generation:', {
                             count: oldRequestIds.length,
-                            requestIds: oldRequestIds
+                            requestIds: oldRequestIds,
+                            requestToAppIdMap: requestToAppIdMap
                         });
 
                         // Check if we have stored selections from page navigation
@@ -1963,6 +2014,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                                 // Mark as deleted before making the request
                                                 deletedApps.add(oldRequestId);
 
+                                                // CRITICAL FIX v9.2.5: Also mark the GENERATED APP ID as deleted
+                                                // This prevents embedding an app that was just deleted
+                                                const oldGenAppId = requestToAppIdMap[oldRequestId];
+                                                if (oldGenAppId) {
+                                                    deletedAppIds.add(oldGenAppId);
+                                                    debugLog('🗑️ Marked generated app as deleted:', oldGenAppId);
+                                                }
+
                                                 const isCloud = window.qlikEnvironment === 'cloud';
                                                 const xrfkey = CONSTANTS.API.XRF_KEY;
                                                 const deleteHeaders = isCloud
@@ -2126,6 +2185,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         appId = latestApp.generatedApp.id;
                                     }
 
+                                    // CRITICAL FIX v9.2.5: Skip if this app was marked as deleted
+                                    if (appId && deletedAppIds.has(appId)) {
+                                        debugLog('⚠️ Skipping deleted app:', appId);
+                                        return;
+                                    }
+
                                     if (appId) {
                                         // Check if this is a different app than what we're currently showing
                                         const isNewApp = (!latestAppId || latestAppId !== appId);
@@ -2257,6 +2322,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                     if (!appId) {
                         if (container) DOM.setHTML(container, '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #999;">No app available</div>');
+                        return;
+                    }
+
+                    // CRITICAL FIX v9.2.5: Skip loading if this app was recently deleted
+                    // This prevents race condition where embed tries to connect to deleted app
+                    if (deletedAppIds.has(appId)) {
+                        debugLog('⚠️ Skipping embed load - app was deleted:', appId);
                         return;
                     }
 
@@ -2492,8 +2564,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             debugLog('Found existing app:', latestAppId, '- will delete old ones in background');
 
                             // Delete old apps in background (after latest is already loaded)
+                            // CRITICAL FIX v9.2.5: Use previousRequestId (REQUEST ID), not latestAppId (GENERATED APP ID)
+                            // The deleteOldODAGApps function compares against request.id, not generatedApp
                             setTimeout(function() {
-                                deleteOldODAGApps(latestAppId);
+                                if (previousRequestId) {
+                                    deleteOldODAGApps(previousRequestId);
+                                } else {
+                                    debugLog('⚠️ Skipping old app cleanup - no previousRequestId available');
+                                }
                             }, 2000);
                         }
                     }, 1000);
