@@ -2078,7 +2078,38 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         }
                                     }
                                 } else {
-                                    // No specific request, find any latest succeeded app that hasn't been deleted
+                                    // No specific request - check for loading apps first
+                                    // CRITICAL FIX: Detect if there's already an app being generated
+                                    const loadingApp = result.find(req =>
+                                        (req.state === 'loading' || req.state === 'queued' || req.state === 'validating') &&
+                                        !deletedApps.has(req.id)
+                                    );
+
+                                    if (loadingApp) {
+                                        // Found an app that's still being generated - resume tracking it
+                                        debugLog('🔄 Found existing loading app, resuming tracking:', loadingApp.id);
+                                        currentRequestId = loadingApp.id;
+                                        setIsGenerating(true);
+
+                                        // Show generating status
+                                        updateDynamicStatus(
+                                            getStatusHTML('generating', messages.progress.generatingApp, true)
+                                        );
+                                        showCancelButton();
+
+                                        // Make sure polling is active
+                                        if (!window[pollingIntervalKey]) {
+                                            window[pollingIntervalKey] = setInterval(function() {
+                                                loadLatestODAGApp();
+                                            }, 1000);
+                                            debugLog('📡 Started polling for loading app');
+                                        }
+
+                                        // Don't look for succeeded apps while one is loading
+                                        return;
+                                    }
+
+                                    // No loading apps, find any latest succeeded app that hasn't been deleted
                                     latestApp = result.find(req =>
                                         req.state === 'succeeded' &&
                                         req.generatedApp &&
