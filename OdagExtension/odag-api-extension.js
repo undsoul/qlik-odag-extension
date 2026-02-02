@@ -1649,19 +1649,31 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     window[lastGenerationKey] = Date.now();
                     debugLog('📍 Generation started at', new Date().toISOString());
 
-                    // CRITICAL: Clear old embed and show loading overlay
-                    // This prevents showing stale data (e.g., from previous Section Access user)
+                    // CRITICAL: Clear old embed and show loading overlay in ALL view modes
+                    // This prevents showing stale data from previous generation
+                    const loadingHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; background: rgba(255,255,255,0.95); color: #666; font-size: 16px;">⏳ Generating new app...</div>';
+
+                    // Clear Dynamic View container (Compact View)
                     const embedContainer = getDynamicEmbedContainer();
                     if (embedContainer) {
-                        // Remove all existing qlik-embed elements to prevent cache
                         const existingEmbeds = embedContainer.querySelectorAll('qlik-embed');
                         existingEmbeds.forEach(function(embed) {
                             embed.remove();
                         });
+                        embedContainer.innerHTML = loadingHTML;
+                        debugLog('✅ Cleared dynamic-embed container');
+                    }
 
-                        // Show loading overlay instead of old content
-                        embedContainer.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; background: rgba(255,255,255,0.95); color: #666; font-size: 16px;">⏳ Generating new app...</div>';
-                        debugLog('✅ Cleared old embed and showing loading overlay');
+                    // CRITICAL FIX: Also clear List View container (iframe-container)
+                    // This was missing - causing old app to show while new one generates
+                    const iframeContainer = DOM.get('#iframe-container-' + layout.qInfo.qId);
+                    if (iframeContainer) {
+                        const existingIframeEmbeds = iframeContainer.querySelectorAll('qlik-embed');
+                        existingIframeEmbeds.forEach(function(embed) {
+                            embed.remove();
+                        });
+                        iframeContainer.innerHTML = loadingHTML;
+                        debugLog('✅ Cleared iframe-container (List View)');
                     }
 
                     // CRITICAL: Cancel any pending auto-refresh to prevent race conditions
