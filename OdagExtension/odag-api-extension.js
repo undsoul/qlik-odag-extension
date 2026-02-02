@@ -2450,6 +2450,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // After a delay, check if we have an app or need to generate one
                     setTimeout(async function() {
                         if (!latestAppId) {
+                            // CRITICAL: Check isGenerating to prevent duplicate generation
+                            if (getIsGenerating()) {
+                                debugLog('⏳ Generation already in progress, skipping initial app generation');
+                                return;
+                            }
                             debugLog('No existing apps found, generating initial app...');
                             generateNewODAGApp();
                         } else {
@@ -2488,6 +2493,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     // Store initial selection state after a delay
                     setTimeout(async function() {
                         if (!latestAppId) {
+                            // CRITICAL: Check isGenerating to prevent duplicate generation
+                            // Another code path (checkSelectionsChanged) might have already started generation
+                            if (getIsGenerating()) {
+                                debugLog('⏳ Generation already in progress, skipping initial app generation');
+                                return;
+                            }
                             debugLog('No existing apps found, generating initial app...');
                             generateNewODAGApp();
                         } else {
