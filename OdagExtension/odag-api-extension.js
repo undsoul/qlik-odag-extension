@@ -800,8 +800,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                     : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
 
+                                // Build DELETE URL - only add xrfkey for On-Premise
+                                const deleteUrl = isCloud
+                                    ? tenantUrl + '/api/v1/odagrequests/' + app.id + '/app'
+                                    : tenantUrl + '/api/odag/v1/requests/' + app.id + '/app?xrfkey=' + xrfkey;
+
                                 const deletePromise = HTTP.request({
-                                    url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + app.id + '/app?xrfkey=' + xrfkey,
+                                    url: deleteUrl,
                                     method: 'DELETE',
                                     headers: deleteHeaders
                                 }).then(function() {
@@ -1730,8 +1735,16 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                         let payload, rowEstResult, currentVariableValues;
 
-                        if (storedSelections && storedSelections.bindSelections) {
-                            debugLog('📦 Using STORED selections from sessionStorage (more reliable after page navigation)');
+                        // CRITICAL FIX: Only use stored selections if they are RECENT (within 30 seconds)
+                        // This prevents stale selections from previous sessions being used
+                        const STORED_SELECTIONS_MAX_AGE_MS = 30000; // 30 seconds
+                        const storedSelectionsAge = storedSelections && storedSelections.timestamp
+                            ? Date.now() - storedSelections.timestamp
+                            : Infinity;
+                        const storedSelectionsValid = storedSelectionsAge < STORED_SELECTIONS_MAX_AGE_MS;
+
+                        if (storedSelections && storedSelections.bindSelections && storedSelectionsValid) {
+                            debugLog('📦 Using STORED selections from sessionStorage (age: ' + Math.round(storedSelectionsAge/1000) + 's)');
 
                             // Use stored selections directly - these were captured when user made the selection
                             const buildResult = await buildPayload(app, odagConfig, layout);
@@ -1747,7 +1760,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                             currentVariableValues = storedSelections.variables || [];
                             debugLog('✅ Payload built using stored selections');
                         } else {
-                            debugLog('🔄 No stored selections - querying engine directly');
+                            // Log why stored selections were not used
+                            if (storedSelections && storedSelections.bindSelections && !storedSelectionsValid) {
+                                debugLog('⚠️ Stored selections EXPIRED (age: ' + Math.round(storedSelectionsAge/1000) + 's > ' + (STORED_SELECTIONS_MAX_AGE_MS/1000) + 's) - querying engine directly');
+                            } else {
+                                debugLog('🔄 No stored selections - querying engine directly');
+                            }
                             // Build payload with current selections (fresh app reference ensures current state)
                             const buildResult = await buildPayload(app, odagConfig, layout);
                             payload = buildResult.payload;
@@ -1939,8 +1957,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                                     ? { 'qlik-csrf-token': getCookie('_csrfToken') || '' }
                                                     : { 'X-Qlik-XrfKey': xrfkey, 'Content-Type': 'application/json' };
 
+                                                // Build DELETE URL - only add xrfkey for On-Premise
+                                                const oldAppDeleteUrl = isCloud
+                                                    ? tenantUrl + '/api/v1/odagrequests/' + oldRequestId + '/app'
+                                                    : tenantUrl + '/api/odag/v1/requests/' + oldRequestId + '/app?xrfkey=' + xrfkey;
+
                                                 HTTP.request({
-                                                    url: (isCloud ? tenantUrl + '/api/v1/odagrequests/' : tenantUrl + '/api/odag/v1/requests/') + oldRequestId + '/app?xrfkey=' + xrfkey,
+                                                    url: oldAppDeleteUrl,
                                                     method: 'DELETE',
                                                     headers: deleteHeaders
                                                 }).then(function() {
