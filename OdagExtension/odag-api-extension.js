@@ -2168,6 +2168,13 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                         return;
                                     }
 
+                                    // CRITICAL FIX v9.2.6: If generation is in progress but we don't have
+                                    // currentRequestId yet (POST still in flight), don't load old succeeded apps
+                                    if (getIsGenerating()) {
+                                        debugLog('⏳ Generation in progress, waiting for new app...');
+                                        return;
+                                    }
+
                                     // No loading apps, find any latest succeeded app that hasn't been deleted
                                     latestApp = result.find(req =>
                                         req.state === 'succeeded' &&
