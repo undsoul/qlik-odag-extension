@@ -2130,10 +2130,25 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                     );
 
                                     if (!latestApp) {
-                                        // Still pending, check status (silent - don't log every poll cycle)
+                                        // Still pending, check status
                                         const pendingApp = result.find(req => req.id === currentRequestId);
                                         if (!pendingApp) {
                                             debugLog('⚠️ Request not found:', currentRequestId);
+                                        } else if (pendingApp.state === 'loading' || pendingApp.state === 'validating' || pendingApp.state === 'queued') {
+                                            // CRITICAL FIX v9.2.7: Show generating UI while app is loading
+                                            updateDynamicStatus(
+                                                getStatusHTML('generating', messages.progress.generatingApp, true)
+                                            );
+                                            showCancelButton();
+                                        } else if (pendingApp.state === 'failed') {
+                                            // Generation failed
+                                            debugLog('❌ Generation failed:', currentRequestId);
+                                            updateDynamicStatus(
+                                                getStatusHTML('failed', 'Generation failed', false)
+                                            );
+                                            hideCancelButton();
+                                            setIsGenerating(false);
+                                            currentRequestId = null;
                                         }
                                     }
                                 } else {
