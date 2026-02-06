@@ -2565,38 +2565,20 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 const hasInitializedThisSession = sessionStorage.getItem(sessionKey);
 
                 if (!hasInitializedThisSession) {
-                    // First session load - load latest app immediately, then delete old ones in background
-                    debugLog('ODAG Extension: First Dynamic View load - loading latest app...');
+                    // CRITICAL FIX v9.2.8: Fresh tab = always generate new app
+                    // User opens new tab with new selections, should not see old stale data
+                    debugLog('ODAG Extension: First session load - generating fresh app...');
                     sessionStorage.setItem(sessionKey, 'true');
 
-                    // Load latest app first for fast initialization
-                    loadLatestODAGApp();
-
-                    // After a delay, check if we have an app or need to generate one
+                    // Small delay to ensure Qlik selections are ready
                     setTimeout(async function() {
-                        if (!latestAppId) {
-                            // CRITICAL: Check isGenerating to prevent duplicate generation
-                            if (getIsGenerating()) {
-                                debugLog('⏳ Generation already in progress, skipping initial app generation');
-                                return;
-                            }
-                            debugLog('No existing apps found, generating initial app...');
-                            generateNewODAGApp();
-                        } else {
-                            debugLog('Found existing app:', latestAppId, '- will delete old ones in background');
-
-                            // Delete old apps in background (after latest is already loaded)
-                            // CRITICAL FIX v9.2.5: Use previousRequestId (REQUEST ID), not latestAppId (GENERATED APP ID)
-                            // The deleteOldODAGApps function compares against request.id, not generatedApp
-                            setTimeout(function() {
-                                if (previousRequestId) {
-                                    deleteOldODAGApps(previousRequestId);
-                                } else {
-                                    debugLog('⚠️ Skipping old app cleanup - no previousRequestId available');
-                                }
-                            }, 2000);
+                        if (getIsGenerating()) {
+                            debugLog('⏳ Generation already in progress, skipping');
+                            return;
                         }
-                    }, 1000);
+                        debugLog('🚀 Auto-generating new app for fresh session');
+                        generateNewODAGApp();
+                    }, 500);
                 } else {
                     // Subsequent loads in same session - check for existing app or generate
                     debugLog('ODAG Extension: Subsequent Dynamic View load - checking for existing app...');
