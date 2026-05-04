@@ -18,7 +18,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.2.0 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.2.9 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -937,9 +937,12 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             const previousMobileState = window[mobileStateKey];
             const viewportChanged = previousMobileState !== undefined && previousMobileState !== isMobile;
 
-            if (window[initKey] && previousMode === currentMode && !isEditMode && !isMobile && !viewportChanged) {
+            // v9.2.9: On mobile, preserve DOM in Dynamic View to prevent embed destruction
+            // and unintended ODAG regeneration on every paint (resize/tap triggers paint).
+            // List View on mobile still rebuilds so its event handlers (open/cancel/reload/delete) re-attach.
+            if (window[initKey] && previousMode === currentMode && !isEditMode && !viewportChanged && (!isMobile || isDynamicView)) {
                 // Check if actual DOM content still exists (not destroyed by page navigation)
-                // Note: Skip this optimization on mobile to ensure event handlers are re-attached
+                // Note: List View on mobile still rebuilds to ensure event handlers are re-attached
                 // Also skip if viewport changed (mobile <-> desktop transition)
                 const hasContent = $element.children().length > 0;
                 if (hasContent) {
