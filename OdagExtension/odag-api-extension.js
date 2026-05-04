@@ -10,15 +10,16 @@ define([
     "./foundation/odag-validators",
     "./foundation/odag-error-handler",
     "./foundation/odag-language",
+    "./foundation/odag-device-detector",
     "./handlers/odag-event-handlers",
     "./core/odag-payload-builder",
     "./views/odag-view-manager",
     "css!./styles/odag-api-extension.css"
 ],
-function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, EventHandlers, PayloadBuilder, ViewManager) {
+function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, DeviceDetector, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.2.9 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.2.10 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -712,6 +713,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             const isLargeView = elementHeight > 400 && elementWidth > 600;
             // Detect mobile viewport (width < 768px) for responsive layout adjustments only
             const isMobile = elementWidth < CONSTANTS.UI.MOBILE_BREAKPOINT_PX;
+            // v9.2.10: Detect native Qlik mobile app (UA / globals / qlik API).
+            // iPad-landscape native app has desktop-sized width, so isMobile alone misses it.
+            // Used to extend the Dynamic View DOM-preservation guard to mobile-app context.
+            const isNativeMobileApp = DeviceDetector.isNativeMobileApp(qlik);
+            const isMobileContext = isMobile || isNativeMobileApp;
             // Use whatever view mode is configured - no mobile restrictions
             const isDynamicView = odagConfig.viewMode === 'dynamicView';
             const effectiveEmbedMode = odagConfig.embedMode || 'classic/app';
@@ -721,7 +727,7 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             const viewModeKey = 'odagViewMode_' + layout.qInfo.qId;
             window[viewModeKey] = isDynamicView ? 'dynamicView' : 'listView';
 
-            debugLog('ODAG Extension: isEditMode =', isEditMode, 'isDynamicView =', isDynamicView, 'isMobile =', isMobile, 'effectiveEmbedMode =', effectiveEmbedMode, 'odagLinkId =', odagConfig.odagLinkId);
+            debugLog('ODAG Extension: isEditMode =', isEditMode, 'isDynamicView =', isDynamicView, 'isMobile =', isMobile, 'isNativeMobileApp =', isNativeMobileApp, '(' + DeviceDetector.getDetectionMethod() + ')', 'effectiveEmbedMode =', effectiveEmbedMode, 'odagLinkId =', odagConfig.odagLinkId);
 
             // Check if we're switching TO Dynamic View (even in edit mode)
             // This cleanup happens BEFORE edit mode check so it runs immediately
@@ -937,10 +943,11 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             const previousMobileState = window[mobileStateKey];
             const viewportChanged = previousMobileState !== undefined && previousMobileState !== isMobile;
 
-            // v9.2.9: On mobile, preserve DOM in Dynamic View to prevent embed destruction
-            // and unintended ODAG regeneration on every paint (resize/tap triggers paint).
+            // v9.2.10: Preserve DOM in Dynamic View on any mobile context (small viewport
+            // OR native Qlik mobile app — iPad-landscape native app has wide width but
+            // still triggers paints that would destroy the embed and re-fire generation).
             // List View on mobile still rebuilds so its event handlers (open/cancel/reload/delete) re-attach.
-            if (window[initKey] && previousMode === currentMode && !isEditMode && !viewportChanged && (!isMobile || isDynamicView)) {
+            if (window[initKey] && previousMode === currentMode && !isEditMode && !viewportChanged && (!isMobileContext || isDynamicView)) {
                 // Check if actual DOM content still exists (not destroyed by page navigation)
                 // Note: List View on mobile still rebuilds to ensure event handlers are re-attached
                 // Also skip if viewport changed (mobile <-> desktop transition)
