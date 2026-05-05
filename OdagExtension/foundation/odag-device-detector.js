@@ -34,7 +34,13 @@ define([], function() {
 
             const userAgent = navigator.userAgent || '';
 
-            const mobileAppUAs = ['QlikSenseMobile', 'Qlik Sense Mobile', 'QlikClient'];
+            // Qlik renamed the native iOS/Android app from "Qlik Sense Mobile" to
+            // "Qlik Analytics Mobile" around v12.27xx. UA strings differ accordingly.
+            const mobileAppUAs = [
+                'QlikSenseMobile', 'Qlik Sense Mobile',
+                'QlikAnalyticsMobile', 'Qlik Analytics Mobile',
+                'QlikClient'
+            ];
             for (let i = 0; i < mobileAppUAs.length; i++) {
                 if (userAgent.indexOf(mobileAppUAs[i]) !== -1) {
                     this._detectionMethod = 'userAgent:' + mobileAppUAs[i];

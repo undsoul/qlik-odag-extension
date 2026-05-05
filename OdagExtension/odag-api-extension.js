@@ -19,7 +19,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, DeviceDetector, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.2.11 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.2.12 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -2628,6 +2628,17 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                                 debugLog('⏳ Generation already in progress, skipping initial app generation');
                                 return;
                             }
+                            // v9.2.12: In Qlik native mobile app, tap-to-expand remounts our DOM,
+                            // which forces initDynamicView to re-run. loadLatestODAGApp is async (~2-3s
+                            // on mobile network); this 1s timeout fires before it returns, latestAppId
+                            // is still null, and we'd wrongly auto-generate. Skip the auto-generate here
+                            // for native mobile app — user can use the Generate button. The fresh-tab
+                            // branch above (sessionStorage flag missing) still auto-generates on first
+                            // load as v9.2.8 intended.
+                            if (isNativeMobileApp) {
+                                debugLog('📱 Native mobile app subsequent load - skipping race-prone auto-generate (use Generate button)');
+                                return;
+                            }
                             debugLog('No existing apps found, generating initial app...');
                             generateNewODAGApp();
                         } else {
@@ -2700,6 +2711,14 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
 
                                     if (hasChanged) {
                                         debugLog('🔄 Page reload: selections changed, triggering refresh');
+
+                                        // v9.2.12: Skip on native mobile app — tap-to-expand re-runs
+                                        // initDynamicView and the stored vs current comparison might
+                                        // false-positive during state restoration timing.
+                                        if (isNativeMobileApp) {
+                                            debugLog('📱 Native mobile app - skipping auto-refresh on stored-selection mismatch');
+                                            return;
+                                        }
 
                                         // Auto-trigger refresh on page load when selections changed
                                         // But only if not already generating
