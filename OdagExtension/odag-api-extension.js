@@ -19,7 +19,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, DeviceDetector, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.2.10 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.2.11 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -943,11 +943,15 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
             const previousMobileState = window[mobileStateKey];
             const viewportChanged = previousMobileState !== undefined && previousMobileState !== isMobile;
 
-            // v9.2.10: Preserve DOM in Dynamic View on any mobile context (small viewport
-            // OR native Qlik mobile app — iPad-landscape native app has wide width but
-            // still triggers paints that would destroy the embed and re-fire generation).
-            // List View on mobile still rebuilds so its event handlers (open/cancel/reload/delete) re-attach.
-            if (window[initKey] && previousMode === currentMode && !isEditMode && !viewportChanged && (!isMobileContext || isDynamicView)) {
+            // v9.2.11: In Dynamic View, ignore viewportChanged — qlik-embed is responsive,
+            // and tap-to-expand on Qlik mobile native app flips isMobile (small→large) which
+            // would otherwise tear down the embed and re-trigger ODAG generation.
+            // List View still respects viewportChanged because its grid layout differs
+            // between mobile and desktop.
+            // v9.2.10: Mobile context (small viewport OR native Qlik app) preserves DOM in
+            // Dynamic View. List View on mobile still rebuilds so its event handlers
+            // (open/cancel/reload/delete) re-attach.
+            if (window[initKey] && previousMode === currentMode && !isEditMode && (isDynamicView || !viewportChanged) && (!isMobileContext || isDynamicView)) {
                 // Check if actual DOM content still exists (not destroyed by page navigation)
                 // Note: List View on mobile still rebuilds to ensure event handlers are re-attached
                 // Also skip if viewport changed (mobile <-> desktop transition)
@@ -988,8 +992,10 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                 }
             }
 
-            if (viewportChanged) {
-                debugLog('🔄 Viewport changed (mobile <-> desktop), rebuilding layout');
+            if (viewportChanged && !isDynamicView) {
+                // v9.2.11: Only rebuild on viewport change for List View (its layout differs
+                // between mobile/desktop). Dynamic View's qlik-embed is responsive on its own.
+                debugLog('🔄 Viewport changed (mobile <-> desktop), rebuilding List View layout');
                 delete window[initKey];
             }
 
