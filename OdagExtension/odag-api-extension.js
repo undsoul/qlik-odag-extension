@@ -19,7 +19,7 @@ define([
 function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONSTANTS, Validators, ErrorHandler, Language, DeviceDetector, EventHandlers, PayloadBuilder, ViewManager) {
     'use strict';
 
-    console.log('🔄 ODAG Extension v9.2.12 LOADED - Vanilla JS migration');
+    console.log('🔄 ODAG Extension v9.2.13 LOADED - Vanilla JS migration');
 
     // ========== ENVIRONMENT DETECTION (RUNS IMMEDIATELY ON MODULE LOAD) ==========
     // This MUST run before properties panel is rendered, so we detect it at module level
@@ -2576,15 +2576,24 @@ function(qlik, DOM, HTTP, DOMPurify, properties, ApiService, StateManager, CONST
                     showTopBarFunc(false);
                 }
 
-                // Use sessionStorage to track if we've initialized in this browser session
+                // Track first-load flag to gate the v9.2.8 "fresh tab → auto-generate" branch.
+                // v9.2.13: In Qlik Analytics Mobile, every tap-to-expand creates a new
+                // [SimpleWebView] (WKWebView) and closes the previous session — confirmed by
+                // log lines: "SelectionsContext is unmounting the object", "Session is closed.",
+                // followed by "[SimpleWebView] Injecting script". sessionStorage dies with the
+                // old WebView, so the flag is missing every time and we falsely re-trigger
+                // fresh-tab regen. Use localStorage on native mobile app — it persists across
+                // WebView instances within the iOS app. Browser keeps sessionStorage so v9.2.8's
+                // per-tab semantics still work (open new browser tab → fresh app).
                 const sessionKey = 'dynamicViewInit_' + odagConfig.odagLinkId;
-                const hasInitializedThisSession = sessionStorage.getItem(sessionKey);
+                const initFlagStore = isNativeMobileApp ? localStorage : sessionStorage;
+                const hasInitializedThisSession = initFlagStore.getItem(sessionKey);
 
                 if (!hasInitializedThisSession) {
                     // CRITICAL FIX v9.2.8: Fresh tab = always generate new app
                     // User opens new tab with new selections, should not see old stale data
-                    debugLog('ODAG Extension: First session load - generating fresh app...');
-                    sessionStorage.setItem(sessionKey, 'true');
+                    debugLog('ODAG Extension: First session load - generating fresh app... (store:', isNativeMobileApp ? 'localStorage' : 'sessionStorage', ')');
+                    initFlagStore.setItem(sessionKey, 'true');
 
                     // Small delay to ensure Qlik selections are ready
                     setTimeout(async function() {
