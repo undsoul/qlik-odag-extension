@@ -23,6 +23,30 @@ A production-ready Qlik Sense extension for On-Demand App Generation (ODAG) with
 
 ---
 
+## Screenshots
+
+### List View
+Manage multiple ODAG apps with side-by-side preview — apps list on the left, embedded app on the right.
+
+<!-- TODO: List View screenshot -->
+
+### Dynamic View
+Always shows the latest app; auto-deletes predecessors and auto-refreshes on selection change.
+
+<!-- TODO: Dynamic View screenshot -->
+
+### Properties Panel
+ODAG link, view mode, embed mode, variable mappings, language — all configurable from the standard Qlik properties panel.
+
+<!-- TODO: Properties Panel screenshot -->
+
+### Generation Flow
+Real-time status polling (Queued → Generating → Ready) with visual indicators.
+
+<!-- TODO: Generation Flow screenshot -->
+
+---
+
 ## View Modes
 
 ### List View (Default)
@@ -69,10 +93,41 @@ Always shows the latest app only:
 
 ## Configuration
 
-### Required
-- **ODAG Link ID**: 24-char (Cloud) or 36-char GUID (On-Premise)
+### 1. ODAG Link Setup
 
-### Optional
+#### **Qlik Cloud** (Manual Entry)
+
+**Finding Your ODAG Link ID:**
+
+📹 **Video Tutorial**: [How to find ODAG Link ID](https://github.com/undsoul/qlik-odag-extension/blob/main/How-to.mov)
+
+<img width="500" height="500" alt="Finding ODAG Link ID in Qlik Cloud" src="https://github.com/user-attachments/assets/264351a2-0282-4f5f-b00b-0683e95c64c6" />
+
+**Steps:**
+1. Go to **Management Console** → **Data** → **ODAG Links**
+2. Find your ODAG link and click to open
+3. Copy the **Link ID** from the URL (24-character hex string)
+4. Paste it into the extension's **ODAG Link ID** field
+
+**Example Link ID**: `6901cd6e65b3db1f1a54bf3c`
+
+**URL Format**:
+```
+https://your-tenant.qlikcloud.com/console/odag-links/{LINK-ID}
+                                                        ↑
+                                                Copy this part
+```
+
+#### **On-Premise** (Dropdown Selector)
+
+**Automatic Link Selection:**
+- Extension automatically fetches all available ODAG links from your environment
+- Select from searchable dropdown in property panel
+- Shows link name and template app for easy identification
+- No manual ID entry required
+
+### 2. Other Settings
+
 - **View Mode**: List View or Dynamic View
 - **Embed Mode**: classic/app, analytics/sheet, classic/sheet
 - **Template Sheet ID**: Show specific sheet
