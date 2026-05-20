@@ -82,7 +82,7 @@ Always shows the latest app only:
 2. Management Console → Extensions → Add
 3. Upload ZIP file
 
-**CSP Required:** Add `cdn.jsdelivr.net` to script-src, style-src, font-src
+> **Air-gapped friendly (v9.2.14+):** DOMPurify is now bundled inside the extension — no CDN access required. Works in fully air-gapped environments out of the box.
 
 ### On-Premise
 1. Download ZIP
