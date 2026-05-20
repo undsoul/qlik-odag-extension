@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g. v9.2.14). Must already exist on a commit.'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing tag=$TAG version=$VERSION"
+
+      - name: Verify .qext version matches tag
+        run: |
+          QEXT_VERSION=$(python3 -c "import json; print(json.load(open('OdagExtension/odag-api-extension.qext'))['version'])")
+          EXPECTED="${{ steps.version.outputs.version }}"
+          echo ".qext version: $QEXT_VERSION"
+          echo "Tag version:   $EXPECTED"
+          if [ "$QEXT_VERSION" != "$EXPECTED" ]; then
+            echo "::error::Version mismatch — .qext says $QEXT_VERSION but tag says $EXPECTED"
+            exit 1
+          fi
+
+      - name: Build extension ZIP
+        run: |
+          ZIP_NAME="OdagExtension-v${{ steps.version.outputs.version }}.zip"
+          cd OdagExtension
+          zip -r "../$ZIP_NAME" . -x "*.DS_Store" "*/.DS_Store"
+          cd ..
+          ls -lh "$ZIP_NAME"
+          echo "ZIP_NAME=$ZIP_NAME" >> "$GITHUB_ENV"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists — uploading asset (clobber)"
+            gh release upload "$TAG" "$ZIP_NAME" --clobber
+          else
+            gh release create "$TAG" \
+              "$ZIP_NAME" \
+              --title "$TAG" \
+              --generate-notes
+          fi
